@@ -1,33 +1,34 @@
 # Tizenflix App
 
-TizenBrew client for Samsung TVs. This package is the UI your TV loads — it talks to [tizenflix-api](../tizenflix-api) over your home network.
+TizenBrew client for Samsung TVs. Talks to [tizenflix-api](../tizenflix-api) over your home network.
 
 Educational purposes only.
 
-## What this is right now
+## What this is
 
-A **proof-of-streaming** page (`app/index.html`), not the final Netflix-style UI. It exists to confirm:
+**v0.2** — UI scaffold + proven playback layer. The main app (`app/index.html`) is a Netflix-style shell ready for browse/detail screens. The **gate test** (`app/gate/index.html`) remains available for playback diagnostics.
 
-1. TizenBrew can load your app on the TV
-2. The TV can reach `tizenflix-api` on your LAN
-3. HLS playback works through the API proxy
-
-Once the gate checklist passes on real hardware, we build rows, hero banners, and animations on top of this.
+See [STRUCTURE.md](STRUCTURE.md) for the full directory map.
 
 ## Local development
 
 ```bash
-# Terminal 1 — API (set LAN IP, not localhost)
+# Terminal 1 — API
 cd ../tizenflix-api
 PUBLIC_BASE=http://192.168.86.11:8790 npm run api
 
-# Terminal 2 — App (builds bundle, then serves on :3010)
+# Terminal 2 — App
 cd ../tizenflix-app
 npm install
 npm start
 ```
 
-`npm start` runs `npm run build` first (esbuild → `app/dist/app.bundle.js`). See [TIZEN_COMPAT.md](TIZEN_COMPAT.md) for TV CSS/JS rules.
+| URL | Purpose |
+|-----|---------|
+| `http://<LAN-IP>:3010/app/index.html` | Main app (TizenBrew loads this) |
+| `http://<LAN-IP>:3010/app/gate/index.html` | Gate playback test |
+
+`npm start` builds both bundles then serves on `:3010`. See [TIZEN_COMPAT.md](TIZEN_COMPAT.md) for TV CSS/JS rules.
 
 ## TizenBrew package
 
@@ -37,30 +38,21 @@ npm start
 | `appPath` | `app/index.html` |
 | npm name | `@dev-arora/tizenflix` |
 
-Full TV setup steps: [docs/tv-setup.md](../docs/tv-setup.md).
+Full TV setup: [docs/tv-setup.md](../docs/tv-setup.md).
 
-## Testing on TV before npm publish
-
-You **do not** need to publish to npm for the first test. Use the LAN dev workflow in `docs/tv-setup.md` (TizenBrew loads your PC's dev server over Wi‑Fi).
-
-When ready for a persistent install:
+## Build
 
 ```bash
-npm publish --access public
+npm run build        # app + gate bundles
+npm run build:app    # main UI only
+npm run build:gate   # diagnostics only
 ```
 
-On TV: TizenBrew → GREEN → add `@dev-arora/tizenflix`.
+## Next: Phase 1 UI
 
-## Files
+1. Home — browse rows from API
+2. Detail — movie / TV with Play
+3. Player screen — wire `screens/player.js` to `player.playSources()`
+4. Settings — quality, API URL (dev)
 
-```
-tizenflix-app/
-├── package.json          # TizenBrew app module (production)
-├── package.lan-dev.json  # Reference mods stub for LAN testing
-├── app/
-│   ├── index.html        # Entry point
-│   ├── css/app.css
-│   ├── js/               # config, player, focus
-│   └── lib/hls.min.js
-└── scripts/dev.mjs       # Dev static server
-```
+Architecture notes: [docs/gate-findings.md](../docs/gate-findings.md).

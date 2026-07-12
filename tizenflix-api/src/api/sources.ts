@@ -4,6 +4,7 @@ import {
   getServerByName,
 } from "../constants/servers.js";
 import { NO_CACHE_HEADERS } from "../constants/headers.js";
+import { fetchWithTimeout } from "../fetch-timeout.js";
 import { decryptAndParse } from "../crypto/decrypt.js";
 import { clearSeedCache, fetchSeed } from "./seed.js";
 import type {
@@ -25,6 +26,7 @@ export interface SourceRequest {
 }
 
 const DEFAULT_HEADERS = NO_CACHE_HEADERS;
+const UPSTREAM_TIMEOUT_MS = 12_000;
 
 function buildSourceUrl(
   endpoint: string,
@@ -47,25 +49,29 @@ function buildSourceUrl(
   return url.toString();
 }
 
-/** Prefer DASH/MPD when present (sl() in player JS). */
-export function preferDashSources(
+/** Prefer HLS manifests for Tizen playback (DASH is not supported in the TV app yet). */
+export function preferHlsSources(
   data: DecryptedSourceResponse
 ): DecryptedSourceResponse {
   if (!data?.sources || !Array.isArray(data.sources)) return data;
-  const dash = data.sources.filter(
-    (s) =>
-      s?.type === "dash" ||
-      s?.url?.toLowerCase?.().includes(".mpd")
-  );
-  if (dash.length === 0) return data;
-  return { ...data, sources: dash };
+  const hls = data.sources.filter((s) => {
+    const url = s?.url?.toLowerCase?.() ?? "";
+    return s?.type === "hls" || url.includes(".m3u8") || url.includes("m3u8");
+  });
+  if (hls.length === 0) return data;
+  return { ...data, sources: hls };
 }
 
 async function fetchEncryptedOnce(
   url: string,
   fetchImpl: typeof fetch
 ): Promise<string> {
-  const res = await fetchImpl(url, { headers: DEFAULT_HEADERS });
+  const res = await fetchWithTimeout(
+    url,
+    { headers: DEFAULT_HEADERS },
+    UPSTREAM_TIMEOUT_MS,
+    fetchImpl
+  );
   if (res.status === 401) {
     const err = new Error("seed rejected") as Error & { status?: number };
     err.status = 401;
@@ -103,7 +109,7 @@ export async function fetchServerSources(
       seed,
       tmdbNum
     );
-    return preferDashSources(parsed);
+    return preferHlsSources(parsed);
   };
 
   try {

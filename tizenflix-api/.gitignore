@@ -2,6 +2,9 @@ node_modules/
 dist/
 data/
 fixtures/*.m3u8
+fixtures/sample.mp4
+fixtures/sample.m3u8
+fixtures/sample*.ts
 fixtures/encrypted-*.txt
 fixtures/decrypt-meta-*.json
 fixtures/capture-*.json

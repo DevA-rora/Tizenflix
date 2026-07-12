@@ -1,15 +1,19 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AppConfig } from "../config.js";
 import { requireTmdbKey } from "../config.js";
 import { DownloadService, pickSource } from "../download/jobs.js";
 import { buildProxyUrl } from "../proxy/proxy-url.js";
-import { fetchProxiedStream } from "../proxy/upstream.js";
+import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from "../proxy/upstream.js";
+import { validatePlaySources } from "../proxy/validate-sources.js";
 import { resolvePlayableSources, listProviders } from "../normalize/to-play-response.js";
 import { ProgressService } from "../store/progress.js";
 import { ProviderHealthService } from "../store/provider-health.js";
 import * as tmdb from "../tmdb/client.js";
+
+const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../fixtures");
 
 export interface RouteContext {
   config: AppConfig;
@@ -75,6 +79,18 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   const { config, progress, downloads, providerHealth } = ctx;
   const { publicBase } = config;
 
+  // TV app (e.g. :3010) calls API (:8790) from the browser — CORS required on all routes.
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   app.get("/", (_req, res) => {
     res.json({
       service: "tizenflix-api",
@@ -109,6 +125,43 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "tizenflix-api", publicBase });
+  });
+
+  app.get("/test/sample.mp4", (_req, res) => {
+    const file = join(FIXTURES_DIR, "sample.mp4");
+    if (!existsSync(file)) {
+      return res.status(404).json({
+        error: "sample.mp4 not found — run: npm run sample-mp4",
+      });
+    }
+    res.setHeader("content-type", "video/mp4");
+    res.sendFile(file);
+  });
+
+  app.get("/test/sample.m3u8", (_req, res) => {
+    const file = join(FIXTURES_DIR, "sample.m3u8");
+    if (!existsSync(file)) {
+      return res.status(404).json({
+        error: "sample.m3u8 not found — run: npm run sample-mp4",
+      });
+    }
+    res.setHeader("content-type", "application/vnd.apple.mpegurl");
+    res.setHeader("access-control-allow-origin", "*");
+    res.sendFile(file);
+  });
+
+  app.get("/test/:asset", (req, res) => {
+    const name = req.params.asset;
+    if (!/^sample\d{3}\.ts$/.test(name)) {
+      return res.status(404).json({ error: "not found" });
+    }
+    const file = join(FIXTURES_DIR, name);
+    if (!existsSync(file)) {
+      return res.status(404).json({ error: `${name} not found — run: npm run sample-mp4` });
+    }
+    res.setHeader("content-type", "video/mp2t");
+    res.setHeader("access-control-allow-origin", "*");
+    res.sendFile(file);
   });
 
   // --- Catalog (TMDB) ---
@@ -240,17 +293,32 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   });
 
   // --- Play ---
+  async function validateAndRespond(play: Awaited<ReturnType<typeof resolvePlayableSources>>, res: Response) {
+    const baseProviders = await listProviders();
+    const providerList = providerHealth.list(baseProviders);
+    const validated = await validatePlaySources(play, publicBase, fetch, {
+      reportProvider: (provider, success) => providerHealth.report(provider, success),
+      providerScore: (provider) => {
+        const stats = providerList.find((p) => p.name === provider);
+        if (!stats) return 0.5;
+        const total = stats.successes + stats.failures;
+        if (!total) return 0.5;
+        return stats.successes / total;
+      },
+    });
+    res.json(withProxiedUrls(publicBase, validated));
+  }
+
   app.get("/play/movie/:tmdbId", async (req, res) => {
     try {
-      const allServers = req.query.all === "true";
       const play = await resolvePlayableSources({
         type: "movie",
         tmdbId: req.params.tmdbId,
         server: typeof req.query.server === "string" ? req.query.server : undefined,
-        allServers,
-        firstSuccessOnly: !allServers && !req.query.server,
+        allServers: req.query.all !== "false",
+        firstSuccessOnly: false,
       });
-      res.json(withProxiedUrls(publicBase, play));
+      await validateAndRespond(play, res);
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -258,17 +326,16 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
 
   app.get("/play/tv/:tmdbId/:season/:episode", async (req, res) => {
     try {
-      const allServers = req.query.all === "true";
       const play = await resolvePlayableSources({
         type: "tv",
         tmdbId: req.params.tmdbId,
         season: req.params.season,
         episode: req.params.episode,
         server: typeof req.query.server === "string" ? req.query.server : undefined,
-        allServers,
-        firstSuccessOnly: !allServers && !req.query.server,
+        allServers: req.query.all !== "false",
+        firstSuccessOnly: false,
       });
-      res.json(withProxiedUrls(publicBase, play));
+      await validateAndRespond(play, res);
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -486,6 +553,11 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       return res.status(400).json({ error: "url query param required" });
     }
     try {
+      if (looksLikeBinarySegment(target)) {
+        await pipeProxiedStream(target, res);
+        return;
+      }
+
       const result = await fetchProxiedStream(target, publicBase);
       res.status(result.status);
       if (result.contentType) res.setHeader("content-type", result.contentType);

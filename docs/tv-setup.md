@@ -8,7 +8,9 @@ This guide explains **what the gate test is**, whether you need to publish to np
 
 The **gate test** is not a separate tool or npm command. It is a **go/no-go checklist** you run on real TV hardware before investing in UI polish.
 
-The current gate test **is** `tizenflix-app/app/index.html` — a minimal page that:
+The current gate test lives at `tizenflix-app/app/gate/index.html`. The main app is `tizenflix-app/app/index.html`.
+
+It:
 
 1. Connects to `tizenflix-api` on your LAN
 2. Calls `GET /play/movie/27205` (Inception)
@@ -132,12 +134,11 @@ On TV: TizenBrew → GREEN → type `@dev-arora/tizenflix` → launch.
 
 ### 5. Run the gate checklist on the TV
 
-1. Open Tizenflix on the TV
-2. Set **API URL** to `http://192.168.1.10:8790` (your PC IP)
-3. Press **Save & test** → should show API OK
-4. Press **Play movie** → Inception should play
-5. Press **Back** → should return to TizenBrew
-6. Record results in [`tizenflix-app/RESULTS.md`](../tizenflix-app/RESULTS.md)
+1. Open Tizenflix on the TV (main app at `/app/index.html`, or gate at `/app/gate/index.html`)
+2. Set **API URL** to `http://192.168.1.10:8790` (your PC IP) — gate test only
+3. Press **Save & test** → should show API OK — gate test only
+4. Press **Play movie** or **S1E1** — gate test
+5. Record results in [`tizenflix-app/RESULTS.md`](../tizenflix-app/RESULTS.md)
 
 ---
 
@@ -171,6 +172,32 @@ cd tizenflix-app && npm install && npm run build && npm start
 
 On TV: remove and re-add the `DevA-rora/Tizenflix` GitHub module so TizenBrew picks up release **v0.1.1**.
 
+### Playback diagnostics (black video box)
+
+Use the three buttons on the gate screen:
+
+| Button | What it tests |
+|--------|----------------|
+| **Test LAN MP4** | `GET /test/sample.mp4` — plain MP4 from your API, no HLS |
+| **Test API HLS** | Full `/play/movie/27205` resolve + HLS playback |
+| **Play movie** | Same as Test API HLS |
+
+Read the **red debug bar at the bottom** of the screen for player path and errors.
+
+| Result | Meaning |
+|--------|---------|
+| MP4 plays, HLS black | HLS player path issue (native vs HLS.js) — check overlay for `HLS.js FATAL` |
+| MP4 also black | TV `<video>` or LAN issue — check `video error` in overlay |
+| Both work | Gate passed — proceed to full UI |
+
+**Tizen `video.play()` note:** Samsung TVs often return `undefined` from `play()`, not a Promise. The app uses `safePlay()` (no `.catch` on undefined) and waits for `canplay` before calling `play()`. If video loads but stays paused, use **Play / Pause** on the playback bar or the remote **Play** key.
+
+Generate the sample MP4 on your PC if missing:
+
+```bash
+cd tizenflix-api && npm run sample-mp4
+```
+
 ---
 
 ## What comes after the gate test?
@@ -180,4 +207,4 @@ On TV: remove and re-add the `DevA-rora/Tizenflix` GitHub module so TizenBrew pi
 3. Spatial focus + row animations
 4. Appwrite (auth, progress, watchlist)
 
-See [tizenbrew-app-research.md](./tizenbrew-app-research.md) for the full roadmap.
+See [gate-findings.md](./gate-findings.md) for playback architecture and [tizenbrew-app-research.md](./tizenbrew-app-research.md) for the full roadmap.

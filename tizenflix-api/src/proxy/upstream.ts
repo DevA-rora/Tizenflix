@@ -1,14 +1,20 @@
 import { VIDKING_HEADERS } from "../constants/headers.js";
+import { fetchWithTimeout } from "../fetch-timeout.js";
 import {
   rewriteM3u8,
   shouldRewriteAsM3u8,
   looksLikeM3u8Url,
   looksLikeM3u8ContentType,
 } from "./rewrite-m3u8.js";
+import type { Response } from "express";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 export const UPSTREAM_HEADERS: HeadersInit = {
   ...VIDKING_HEADERS,
 };
+
+const UPSTREAM_TIMEOUT_MS = 12_000;
 
 export interface ProxyStreamResult {
   status: number;
@@ -17,16 +23,49 @@ export interface ProxyStreamResult {
   rewritten: boolean;
 }
 
+export function looksLikeBinarySegment(url: string): boolean {
+  return /\.(ts|m4s)(\?|$|\.)/i.test(url);
+}
+
+/** Stream binary segments through without buffering the full body in memory. */
+export async function pipeProxiedStream(
+  targetUrl: string,
+  res: Response,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  const upstream = await fetchWithTimeout(
+    targetUrl,
+    { headers: UPSTREAM_HEADERS, redirect: "follow" },
+    UPSTREAM_TIMEOUT_MS,
+    fetchImpl
+  );
+
+  res.status(upstream.status);
+  const contentType = upstream.headers.get("content-type");
+  if (contentType) res.setHeader("content-type", contentType);
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", "public, max-age=3600");
+
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+
+  await pipeline(Readable.fromWeb(upstream.body as ReadableStream<Uint8Array>), res);
+}
+
 /** Fetch upstream media; rewrite m3u8 playlists for Tizen-safe playback */
 export async function fetchProxiedStream(
   targetUrl: string,
   publicBase: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<ProxyStreamResult> {
-  const upstream = await fetchImpl(targetUrl, {
-    headers: UPSTREAM_HEADERS,
-    redirect: "follow",
-  });
+  const upstream = await fetchWithTimeout(
+    targetUrl,
+    { headers: UPSTREAM_HEADERS, redirect: "follow" },
+    UPSTREAM_TIMEOUT_MS,
+    fetchImpl
+  );
 
   const contentType = upstream.headers.get("content-type");
 
@@ -35,7 +74,7 @@ export async function fetchProxiedStream(
 
   if (mightBeM3u8) {
     const text = await upstream.text();
-    if (shouldRewriteAsM3u8(targetUrl, contentType, text)) {
+    if (upstream.ok && shouldRewriteAsM3u8(targetUrl, contentType, text)) {
       return {
         status: upstream.status,
         contentType: "application/vnd.apple.mpegurl",

@@ -12,7 +12,8 @@
     "download": "tsx scripts/download.mjs",
     "capture": "node scripts/capture-network.mjs",
     "api": "tsx scripts/server.mjs",
-    "save-fixtures": "tsx scripts/save-fixtures.mjs"
+    "save-fixtures": "tsx scripts/save-fixtures.mjs",
+    "sample-mp4": "node scripts/sample-mp4.mjs"
   },
   "engines": {
     "node": ">=18"

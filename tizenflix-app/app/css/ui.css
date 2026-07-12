@@ -1,0 +1,85 @@
+/* Main Tizenflix app shell — Netflix-style layout foundation */
+
+.app-shell {
+  min-height: 100vh;
+  background-color: #141414;
+}
+
+.app-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  padding: 24px 48px;
+  background: linear-gradient(to bottom, rgba(20, 20, 20, 0.95) 0%, rgba(20, 20, 20, 0) 100%);
+}
+
+.app-logo {
+  margin: 0;
+  font-size: 36px;
+  font-weight: bold;
+  color: #e50914;
+  letter-spacing: 1px;
+}
+
+.app-nav-links {
+  margin-left: 48px;
+  display: -webkit-flex;
+  display: flex;
+}
+
+.app-nav-links button {
+  min-height: 48px;
+  padding: 10px 20px;
+  margin-right: 12px;
+  background-color: transparent;
+  font-size: 24px;
+}
+
+.app-nav-links button.tv-focus,
+.app-nav-links button.nav-active {
+  background-color: #333333;
+}
+
+.app-main {
+  padding: 120px 48px 48px;
+  max-width: 1920px;
+  margin: 0 auto;
+}
+
+.screen {
+  display: block;
+}
+
+.screen-placeholder {
+  padding: 48px;
+  background-color: #1f1f1f;
+  border: 2px solid #333333;
+  border-radius: 6px;
+}
+
+.screen-placeholder h2 {
+  margin: 0 0 16px;
+  font-size: 34px;
+}
+
+.screen-placeholder p {
+  margin: 0 0 24px;
+  color: #b3b3b3;
+  font-size: 26px;
+}
+
+.app-footer-hint {
+  margin-top: 32px;
+  font-size: 22px;
+  color: #666666;
+}
+
+.app-footer-hint a {
+  color: #b3b3b3;
+}

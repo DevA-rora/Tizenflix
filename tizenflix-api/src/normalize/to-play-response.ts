@@ -117,13 +117,9 @@ export async function resolvePlayableSources(
   const meta = await fetchMetadata(type, tmdbId, fetchImpl);
   const results: ServerResult[] = [];
 
-  const serversToTry = server
-    ? [server]
-    : allServers
-      ? SERVER_PRIORITY
-      : SERVER_PRIORITY;
+  const serversToTry = server ? [server] : SERVER_PRIORITY;
 
-  for (const serverName of serversToTry) {
+  const fetchOne = async (serverName: string): Promise<ServerResult> => {
     try {
       const data = server
         ? await fetchServerSources(
@@ -151,22 +147,30 @@ export async function resolvePlayableSources(
           );
 
       if (data) {
-        results.push({ server: serverName, data });
-        if (firstSuccessOnly) break;
-      } else {
-        results.push({
-          server: serverName,
-          data: null,
-          error: "No sources returned",
-        });
+        return { server: serverName, data };
       }
-    } catch (err) {
-      results.push({
+      return {
         server: serverName,
         data: null,
-        error: err instanceof Error ? err.message : String(err),
-      });
+        error: "No sources returned",
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       if (server) throw err;
+      return { server: serverName, data: null, error: message };
+    }
+  };
+
+  if (server) {
+    results.push(await fetchOne(server));
+  } else if (allServers) {
+    const settled = await Promise.all(serversToTry.map((name) => fetchOne(name)));
+    results.push(...settled);
+  } else {
+    for (const serverName of serversToTry) {
+      const result = await fetchOne(serverName);
+      results.push(result);
+      if (firstSuccessOnly && result.data?.sources?.length) break;
     }
   }
 

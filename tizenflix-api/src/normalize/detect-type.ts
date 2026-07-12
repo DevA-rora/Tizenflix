@@ -1,7 +1,8 @@
-export function detectStreamType(url: string): "mp4" | "m3u8" | "unknown" {
+export function detectStreamType(url: string): "mp4" | "m3u8" | "dash" | "unknown" {
   if (!url) return "unknown";
   const lower = url.toLowerCase();
   if (lower.includes(".m3u8") || lower.includes("m3u8")) return "m3u8";
+  if (lower.includes(".mpd") || lower.includes("/dash/")) return "dash";
   if (
     lower.includes(".mp4") ||
     lower.includes(".webm") ||

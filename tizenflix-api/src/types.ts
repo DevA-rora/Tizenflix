@@ -32,7 +32,7 @@ export interface PlayableSource {
   id: string;
   provider: string;
   label: string;
-  type: "mp4" | "m3u8" | "unknown";
+  type: "mp4" | "m3u8" | "dash" | "unknown";
   url: string;
   priority: number;
 }
@@ -45,6 +45,7 @@ export interface PlayResponse {
   episode?: string;
   sources: PlayableSource[];
   recommended: string | null;
+  warnings?: string[];
   subtitles: Array<{
     id: string;
     language: string;

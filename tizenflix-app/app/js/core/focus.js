@@ -27,8 +27,10 @@ function labelFor(el) {
   if (!el) return "";
   if (el.id === "apiBase") return "API URL";
   if (el.id === "saveApiBtn") return "Save & test";
+  if (el.id === "testMp4Btn") return "Test LAN MP4";
+  if (el.id === "testHlsBtn") return "Test API HLS";
   if (el.id === "playBtn") return "Play movie";
-  if (el.id === "stopBtn") return "Stop";
+  if (el.id === "stopBtn" || el.id === "stopBtnBar") return "Stop";
   return el.textContent || el.tagName;
 }
 

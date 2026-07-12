@@ -1,0 +1,152 @@
+/* Shared video player chrome — used by gate and app player screen */
+
+.video-wrap {
+  display: block;
+  position: relative;
+  width: 100%;
+  margin-top: 20px;
+  background-color: #000000;
+  border: 3px solid #333333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.video-wrap.is-active {
+  border-color: #e50914;
+}
+
+.video-aspect {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  min-height: 360px;
+  background-color: #000000;
+}
+
+.video-aspect video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-color: #000000;
+}
+
+.now-playing {
+  margin: 0;
+  padding: 14px 18px;
+  font-size: 22px;
+  color: #b3b3b3;
+  background-color: #1a1a1a;
+  text-align: center;
+}
+
+.now-playing.is-live {
+  color: #46d369;
+}
+
+body.is-playing .setup-only {
+  display: none;
+}
+
+body.is-playing #banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10001;
+  margin: 0;
+  border-radius: 0;
+  font-size: 22px;
+  padding: 12px 24px;
+}
+
+body.is-playing main,
+body.is-playing .app-main {
+  padding: 0;
+  max-width: none;
+}
+
+body.is-playing .panel-player,
+body.is-playing .screen-player {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background-color: #000000;
+}
+
+body.is-playing .panel-player h2,
+body.is-playing .player-controls {
+  display: none;
+}
+
+.debug-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10004;
+  margin: 0;
+  padding: 14px 24px;
+  max-height: 220px;
+  overflow: hidden;
+  background-color: rgba(0, 0, 0, 0.92);
+  border-top: 2px solid #e50914;
+  color: #ffffff;
+  font-family: monospace;
+  font-size: 18px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+body.is-playing .debug-overlay {
+  bottom: 72px;
+}
+
+body.is-playing .log-compact {
+  display: none;
+}
+
+body.is-playing #videoWrap {
+  position: fixed;
+  top: 52px;
+  left: 0;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  z-index: 10000;
+}
+
+body.is-playing .video-aspect {
+  padding-top: 0;
+  height: calc(100vh - 52px);
+  min-height: 0;
+}
+
+body.is-playing .now-playing {
+  display: none;
+}
+
+body.is-playing .playback-bar {
+  display: block;
+}
+
+.playback-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10003;
+  padding: 16px 48px;
+  background-color: rgba(0, 0, 0, 0.85);
+  border-top: 2px solid #333333;
+}
+
+.playback-bar .row {
+  margin-bottom: 0;
+}

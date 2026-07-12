@@ -1,6 +1,6 @@
 {
   "name": "@dev-arora/tizenflix",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "TizenBrew streaming client for Tizenflix (educational purposes only)",
   "packageType": "app",
   "appName": "Tizenflix",
@@ -14,10 +14,13 @@
   "files": [
     "app",
     "package.json",
-    "README.md"
+    "README.md",
+    "STRUCTURE.md"
   ],
   "scripts": {
-    "build": "esbuild app/js/main.js --bundle --outfile=app/dist/app.bundle.js --target=es2015 --format=iife --global-name=TizenflixApp",
+    "build": "npm run build:app && npm run build:gate",
+    "build:app": "esbuild app/js/app.js --bundle --outfile=app/dist/app.bundle.js --target=es2015 --format=iife --global-name=TizenflixApp",
+    "build:gate": "esbuild app/js/gate/main.js --bundle --outfile=app/dist/gate.bundle.js --target=es2015 --format=iife --global-name=TizenflixGate",
     "start": "npm run build && node scripts/dev.mjs",
     "prepublishOnly": "npm run build"
   },

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tizenflix — Gate Test</title>
+  <link rel="stylesheet" href="../css/base.css" />
+  <link rel="stylesheet" href="../css/player.css" />
+  <link rel="stylesheet" href="../css/gate.css" />
+</head>
+<body>
+  <noscript><p class="noscript-warn">JavaScript is required for Tizenflix playback.</p></noscript>
+  <div id="focusHint">Focused: —</div>
+  <p id="jsStatus" class="js-status">Loading JavaScript...</p>
+
+  <header class="setup-only">
+    <h1>Tizenflix Gate</h1>
+    <p>Playback diagnostics — use before shipping UI changes.</p>
+  </header>
+
+  <main>
+    <div id="banner" class="status info">Connect to your API, then run a playback test.</div>
+
+    <section class="panel panel-player">
+      <h2>Player</h2>
+      <p class="meta diag-hint">MP4 works + HLS black = HLS issue. Both black = TV video element issue.</p>
+
+      <h3 class="subheading">Movie — Inception (TMDB 27205)</h3>
+      <div class="row player-controls">
+        <button type="button" id="testMp4Btn" class="secondary">Test LAN MP4</button>
+        <button type="button" id="testHlsBtn" class="secondary">Test LAN HLS</button>
+        <button type="button" id="playBtn">Play movie</button>
+      </div>
+
+      <h3 class="subheading">TV — Off Campus (TMDB 273240)</h3>
+      <div class="row player-controls">
+        <button type="button" id="playTvS1E1Btn">S1E1</button>
+        <button type="button" id="playTvS1E2Btn" class="secondary">S1E2</button>
+        <button type="button" id="playTvS1E3Btn" class="secondary">S1E3</button>
+      </div>
+
+      <div class="row player-controls">
+        <button type="button" id="stopBtn" class="secondary">Stop</button>
+      </div>
+
+      <div id="videoWrap" class="video-wrap">
+        <div class="video-aspect">
+          <video id="video" playsinline></video>
+        </div>
+        <p id="nowPlaying" class="now-playing">Video appears here when playback starts.</p>
+      </div>
+
+      <div id="playerLog" class="log log-compact" aria-live="polite"></div>
+    </section>
+
+    <section id="apiPanel" class="panel setup-only">
+      <h2>API connection</h2>
+      <div class="row">
+        <label for="apiBase">API URL</label>
+        <input type="text" id="apiBase" value="http://192.168.86.11:8790" placeholder="http://192.168.86.11:8790" />
+        <button type="button" id="saveApiBtn">Save &amp; test</button>
+      </div>
+      <div id="healthLog" class="log log-compact" aria-live="polite"></div>
+    </section>
+
+    <section id="checklistPanel" class="panel setup-only">
+      <h2>Gate checklist</h2>
+      <ul id="checklist" class="checklist">
+        <li id="check-health">API health returns OK from the TV</li>
+        <li id="check-resolve">/play returns at least one stream (movie or TV)</li>
+        <li id="check-tv">TV episode plays (Off Campus S1E1)</li>
+        <li id="check-video">Video plays with picture and sound</li>
+        <li id="check-hls">HLS segments load (no endless spinner)</li>
+        <li id="check-back">Back key returns to TizenBrew</li>
+      </ul>
+    </section>
+  </main>
+
+  <pre id="debugOverlay" class="debug-overlay">Debug log...</pre>
+
+  <div id="playbackBar" class="playback-bar">
+    <div class="row">
+      <button type="button" id="playPauseBtn">Play / Pause</button>
+      <button type="button" id="stopBtnBar" class="secondary">Stop</button>
+      <span id="playbackStatus" style="color:#b3b3b3;font-size:24px;">Playing...</span>
+    </div>
+  </div>
+
+  <script src="../lib/hls.min.js"></script>
+  <script src="../dist/gate.bundle.js"></script>
+</body>
+</html>

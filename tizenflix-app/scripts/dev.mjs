@@ -69,9 +69,11 @@ server.listen(PORT, "0.0.0.0", () => {
   const ips = lanAddresses();
   console.log("");
   console.log("Tizenflix app dev server");
-  console.log("  Local:  http://localhost:" + PORT + "/app/index.html");
+  console.log("  App:   http://localhost:" + PORT + "/app/index.html");
+  console.log("  Gate:  http://localhost:" + PORT + "/app/gate/index.html");
   for (const ip of ips) {
-    console.log("  LAN:    http://" + ip + ":" + PORT + "/app/index.html");
+    console.log("  App:   http://" + ip + ":" + PORT + "/app/index.html");
+    console.log("  Gate:  http://" + ip + ":" + PORT + "/app/gate/index.html");
   }
   console.log("");
   console.log("Also run tizenflix-api with PUBLIC_BASE set to your LAN IP.");

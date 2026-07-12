@@ -4,68 +4,42 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tizenflix</title>
-  <!-- Critical inline CSS — visible even if app.css fails to load on Tizen -->
-  <style>
-    body { margin: 0; background: #141414; color: #ffffff; font-family: Arial, sans-serif; font-size: 28px; }
-    h1, h2, p, li, label { color: #ffffff; }
-    header { background: #1f1f1f; padding: 28px 48px; border-bottom: 2px solid #333; }
-    .panel { background: #1f1f1f; border: 2px solid #333; padding: 28px; margin: 24px 48px; }
-    button { background: #e50914; color: #fff; font-size: 26px; min-height: 64px; padding: 14px 28px; border: none; }
-    input[type="text"] { background: #141414; color: #fff; font-size: 26px; min-height: 64px; border: 2px solid #444; padding: 14px; }
-  </style>
-  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/ui.css" />
+  <link rel="stylesheet" href="css/player.css" />
 </head>
-<body>
-  <noscript><p class="noscript-warn">JavaScript is required for Tizenflix playback.</p></noscript>
+<body class="app-shell">
+  <noscript><p class="noscript-warn">JavaScript is required for Tizenflix.</p></noscript>
   <div id="focusHint">Focused: —</div>
-  <p id="jsStatus" style="margin:0;padding:12px 48px;font-size:22px;color:#b3b3b3;">Loading JavaScript...</p>
 
-  <header>
-    <h1>Tizenflix</h1>
-    <p>Proof-of-streaming — confirms your TV can play via tizenflix-api before we build the full UI.</p>
-  </header>
+  <nav class="app-nav setup-only" aria-label="Main">
+    <h1 class="app-logo">TIZENFLIX</h1>
+    <div class="app-nav-links" id="appNav">
+      <button type="button" data-screen="home" class="nav-active">Home</button>
+      <button type="button" data-screen="search">Search</button>
+      <button type="button" data-screen="settings">Settings</button>
+    </div>
+  </nav>
 
-  <main>
-    <div id="banner" class="status info">Connect to your API, then press Play.</div>
+  <main id="appRoot" class="app-main" role="main"></main>
 
-    <section class="panel">
-      <h2>API connection</h2>
-      <p class="meta">Use your PC LAN IP (not localhost). Example: <code>http://192.168.86.11:8790</code></p>
-      <div class="row">
-        <label for="apiBase">API URL</label>
-        <input type="text" id="apiBase" placeholder="http://192.168.86.11:8790" />
-        <button type="button" id="saveApiBtn">Save &amp; test</button>
-      </div>
-      <div id="healthLog" class="log" aria-live="polite"></div>
-    </section>
+  <!-- Player layer — shared by player screen -->
+  <div id="videoWrap" class="video-wrap hidden">
+    <div class="video-aspect">
+      <video id="video" playsinline></video>
+    </div>
+    <p id="nowPlaying" class="now-playing">Video appears here when playback starts.</p>
+  </div>
 
-    <section class="panel">
-      <h2>Player — Inception (TMDB 27205)</h2>
-      <p class="meta">Resolves <code>GET /play/movie/27205</code> and plays the recommended HLS stream through the API proxy.</p>
-      <div class="row">
-        <button type="button" id="playBtn">Play movie</button>
-        <button type="button" id="stopBtn" class="secondary">Stop</button>
-      </div>
-      <div id="videoWrap" class="video-wrap">
-        <div class="video-aspect">
-          <video id="video" crossorigin="anonymous" playsinline></video>
-        </div>
-      </div>
-      <div id="playerLog" class="log" aria-live="polite"></div>
-    </section>
+  <pre id="debugOverlay" class="debug-overlay hidden">Debug log...</pre>
 
-    <section class="panel">
-      <h2>Gate checklist</h2>
-      <p class="meta">Pass this on real TV hardware before building animations and features.</p>
-      <ul id="checklist" class="checklist">
-        <li id="check-health">API health returns OK from the TV</li>
-        <li id="check-resolve">/play returns at least one stream</li>
-        <li id="check-video">Video plays with picture and sound</li>
-        <li id="check-hls">HLS segments load (no endless spinner)</li>
-        <li id="check-back">Back key returns to TizenBrew</li>
-      </ul>
-    </section>
-  </main>
+  <div id="playbackBar" class="playback-bar">
+    <div class="row">
+      <button type="button" id="playPauseBtn">Play / Pause</button>
+      <button type="button" id="stopBtnBar" class="secondary">Stop</button>
+      <span id="playbackStatus" style="color:#b3b3b3;font-size:24px;">Playing...</span>
+    </div>
+  </div>
 
   <script src="lib/hls.min.js"></script>
   <script src="dist/app.bundle.js"></script>

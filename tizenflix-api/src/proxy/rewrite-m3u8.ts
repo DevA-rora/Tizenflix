@@ -2,13 +2,101 @@ import { buildProxyUrl, resolvePlaylistUrl } from "./proxy-url.js";
 
 const URI_ATTR_RE = /URI="([^"]+)"/g;
 
+export function isMasterPlaylist(body: string): boolean {
+  return body.includes("#EXT-X-STREAM-INF");
+}
+
+interface StreamVariant {
+  inf: string;
+  url: string;
+  bandwidth: number;
+  audioGroup: string | null;
+}
+
+function parseBandwidth(inf: string): number {
+  const match = inf.match(/BANDWIDTH=(\d+)/);
+  return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+function parseAudioGroup(inf: string): string | null {
+  const match = inf.match(/AUDIO="([^"]+)"/);
+  return match ? match[1] : null;
+}
+
+function parseResolutionHeight(inf: string): number {
+  const match = inf.match(/RESOLUTION=\d+x(\d+)/i);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+/** One English audio + up to 3 video rungs ≤1080p for ABR and future quality settings. */
+export function simplifyMasterForTv(content: string, maxRungs = 3): string {
+  if (!isMasterPlaylist(content)) return content;
+
+  const lines = content.split(/\r?\n/);
+  const mediaLines: string[] = [];
+  const variants: StreamVariant[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith("#EXT-X-MEDIA:") && line.includes("TYPE=AUDIO")) {
+      mediaLines.push(line);
+    }
+    if (line.startsWith("#EXT-X-STREAM-INF")) {
+      const next = lines[i + 1]?.trim();
+      if (next && !next.startsWith("#")) {
+        variants.push({
+          inf: line,
+          url: next,
+          bandwidth: parseBandwidth(line),
+          audioGroup: parseAudioGroup(line),
+        });
+        i += 1;
+      }
+    }
+  }
+
+  if (!variants.length) return content;
+
+  let audioLine =
+    mediaLines.find((l) => l.includes('LANGUAGE="en"') && l.includes("DEFAULT=YES")) ??
+    mediaLines.find((l) => l.includes('LANGUAGE="en"')) ??
+    mediaLines.find((l) => l.includes("DEFAULT=YES")) ??
+    mediaLines[0];
+
+  const audioGroup = audioLine?.match(/GROUP-ID="([^"]+)"/)?.[1] ?? "audio0";
+
+  const primary = variants.filter(
+    (v) =>
+      v.audioGroup === audioGroup &&
+      !(v.audioGroup || "").includes("failover")
+  );
+  const pool = primary.length
+    ? primary
+    : variants.filter((v) => !(v.audioGroup || "").includes("failover"));
+  pool.sort((a, b) => b.bandwidth - a.bandwidth);
+  const capped = pool.filter((v) => {
+    const h = parseResolutionHeight(v.inf);
+    return h === 0 || h <= 1080;
+  });
+  const ladder = (capped.length ? capped : pool).slice(0, maxRungs);
+  if (!ladder.length) return content;
+
+  const out = ["#EXTM3U", "#EXT-X-VERSION:3"];
+  if (audioLine) out.push(audioLine);
+  for (const rung of ladder) {
+    out.push(rung.inf, rung.url);
+  }
+  return out.join("\n");
+}
+
 /** Rewrite every media URL in an HLS playlist to go through our proxy */
 export function rewriteM3u8(
   content: string,
   manifestUrl: string,
   publicBase: string
 ): string {
-  const lines = content.split(/\r?\n/);
+  const simplified = simplifyMasterForTv(content);
+  const lines = simplified.split(/\r?\n/);
   const out: string[] = [];
 
   for (const line of lines) {
@@ -50,12 +138,9 @@ export function looksLikeM3u8ContentType(contentType: string | null): boolean {
 }
 
 export function shouldRewriteAsM3u8(
-  url: string,
-  contentType: string | null,
+  _url: string,
+  _contentType: string | null,
   body: string
 ): boolean {
-  if (looksLikeM3u8Body(body)) return true;
-  if (looksLikeM3u8ContentType(contentType)) return true;
-  if (looksLikeM3u8Url(url)) return true;
-  return false;
+  return looksLikeM3u8Body(body);
 }
