@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tizenflix</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <header>
+    <h1>Tizenflix</h1>
+    <p>Proof-of-streaming — confirms your TV can play via tizenflix-api before we build the full UI.</p>
+  </header>
+
+  <main>
+    <div id="banner" class="status info">Connect to your API, then press Play.</div>
+
+    <section class="panel">
+      <h2>API connection</h2>
+      <p class="meta">Use your PC&rsquo;s LAN IP (not localhost). Example: <code>http://192.168.1.10:8790</code></p>
+      <div class="row">
+        <label for="apiBase">API URL</label>
+        <input type="text" id="apiBase" placeholder="http://192.168.1.x:8790" />
+        <button type="button" id="saveApiBtn">Save &amp; test</button>
+      </div>
+      <div id="healthLog" class="log" aria-live="polite"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Player — Inception (TMDB 27205)</h2>
+      <p class="meta">Resolves <code>GET /play/movie/27205</code> and plays the recommended HLS stream through the API proxy.</p>
+      <div class="row">
+        <button type="button" id="playBtn">Play movie</button>
+        <button type="button" id="stopBtn" class="secondary">Stop</button>
+      </div>
+      <div class="video-wrap">
+        <video id="video" controls crossorigin="anonymous" playsinline></video>
+      </div>
+      <div id="playerLog" class="log" aria-live="polite"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Gate checklist</h2>
+      <p class="meta">The &ldquo;gate test&rdquo; is this checklist — pass it on real TV hardware before building animations and features.</p>
+      <ul id="checklist" class="checklist">
+        <li id="check-health">API health returns OK from the TV</li>
+        <li id="check-resolve">/play returns at least one stream</li>
+        <li id="check-video">Video plays with picture and sound</li>
+        <li id="check-hls">HLS segments load (no endless spinner)</li>
+        <li id="check-back">Back key returns to TizenBrew</li>
+      </ul>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      getApiBase,
+      setApiBase,
+      checkHealth,
+      resolveMovie,
+      pickPlayableSource,
+      logLine,
+    } from "./js/config.js";
+    import { playUrl, destroyPlayer } from "./js/player.js";
+    import { setupFocus } from "./js/focus.js";
+
+    const TEST_TMDB_ID = "27205";
+    const banner = document.getElementById("banner");
+    const apiInput = document.getElementById("apiBase");
+    const healthLog = document.getElementById("healthLog");
+    const playerLog = document.getElementById("playerLog");
+    const video = document.getElementById("video");
+    const playBtn = document.getElementById("playBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    const checks = {
+      health: document.getElementById("check-health"),
+      resolve: document.getElementById("check-resolve"),
+      video: document.getElementById("check-video"),
+      hls: document.getElementById("check-hls"),
+      back: document.getElementById("check-back"),
+    };
+
+    function markCheck(el, pass) {
+      el.classList.remove("pass", "fail");
+      el.classList.add(pass ? "pass" : "fail");
+      el.textContent = (pass ? "✓ " : "✗ ") + el.textContent.replace(/^[✓✗]\s*/, "");
+    }
+
+    function setBanner(kind, text) {
+      banner.className = "status " + kind;
+      banner.textContent = text;
+    }
+
+    function healthDbg(msg) {
+      logLine(healthLog, msg);
+    }
+
+    function playerDbg(msg) {
+      logLine(playerLog, msg);
+    }
+
+    apiInput.value = getApiBase();
+
+    async function testApi() {
+      const base = setApiBase(apiInput.value.trim() || getApiBase());
+      healthLog.innerHTML = "";
+      healthDbg("Testing " + base + "/health …");
+      setBanner("info", "Checking API…");
+
+      try {
+        const data = await checkHealth(base);
+        healthDbg("OK — " + JSON.stringify(data));
+        markCheck(checks.health, true);
+        setBanner("ok", "API reachable — press Play movie.");
+        return base;
+      } catch (err) {
+        healthDbg("FAILED — " + err.message);
+        markCheck(checks.health, false);
+        setBanner("err", "Cannot reach API. Is tizenflix-api running with PUBLIC_BASE set to your LAN IP?");
+        throw err;
+      }
+    }
+
+    document.getElementById("saveApiBtn").addEventListener("click", () => {
+      testApi().catch(() => {});
+    });
+
+    playBtn.addEventListener("click", async () => {
+      playerLog.innerHTML = "";
+      playBtn.disabled = true;
+      setBanner("info", "Resolving stream…");
+
+      try {
+        const base = await testApi();
+        playerDbg("GET /play/movie/" + TEST_TMDB_ID);
+        const play = await resolveMovie(base, TEST_TMDB_ID);
+        const source = pickPlayableSource(play);
+        if (!source?.url) {
+          markCheck(checks.resolve, false);
+          throw new Error("No playable sources in response");
+        }
+        markCheck(checks.resolve, true);
+        playerDbg("Source: " + source.label + " (" + source.provider + ", " + source.type + ")");
+        if (play.subtitles?.length) {
+          playerDbg("Subtitles available: " + play.subtitles.length);
+        }
+
+        playUrl(video, source.url, playerDbg);
+        setBanner("ok", "Playing — " + (play.title || "movie"));
+
+        video.onplaying = () => markCheck(checks.video, true);
+        video.onwaiting = () => playerDbg("Buffering…");
+        video.onerror = () => {
+          markCheck(checks.video, false);
+          playerDbg("Video element error");
+        };
+
+        let progressed = false;
+        video.ontimeupdate = () => {
+          if (!progressed && video.currentTime > 1) {
+            progressed = true;
+            markCheck(checks.hls, true);
+          }
+        };
+      } catch (err) {
+        setBanner("err", err.message);
+        playerDbg("ERROR — " + err.message);
+      } finally {
+        playBtn.disabled = false;
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      destroyPlayer();
+      video.removeAttribute("src");
+      video.load();
+      playerDbg("Stopped");
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.keyCode === 10009 || e.key === "Back") {
+        markCheck(checks.back, true);
+      }
+    });
+
+    setupFocus(document.body);
+
+    testApi().catch(() => {
+      setBanner("warn", "Enter your API LAN URL above, then Save & test.");
+    });
+  </script>
+  <script src="lib/hls.min.js"></script>
+</body>
+</html>

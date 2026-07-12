@@ -1,0 +1,23 @@
+{
+  "name": "@dev-arora/tizenflix",
+  "version": "0.1.0",
+  "description": "TizenBrew streaming client for Tizenflix (educational purposes only)",
+  "packageType": "app",
+  "appName": "Tizenflix",
+  "appPath": "app/index.html",
+  "keys": [
+    "MediaPlayPause",
+    "MediaFastForward",
+    "MediaRewind"
+  ],
+  "license": "MIT",
+  "files": [
+    "app",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node scripts/dev.mjs",
+    "prepublishOnly": "node -e \"require('fs').accessSync('app/index.html')\""
+  }
+}

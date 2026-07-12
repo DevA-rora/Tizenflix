@@ -1,0 +1,35 @@
+# Tizenflix
+
+Netflix-style streaming for Samsung TVs via [TizenBrew](https://github.com/reisxd/TizenBrew). Educational purposes only.
+
+## Repository layout
+
+```
+Tizenflix/
+├── tizenflix-app/     # TizenBrew TV client (SPA) — start here for the TV app
+├── tizenflix-api/     # Stream resolver + TMDB catalog + proxy + downloads
+├── lab/               # Legacy experiments (Vidking iframe tests, old harness)
+└── docs/              # Research and TV setup guides
+```
+
+| Package | What it does | Quick start |
+|---------|--------------|-------------|
+| **tizenflix-app** | Web UI loaded by TizenBrew on your TV | `cd tizenflix-app && npm start` |
+| **tizenflix-api** | Backend the TV talks to over LAN | `cd tizenflix-api && npm run api` |
+| **lab** | Old proof-of-concept pages (archived) | `cd lab && npm start` |
+
+## First-time TV test (summary)
+
+1. Install **TizenBrew** on your Samsung TV (see [docs/tv-setup.md](docs/tv-setup.md)).
+2. On your PC, run **tizenflix-api** with `PUBLIC_BASE=http://<your-LAN-IP>:8790`.
+3. On your PC, run **tizenflix-app** dev server (`npm start` → port 3010).
+4. Add the app to TizenBrew on your TV (LAN dev or npm — full steps in [docs/tv-setup.md](docs/tv-setup.md)).
+5. Confirm video plays from your API in the on-TV player.
+
+You do **not** need a polished UI or npm publish for the first LAN test.
+
+## Docs
+
+- [TV setup & gate test explained](docs/tv-setup.md)
+- [TizenBrew research & build plan](docs/tizenbrew-app-research.md)
+- [API reference](tizenflix-api/api_info.md)

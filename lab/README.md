@@ -1,6 +1,8 @@
-# Tizenflix
+# Lab (legacy experiments)
 
-A TizenBrew application for streaming media (educational purposes only).
+> **Superseded by [`tizenflix-app`](../tizenflix-app/)** — use that for TV development. This folder is kept for early Vidking iframe tests and the old tmdb-embed-api harness.
+
+Legacy TizenBrew / playback experiments (educational purposes only).
 
 ## Playback test harness
 

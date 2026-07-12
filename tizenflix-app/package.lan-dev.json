@@ -1,0 +1,15 @@
+{
+  "name": "@dev-arora/tizenflix-lan-dev",
+  "version": "0.0.0",
+  "description": "LAN dev stub — use while testing on TV before npm publish. See README.",
+  "packageType": "mods",
+  "appName": "Tizenflix (LAN)",
+  "websiteURL": "http://REPLACE_WITH_YOUR_PC_LAN_IP:3010/app/index.html",
+  "main": "app/dev-noop.js",
+  "keys": [
+    "MediaPlayPause",
+    "MediaFastForward",
+    "MediaRewind"
+  ],
+  "license": "MIT"
+}

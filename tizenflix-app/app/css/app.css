@@ -1,0 +1,201 @@
+:root {
+  --bg: #141414;
+  --surface: #1f1f1f;
+  --border: #333;
+  --text: #ffffff;
+  --muted: #b3b3b3;
+  --accent: #e50914;
+  --ok: #46d369;
+  --warn: #f5c518;
+  --err: #e87c03;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "SamsungOne", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+header {
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+main {
+  padding: 1.5rem 2rem 2.5rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.status {
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.status.info {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+}
+
+.status.ok {
+  background: rgba(70, 211, 105, 0.12);
+  border: 1px solid var(--ok);
+  color: var(--ok);
+}
+
+.status.warn {
+  background: rgba(245, 197, 24, 0.12);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
+
+.status.err {
+  background: rgba(232, 124, 3, 0.12);
+  border: 1px solid var(--err);
+  color: var(--err);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  min-width: 5rem;
+}
+
+input[type="text"] {
+  flex: 1;
+  min-width: 14rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+button {
+  padding: 0.6rem 1.1rem;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+button.secondary {
+  background: #333;
+}
+
+button.focused,
+button:focus {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  transform: scale(1.04);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.video-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+}
+
+.log {
+  margin-top: 0.75rem;
+  max-height: 140px;
+  overflow-y: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+}
+
+.log div {
+  margin-bottom: 0.2rem;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+.checklist {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.checklist li {
+  margin-bottom: 0.35rem;
+}
+
+.checklist li.pass {
+  color: var(--ok);
+}
+
+.checklist li.fail {
+  color: var(--err);
+}
