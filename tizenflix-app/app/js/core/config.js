@@ -1,8 +1,42 @@
 var STORAGE_KEY = "tizenflix.apiBase";
 var QUALITY_MODE_KEY = "tizenflix.qualityMode";
+var DEV_MODE_KEY = "tizenflix.devMode";
 var API_PORT = "8790";
 var PLAY_RESOLVE_TIMEOUT_MS = 90000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
+
+function isTizenClient() {
+  if (typeof navigator === "undefined") return false;
+  var ua = navigator.userAgent || "";
+  return ua.indexOf("SMART-TV") !== -1 || ua.indexOf("Tizen") !== -1;
+}
+
+function getDevMode() {
+  try {
+    var stored = localStorage.getItem(DEV_MODE_KEY);
+    if (stored === "0" || stored === "false") return false;
+    if (stored === "1" || stored === "true") return true;
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return true;
+}
+
+function setDevMode(enabled) {
+  try {
+    localStorage.setItem(DEV_MODE_KEY, enabled ? "1" : "0");
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return !!enabled;
+}
+
+function buildPlayQuery(extra) {
+  var parts = [];
+  if (isTizenClient()) parts.push("profile=tizen");
+  if (extra) parts.push(extra);
+  return parts.length ? parts.join("&") : null;
+}
 
 function deriveDefaultApi() {
   if (typeof window !== "undefined" && window.location && window.location.hostname) {
@@ -86,12 +120,13 @@ function setQualityMode(mode) {
   return m;
 }
 
-function resolvePlay(apiBase, path, query) {
+function resolvePlay(apiBase, path, query, timeoutMs) {
   var url = apiBase + path;
   if (query) {
     url += (url.indexOf("?") === -1 ? "?" : "&") + query;
   }
-  return fetchWithTimeout(url, PLAY_RESOLVE_TIMEOUT_MS).then(function (res) {
+  var ms = timeoutMs || PLAY_RESOLVE_TIMEOUT_MS;
+  return fetchWithTimeout(url, ms).then(function (res) {
     if (!res.ok) {
       return res.text().then(function (text) {
         throw new Error("Play API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
@@ -101,11 +136,11 @@ function resolvePlay(apiBase, path, query) {
   });
 }
 
-function resolveMovie(apiBase, tmdbId, query) {
-  return resolvePlay(apiBase, "/play/movie/" + encodeURIComponent(tmdbId), query);
+function resolveMovie(apiBase, tmdbId, query, timeoutMs) {
+  return resolvePlay(apiBase, "/play/movie/" + encodeURIComponent(tmdbId), query, timeoutMs);
 }
 
-function resolveTvEpisode(apiBase, tmdbId, season, episode, query) {
+function resolveTvEpisode(apiBase, tmdbId, season, episode, query, timeoutMs) {
   var path =
     "/play/tv/" +
     encodeURIComponent(tmdbId) +
@@ -113,7 +148,7 @@ function resolveTvEpisode(apiBase, tmdbId, season, episode, query) {
     encodeURIComponent(season) +
     "/" +
     encodeURIComponent(episode);
-  return resolvePlay(apiBase, path, query);
+  return resolvePlay(apiBase, path, query, timeoutMs);
 }
 
 function pickPlayableSource(play) {
@@ -150,6 +185,11 @@ function orderSourcesForPlay(play) {
 
 function listSourcesToTry(play) {
   var ordered = orderSourcesForPlay(play);
+  if (isTizenClient()) {
+    ordered = ordered.filter(function (source) {
+      return source.type === "m3u8";
+    });
+  }
   if (!play || !play.warnings || !play.warnings.length) return ordered;
 
   return ordered.filter(function (source) {
@@ -191,10 +231,15 @@ function apiGet(path) {
 module.exports = {
   STORAGE_KEY: STORAGE_KEY,
   QUALITY_MODE_KEY: QUALITY_MODE_KEY,
+  DEV_MODE_KEY: DEV_MODE_KEY,
   PLAY_RESOLVE_TIMEOUT_MS: PLAY_RESOLVE_TIMEOUT_MS,
   deriveDefaultApi: deriveDefaultApi,
   API_PORT: API_PORT,
   VALID_QUALITY_MODES: VALID_QUALITY_MODES,
+  isTizenClient: isTizenClient,
+  getDevMode: getDevMode,
+  setDevMode: setDevMode,
+  buildPlayQuery: buildPlayQuery,
   getApiBase: getApiBase,
   setApiBase: setApiBase,
   getQualityMode: getQualityMode,

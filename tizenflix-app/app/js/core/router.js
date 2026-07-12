@@ -3,11 +3,19 @@
  */
 
 var focus = require("../core/focus.js");
+var playback = require("../services/playback.js");
 
 var stack = [];
 var screens = {};
 var rootEl = null;
 var onFocusHint = null;
+
+var BROWSE_SCREENS = {
+  home: true,
+  trending: true,
+  tv: true,
+  movies: true,
+};
 
 function register(name, screen) {
   screens[name] = screen;
@@ -25,14 +33,13 @@ function render() {
   if (screen && typeof screen.render === "function") {
     screen.render(rootEl);
   }
-  if (onFocusHint) {
-    focus.setupFocus(document.body, onFocusHint);
-  }
+  focus.afterScreenRender(name || "");
 }
 
 function navigate(name, params) {
   var screen = screens[name];
   if (!screen) return;
+  playback.stop({ skipRerender: true });
   stack.push(name);
   if (typeof screen.onEnter === "function") {
     screen.onEnter(params || {});
@@ -47,13 +54,22 @@ function replace(name, params) {
 
 function back() {
   if (stack.length <= 1) return false;
+  playback.stop({ skipRerender: true });
   var leaving = stack.pop();
   var screen = screens[leaving];
   if (screen && typeof screen.onLeave === "function") {
     screen.onLeave();
   }
   render();
+  var now = current();
+  if (BROWSE_SCREENS[now]) {
+    focus.restoreMainFocus();
+  }
   return true;
+}
+
+function rerender() {
+  render();
 }
 
 function init(options) {
@@ -70,5 +86,6 @@ module.exports = {
   replace: replace,
   back: back,
   current: current,
+  rerender: rerender,
   init: init,
 };

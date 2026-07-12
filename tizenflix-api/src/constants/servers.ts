@@ -51,6 +51,15 @@ export const SERVER_PRIORITY = [
   SERVERS.HELIUM.name,
 ];
 
+/** TV-friendly order — Oxygen/Titanium HLS first; Lithium often MP4-only */
+export const TIZEN_SERVER_PRIORITY = [
+  SERVERS.OXYGEN.name,
+  SERVERS.TITANIUM.name,
+  SERVERS.HELIUM.name,
+  SERVERS.HYDROGEN.name,
+  SERVERS.LITHIUM.name,
+];
+
 export function getServerByName(name: string): ServerConfig | undefined {
   const lower = name.toLowerCase();
   return Object.values(SERVERS).find((s) => s.name.toLowerCase() === lower);

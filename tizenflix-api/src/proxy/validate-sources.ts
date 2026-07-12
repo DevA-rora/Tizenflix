@@ -11,6 +11,7 @@ export interface ManifestProbe {
 export interface ValidatePlayOptions {
   reportProvider?: (provider: string, success: boolean) => void;
   providerScore?: (provider: string) => number | null;
+  tizenProfile?: boolean;
 }
 
 function parseBandwidthFromLabel(label: string): number {
@@ -113,6 +114,48 @@ function sortPlayableSources(ranked: RankedSource[]): PlayableSource[] {
     .map((r) => r.source);
 }
 
+async function probeSource(
+  source: PlayableSource,
+  publicBase: string,
+  fetchImpl: typeof fetch,
+  options: ValidatePlayOptions
+): Promise<{ source: PlayableSource; ranked?: RankedSource; warning?: string }> {
+  if (source.type !== "m3u8") {
+    if (!options.tizenProfile) {
+      return {
+        source,
+        warning: `${source.provider} ${source.label}: ${source.type} is not supported on Tizen (HLS only)`,
+      };
+    }
+    return { source };
+  }
+
+  const probe = await probeHlsManifest(source.url, publicBase, fetchImpl);
+  if (probe.ok) {
+    options.reportProvider?.(source.provider, true);
+    return {
+      source,
+      ranked: {
+        source,
+        probe,
+        healthScore: options.providerScore?.(source.provider) ?? 0.5,
+      },
+    };
+  }
+
+  options.reportProvider?.(source.provider, false);
+  if (options.tizenProfile) {
+    console.warn(
+      `[validate] ${source.provider} ${source.label}: ${probe.reason ?? "manifest unavailable"}`
+    );
+    return { source };
+  }
+  return {
+    source,
+    warning: `${source.provider} ${source.label}: ${probe.reason ?? "manifest unavailable"}`,
+  };
+}
+
 /** Probe each m3u8 source; playable sources first, with human-readable warnings. */
 export async function validatePlaySources(
   play: PlayResponse,
@@ -124,38 +167,41 @@ export async function validatePlaySources(
   const rankedPlayable: RankedSource[] = [];
   const blocked: PlayableSource[] = [];
 
-  for (const source of play.sources) {
-    if (source.type !== "m3u8") {
+  const m3u8Sources = play.sources.filter((s) => s.type === "m3u8");
+  const nonM3u8 = play.sources.filter((s) => s.type !== "m3u8");
+
+  if (!options.tizenProfile) {
+    for (const source of nonM3u8) {
       warnings.push(
         `${source.provider} ${source.label}: ${source.type} is not supported on Tizen (HLS only)`
-      );
-      blocked.push(source);
-      continue;
-    }
-
-    const probe = await probeHlsManifest(source.url, publicBase, fetchImpl);
-    if (probe.ok) {
-      options.reportProvider?.(source.provider, true);
-      rankedPlayable.push({
-        source,
-        probe,
-        healthScore: options.providerScore?.(source.provider) ?? 0.5,
-      });
-    } else {
-      options.reportProvider?.(source.provider, false);
-      warnings.push(
-        `${source.provider} ${source.label}: ${probe.reason ?? "manifest unavailable"}`
       );
       blocked.push(source);
     }
   }
 
+  const probeResults = await Promise.all(
+    m3u8Sources.map((source) => probeSource(source, publicBase, fetchImpl, options))
+  );
+
+  for (const result of probeResults) {
+    if (result.ranked) {
+      rankedPlayable.push(result.ranked);
+    } else if (result.warning) {
+      warnings.push(result.warning);
+      blocked.push(result.source);
+    } else if (!options.tizenProfile) {
+      blocked.push(result.source);
+    }
+  }
+
   const playable = sortPlayableSources(rankedPlayable);
-  const sources = [...playable, ...blocked];
+  const sources = options.tizenProfile ? playable : [...playable, ...blocked];
 
   if (!playable.length && play.sources.length) {
     warnings.push(
-      "No playable HLS sources right now — CDN may be blocking your network. Try again later or use Test LAN HLS."
+      options.tizenProfile
+        ? "No playable HLS stream for this title right now. Try again later."
+        : "No playable HLS sources right now — CDN may be blocking your network. Try again later or use Test LAN HLS."
     );
   }
 

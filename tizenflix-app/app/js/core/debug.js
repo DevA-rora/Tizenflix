@@ -20,7 +20,12 @@ function render() {
   var el = document.getElementById("debugOverlay");
   if (!el) return;
   el.textContent = lines.join("\n");
-  el.classList.remove("hidden");
+  var config = require("./config.js");
+  if (config.getDevMode()) {
+    el.classList.remove("hidden");
+  } else {
+    el.classList.add("hidden");
+  }
 }
 
 function debugLog(msg) {

@@ -27,7 +27,6 @@ function createCard(item, onSelect) {
     '<div class="card-poster" style="background-image:url(\'' +
     escapeHtml(poster) +
     '\')">' +
-    '<span class="card-n">N</span>' +
     "</div>" +
     '<span class="card-title">' +
     escapeHtml(title) +

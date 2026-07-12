@@ -4,6 +4,7 @@
 
 var api = require("../services/api.js");
 var router = require("../core/router.js");
+var focus = require("../core/focus.js");
 var hero = require("../components/hero.js");
 var row = require("../components/row.js");
 var playback = require("../services/playback.js");
@@ -34,6 +35,7 @@ function filterRows(rows) {
 }
 
 function openItem(item) {
+  focus.rememberMainFocus();
   if (item.type === "tv") {
     router.navigate("detail-tv", { tmdbId: item.id, title: item.title });
   } else {
@@ -120,15 +122,27 @@ function loadContent(el) {
             .then(rowLoaded);
         })(bundle.rows[i]);
       }
+
+      focus.focusDefaultMain();
     })
     .catch(function (err) {
       el.innerHTML = "";
       var msg = err.message || String(err);
-      if (msg.indexOf("503") !== -1 || msg.indexOf("TMDB") !== -1) {
+      if (msg.indexOf("401") !== -1) {
+        showError(
+          el,
+          "TMDB API key is invalid. Open tizenflix-api/.env and set TMDB_API_KEY to your v3 API key (not the read access token), then restart the API."
+        );
+      } else if (msg.indexOf("503") !== -1 || msg.indexOf("TMDB") !== -1) {
         showError(
           el,
           "Catalog unavailable — set TMDB_API_KEY in tizenflix-api/.env and restart the API. " +
             "Browser: use Settings to point API URL to http://localhost:8790"
+        );
+      } else if (msg.indexOf("Failed to fetch") !== -1 || msg.indexOf("NetworkError") !== -1) {
+        showError(
+          el,
+          "Cannot reach the API. In Settings set API URL to http://localhost:8790 (browser) or http://192.168.86.49:8790 (TV), then start: cd tizenflix-api && npm run api"
         );
       } else {
         showError(el, "Could not load catalog: " + msg);
@@ -137,6 +151,7 @@ function loadContent(el) {
 }
 
 function render(container) {
+  row.resetRowCounter();
   var el = document.createElement("div");
   el.className = "screen screen-home";
   el.innerHTML = '<div class="loading-msg">Loading catalog…</div>';

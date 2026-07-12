@@ -45,16 +45,27 @@ function getEpisodes(tmdbId, season) {
   );
 }
 
-function resolveMovie(tmdbId) {
-  return config.resolveMovie(getBase(), tmdbId);
+function resolveMovie(tmdbId, extraQuery, timeoutMs) {
+  return config.resolveMovie(getBase(), tmdbId, config.buildPlayQuery(extraQuery), timeoutMs);
 }
 
-function resolveTvEpisode(tmdbId, season, episode) {
-  return config.resolveTvEpisode(getBase(), tmdbId, season, episode);
+function resolveTvEpisode(tmdbId, season, episode, extraQuery, timeoutMs) {
+  return config.resolveTvEpisode(
+    getBase(),
+    tmdbId,
+    season,
+    episode,
+    config.buildPlayQuery(extraQuery),
+    timeoutMs
+  );
 }
 
 function sourcesForPlay(play) {
   return config.listSourcesToTry(play);
+}
+
+function hasPlayableSources(play) {
+  return sourcesForPlay(play).length > 0;
 }
 
 module.exports = {
@@ -71,4 +82,5 @@ module.exports = {
   resolveMovie: resolveMovie,
   resolveTvEpisode: resolveTvEpisode,
   sourcesForPlay: sourcesForPlay,
+  hasPlayableSources: hasPlayableSources,
 };

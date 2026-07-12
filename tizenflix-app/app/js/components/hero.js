@@ -46,7 +46,7 @@ function renderHero(item, handlers) {
     '<p class="hero-overview">' +
     escapeHtml(overview) +
     "</p>" +
-    '<div class="hero-actions">' +
+    '<div class="hero-actions" data-focus-row="hero">' +
     '<button type="button" class="btn btn-play focusable" data-action="play">▶ Play</button>' +
     '<button type="button" class="btn btn-info focusable" data-action="info">More info</button>' +
     "</div>" +

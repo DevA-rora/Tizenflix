@@ -64,6 +64,8 @@ export interface ResolveOptions {
   server?: string;
   allServers?: boolean;
   firstSuccessOnly?: boolean;
+  profile?: "tizen" | "default";
+  providerScore?: (provider: string) => number;
 }
 
 export interface ServerResult {

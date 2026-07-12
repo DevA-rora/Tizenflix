@@ -4,6 +4,7 @@
 
 var api = require("../services/api.js");
 var router = require("../core/router.js");
+var focus = require("../core/focus.js");
 var playback = require("../services/playback.js");
 
 var params = {};
@@ -108,14 +109,17 @@ function render(container) {
         '<p class="detail-overview">' +
         escapeHtml(title.overview || "") +
         "</p>" +
-        '<div class="detail-actions">' +
-        '<button type="button" class="btn btn-play focusable" id="detailPlayS1E1">▶ Play S1E1</button>' +
+        '<div class="detail-actions" data-focus-row="detail-actions">' +
+        '<button type="button" class="btn btn-play focusable" id="detailPlayBtn">▶ Play S1E1</button>' +
         '<button type="button" class="btn btn-info focusable" id="detailBackBtn">← Back</button>' +
         "</div>" +
         "</div></div>" +
         '<div class="episode-list"></div>';
 
-      el.querySelector("#detailPlayS1E1").addEventListener("click", function () {
+      var playBtn = el.querySelector("#detailPlayBtn");
+      var backBtn = el.querySelector("#detailBackBtn");
+
+      playBtn.addEventListener("click", function () {
         playback
           .playTvEpisode(title.id, 1, 1, title.title + " S1E1", status)
           .catch(function (err) {
@@ -123,10 +127,11 @@ function render(container) {
           });
       });
 
-      el.querySelector("#detailBackBtn").addEventListener("click", function () {
+      backBtn.addEventListener("click", function () {
         router.back();
       });
 
+      focus.focusElement(playBtn);
       renderEpisodes(el, title.id, title.title);
     })
     .catch(function (err) {

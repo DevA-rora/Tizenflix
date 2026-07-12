@@ -1,6 +1,8 @@
 # Todo
+- [ ] Add animations when moving between shows/movies (like Netflix)
 
 # Doing
+- [ ] Copy Netflix sidebar.
 
 # Done
 - [x] Netflix-style UI (sidebar, hero, browse rows) — browser testable at `:3010/app/index.html`

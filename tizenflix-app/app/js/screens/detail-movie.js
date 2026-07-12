@@ -4,6 +4,7 @@
 
 var api = require("../services/api.js");
 var router = require("../core/router.js");
+var focus = require("../core/focus.js");
 var playback = require("../services/playback.js");
 
 var params = {};
@@ -55,7 +56,7 @@ function render(container) {
         '<p class="detail-overview">' +
         escapeHtml(title.overview || "") +
         "</p>" +
-        '<div class="detail-actions">' +
+        '<div class="detail-actions" data-focus-row="detail-actions">' +
         '<button type="button" class="btn btn-play focusable" id="detailPlayBtn">▶ Play</button>' +
         '<button type="button" class="btn btn-info focusable" id="detailBackBtn">← Back</button>' +
         "</div>" +
@@ -73,6 +74,8 @@ function render(container) {
       backBtn.addEventListener("click", function () {
         router.back();
       });
+
+      focus.focusElement(playBtn);
     })
     .catch(function (err) {
       el.innerHTML =

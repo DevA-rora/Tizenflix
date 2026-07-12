@@ -46,6 +46,14 @@
   color: #46d369;
 }
 
+body.is-playing #app {
+  display: none;
+}
+
+body.is-playing #focusHint {
+  display: none;
+}
+
 body.is-playing .setup-only {
   display: none;
 }
@@ -111,19 +119,20 @@ body.is-playing .log-compact {
 
 body.is-playing #videoWrap {
   position: fixed;
-  top: 52px;
+  top: 0;
   left: 0;
-  width: 100%;
-  height: auto;
+  width: 100vw;
+  height: 100vh;
   margin: 0;
   border: none;
   border-radius: 0;
   z-index: 10000;
+  background-color: #000000;
 }
 
 body.is-playing .video-aspect {
   padding-top: 0;
-  height: calc(100vh - 52px);
+  height: calc(100vh - 72px);
   min-height: 0;
 }
 

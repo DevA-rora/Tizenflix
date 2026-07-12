@@ -74,6 +74,10 @@
   flex: 1;
   margin-left: 72px;
   min-height: 100vh;
+  max-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .screen {
@@ -423,6 +427,7 @@
 .screen-settings {
   padding: 48px;
   max-width: 900px;
+  padding-bottom: 120px;
 }
 
 .screen-settings h2 {
@@ -490,7 +495,12 @@
 }
 
 /* --- Browser dev --- */
-body.browser-dev #focusHint {
+body.dev-mode-off #focusHint,
+body.dev-mode-off #debugOverlay {
+  display: none !important;
+}
+
+body.browser-dev.dev-mode-on #focusHint {
   display: block;
 }
 

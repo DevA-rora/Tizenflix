@@ -4,9 +4,13 @@
 
 var card = require("./card.js");
 
+var rowCounter = 0;
+
 function createRow(title, items, onSelect) {
+  rowCounter += 1;
   var row = document.createElement("section");
   row.className = "content-row";
+  row.setAttribute("data-focus-row", "row-" + rowCounter);
 
   var heading = document.createElement("h2");
   heading.className = "row-title";
@@ -24,6 +28,11 @@ function createRow(title, items, onSelect) {
   return row;
 }
 
+function resetRowCounter() {
+  rowCounter = 0;
+}
+
 module.exports = {
   createRow: createRow,
+  resetRowCounter: resetRowCounter,
 };

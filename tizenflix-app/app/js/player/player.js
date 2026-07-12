@@ -94,7 +94,6 @@ function showVideoWrap(wrap) {
 }
 
 function enterPlaybackMode(title) {
-  if (playbackEntered) return;
   playbackEntered = true;
   document.body.classList.add("is-playing");
   var status = document.getElementById("playbackStatus");
@@ -104,6 +103,17 @@ function enterPlaybackMode(title) {
     nowPlaying.textContent = "Now playing: " + (title || "movie");
     nowPlaying.classList.add("is-live");
   }
+}
+
+/** Show fullscreen chrome while resolving or buffering (before the playing event). */
+function showPlaybackChrome(videoWrap, title) {
+  playbackEntered = false;
+  document.body.classList.add("is-playing");
+  showVideoWrap(videoWrap);
+  var titleEl = document.getElementById("playbackTitle");
+  if (titleEl) titleEl.textContent = title || "";
+  var status = document.getElementById("playbackStatus");
+  if (status && title) status.textContent = "Preparing: " + title;
 }
 
 function exitPlaybackMode() {
@@ -755,6 +765,7 @@ module.exports = {
   playDirect: playDirect,
   showVideoWrap: showVideoWrap,
   enterPlaybackMode: enterPlaybackMode,
+  showPlaybackChrome: showPlaybackChrome,
   exitPlaybackMode: exitPlaybackMode,
   isTizenTv: isTizenTv,
   logVideoState: logVideoState,

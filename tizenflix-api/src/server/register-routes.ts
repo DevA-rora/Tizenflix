@@ -293,32 +293,48 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   });
 
   // --- Play ---
-  async function validateAndRespond(play: Awaited<ReturnType<typeof resolvePlayableSources>>, res: Response) {
+  function providerScoreFromList(
+    providerList: Awaited<ReturnType<typeof providerHealth.list>>
+  ) {
+    return (provider: string) => {
+      const stats = providerList.find((p) => p.name === provider);
+      if (!stats) return 0.5;
+      const total = stats.successes + stats.failures;
+      if (!total) return 0.5;
+      return stats.successes / total;
+    };
+  }
+
+  async function validateAndRespond(
+    play: Awaited<ReturnType<typeof resolvePlayableSources>>,
+    res: Response,
+    tizenProfile: boolean
+  ) {
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
     const validated = await validatePlaySources(play, publicBase, fetch, {
+      tizenProfile,
       reportProvider: (provider, success) => providerHealth.report(provider, success),
-      providerScore: (provider) => {
-        const stats = providerList.find((p) => p.name === provider);
-        if (!stats) return 0.5;
-        const total = stats.successes + stats.failures;
-        if (!total) return 0.5;
-        return stats.successes / total;
-      },
+      providerScore: providerScoreFromList(providerList),
     });
     res.json(withProxiedUrls(publicBase, validated));
   }
 
   app.get("/play/movie/:tmdbId", async (req, res) => {
     try {
+      const tizenProfile = req.query.profile === "tizen";
+      const baseProviders = await listProviders();
+      const providerList = providerHealth.list(baseProviders);
       const play = await resolvePlayableSources({
         type: "movie",
         tmdbId: req.params.tmdbId,
         server: typeof req.query.server === "string" ? req.query.server : undefined,
         allServers: req.query.all !== "false",
         firstSuccessOnly: false,
+        profile: tizenProfile ? "tizen" : undefined,
+        providerScore: providerScoreFromList(providerList),
       });
-      await validateAndRespond(play, res);
+      await validateAndRespond(play, res, tizenProfile);
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -326,6 +342,9 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
 
   app.get("/play/tv/:tmdbId/:season/:episode", async (req, res) => {
     try {
+      const tizenProfile = req.query.profile === "tizen";
+      const baseProviders = await listProviders();
+      const providerList = providerHealth.list(baseProviders);
       const play = await resolvePlayableSources({
         type: "tv",
         tmdbId: req.params.tmdbId,
@@ -334,8 +353,10 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         server: typeof req.query.server === "string" ? req.query.server : undefined,
         allServers: req.query.all !== "false",
         firstSuccessOnly: false,
+        profile: tizenProfile ? "tizen" : undefined,
+        providerScore: providerScoreFromList(providerList),
       });
-      await validateAndRespond(play, res);
+      await validateAndRespond(play, res, tizenProfile);
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }

@@ -1,4 +1,4 @@
-import { SERVER_PRIORITY } from "../constants/servers.js";
+import { SERVER_PRIORITY, TIZEN_SERVER_PRIORITY } from "../constants/servers.js";
 import { fetchMetadata } from "../api/metadata.js";
 import { fetchServerSources, fetchServerSourcesDirect } from "../api/sources.js";
 import { detectStreamType, slugify } from "./detect-type.js";
@@ -100,6 +100,28 @@ export function mergeServerResults(
   };
 }
 
+function sortServersForProfile(
+  names: string[],
+  profile: ResolveOptions["profile"],
+  providerScore?: (provider: string) => number
+): string[] {
+  if (profile !== "tizen") return names;
+
+  const baseOrder = TIZEN_SERVER_PRIORITY.filter((n) => names.includes(n));
+  for (const n of names) {
+    if (baseOrder.indexOf(n) === -1) baseOrder.push(n);
+  }
+
+  if (!providerScore) return baseOrder;
+
+  return baseOrder.slice().sort((a, b) => {
+    const scoreA = providerScore(a) ?? 0.5;
+    const scoreB = providerScore(b) ?? 0.5;
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return baseOrder.indexOf(a) - baseOrder.indexOf(b);
+  });
+}
+
 export async function resolvePlayableSources(
   options: ResolveOptions,
   fetchImpl: typeof fetch = fetch
@@ -112,12 +134,18 @@ export async function resolvePlayableSources(
     server,
     allServers = false,
     firstSuccessOnly = !allServers && !server,
+    profile,
+    providerScore,
   } = options;
 
   const meta = await fetchMetadata(type, tmdbId, fetchImpl);
   const results: ServerResult[] = [];
 
-  const serversToTry = server ? [server] : SERVER_PRIORITY;
+  const serversToTry = sortServersForProfile(
+    server ? [server] : SERVER_PRIORITY,
+    profile,
+    providerScore
+  );
 
   const fetchOne = async (serverName: string): Promise<ServerResult> => {
     try {

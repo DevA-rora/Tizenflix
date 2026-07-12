@@ -5,12 +5,15 @@
 var router = require("./core/router.js");
 var focus = require("./core/focus.js");
 var debug = require("./core/debug.js");
+var config = require("./core/config.js");
 var player = require("./player/player.js");
 var playback = require("./services/playback.js");
 
 var home = require("./screens/home.js");
 var search = require("./screens/search.js");
+var random = require("./screens/random.js");
 var settings = require("./screens/settings.js");
+var categories = require("./screens/categories.js");
 var mylist = require("./screens/mylist.js");
 var detailMovie = require("./screens/detail-movie.js");
 var detailTv = require("./screens/detail-tv.js");
@@ -97,18 +100,30 @@ function wireGlobalKeys() {
   });
 }
 
+function applyDevMode() {
+  var on = config.getDevMode();
+  if (document.body) {
+    document.body.classList.toggle("dev-mode-on", on);
+    document.body.classList.toggle("dev-mode-off", !on);
+  }
+}
+
 function init() {
   if (!player.isTizenTv()) {
     document.body.classList.add("browser-dev");
   }
 
+  applyDevMode();
+
   debug.debugClear();
   debug.debugLog("Tizenflix — Tizen TV: " + (player.isTizenTv() ? "yes" : "no"));
 
   router.register("home", browseScreen("home"));
+  router.register("random", random);
   router.register("trending", browseScreen("trending"));
   router.register("tv", browseScreen("tv"));
   router.register("movies", browseScreen("movies"));
+  router.register("categories", categories);
   router.register("search", search);
   router.register("settings", settings);
   router.register("mylist", mylist);
@@ -125,7 +140,7 @@ function init() {
   wireSidebar();
   wirePlayback();
   wireGlobalKeys();
-  focus.setupFocus(document.body, updateFocusHint);
+  focus.init(updateFocusHint);
 }
 
 if (document.readyState === "loading") {
@@ -137,6 +152,7 @@ if (document.readyState === "loading") {
 window.TizenflixApp = {
   router: router,
   showStatus: showStatus,
+  setSidebarActive: setSidebarActive,
 };
 
 module.exports = {

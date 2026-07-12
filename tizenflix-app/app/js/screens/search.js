@@ -4,9 +4,11 @@
 
 var api = require("../services/api.js");
 var router = require("../core/router.js");
+var focus = require("../core/focus.js");
 var card = require("../components/card.js");
 
 function openItem(item) {
+  focus.rememberMainFocus();
   if (item.type === "tv") {
     router.navigate("detail-tv", { tmdbId: item.id, title: item.title });
   } else {
