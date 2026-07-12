@@ -26,6 +26,6 @@ app.listen(config.port, () => {
   console.log(`  GET  /play/movie/27205`);
   console.log(`  POST /download/movie/27205`);
   if (!config.tmdbApiKey) {
-    console.warn("  TMDB_API_KEY not set — catalog/search routes return 503");
+    console.warn("  TMDB_API_KEY not set — edit tizenflix-api/.env (v3 API key from themoviedb.org/settings/api)");
   }
 });
