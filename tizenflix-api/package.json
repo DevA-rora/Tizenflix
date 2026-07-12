@@ -1,0 +1,32 @@
+{
+  "name": "tizenflix-api",
+  "version": "0.2.0",
+  "description": "Netflix-style streaming API for Tizen TV — Vidking/Videasy resolver + TMDB catalog",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "resolve": "tsx scripts/resolve.mjs",
+    "download": "tsx scripts/download.mjs",
+    "capture": "node scripts/capture-network.mjs",
+    "api": "tsx scripts/server.mjs",
+    "save-fixtures": "tsx scripts/save-fixtures.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.3",
+    "playwright": "^1.52.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vidking iframe test</title>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <header>
+    <h1>Vidking iframe + postMessage</h1>
+    <p>Vidking exposes iframe embed only — no public .m3u8/.mp4 API. Events below are outgoing from the player.</p>
+    <nav class="nav-links">
+      <a href="index.html">Hub</a>
+      <a href="vidking-params.html">Vidking params</a>
+      <a href="gate-test.html">Gate test</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="row">
+        <label for="mediaType">Type</label>
+        <select id="mediaType">
+          <option value="movie">Movie</option>
+          <option value="tv">TV</option>
+        </select>
+        <label for="tmdbId">TMDB ID</label>
+        <input type="text" id="tmdbId" value="27205" />
+        <label for="season">S</label>
+        <input type="number" id="season" value="1" min="1" style="width:4rem" />
+        <label for="episode">E</label>
+        <input type="number" id="episode" value="1" min="1" style="width:4rem" />
+        <button type="button" id="loadBtn">Load embed</button>
+      </div>
+      <div id="status" class="status info">Enter TMDB ID and load embed.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Player</h2>
+      <div class="iframe-wrap">
+        <iframe id="player" title="Vidking player" allowfullscreen allow="autoplay; fullscreen"></iframe>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>postMessage log</h2>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.5rem">
+        Expect PLAYER_EVENT (play, pause, timeupdate). No stream URL is exposed.
+      </p>
+      <div id="log" class="log"></div>
+      <button type="button" id="clearBtn" class="secondary" style="margin-top:0.5rem">Clear log</button>
+    </div>
+  </main>
+  <script src="common.js"></script>
+  <script>
+    var mediaType = document.getElementById("mediaType");
+    var tmdbId = document.getElementById("tmdbId");
+    var season = document.getElementById("season");
+    var episode = document.getElementById("episode");
+    var loadBtn = document.getElementById("loadBtn");
+    var clearBtn = document.getElementById("clearBtn");
+    var player = document.getElementById("player");
+    var log = document.getElementById("log");
+    var status = document.getElementById("status");
+
+    function buildVidkingUrl() {
+      var id = tmdbId.value.trim();
+      var color = "e50914";
+      if (mediaType.value === "movie") {
+        return "https://www.vidking.net/embed/movie/" + id + "?color=" + color + "&autoPlay=true";
+      }
+      return (
+        "https://www.vidking.net/embed/tv/" +
+        id + "/" + season.value + "/" + episode.value +
+        "?color=" + color + "&autoPlay=true&episodeSelector=true&nextEpisode=true"
+      );
+    }
+
+    function loadEmbed() {
+      var url = buildVidkingUrl();
+      player.src = url;
+      status.className = "status info";
+      status.textContent = "Loaded: " + url;
+      logLine(log, "iframe src set", null);
+    }
+
+    loadBtn.addEventListener("click", loadEmbed);
+    clearBtn.addEventListener("click", function () {
+      log.innerHTML = "";
+    });
+
+    window.addEventListener("message", function (event) {
+      var payload = parsePlayerMessage(event.data);
+      var line = formatPlayerEvent(payload);
+      var cls = null;
+      if (payload && payload.data && payload.data.event === "play") cls = "event-play";
+      if (payload && payload.data && payload.data.event === "pause") cls = "event-pause";
+      logLine(log, line, cls);
+
+      if (payload && payload.data && payload.data.event === "timeupdate") {
+        var hasUrl = JSON.stringify(payload).indexOf("m3u8") !== -1 ||
+          JSON.stringify(payload).indexOf(".mp4") !== -1;
+        if (hasUrl) {
+          logLine(log, "WARNING: stream URL found in message (unexpected)", "event-error");
+        }
+      }
+    });
+
+    loadEmbed();
+    setupBasicFocus(document.body);
+  </script>
+</body>
+</html>

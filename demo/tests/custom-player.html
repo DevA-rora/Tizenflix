@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Custom player test</title>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <header>
+    <h1>Custom player (direct .mp4 / .m3u8)</h1>
+    <p>Own &lt;video&gt; element — full remote control + subtitle picker.</p>
+    <nav class="nav-links">
+      <a href="index.html">Hub</a>
+      <a href="stream-fetch.html">Stream fetch</a>
+    </nav>
+  </header>
+  <main>
+    <div id="status" class="status info">Loading…</div>
+
+    <div class="panel">
+      <div class="video-wrap">
+        <video id="video" controls crossorigin="anonymous"></video>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Subtitles</h2>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.5rem">
+        Requires <code>node scripts/subtitle-proxy.mjs</code> and OpenSubtitles API key in .env
+      </p>
+      <div id="subRow" class="row"></div>
+      <button type="button" id="loadSubsBtn" class="secondary">Load subtitles</button>
+    </div>
+
+    <div class="panel">
+      <h2>Controls</h2>
+      <div class="row">
+        <button type="button" id="playBtn">Play / Pause</button>
+        <button type="button" id="backBtn" class="secondary">Back to stream fetch</button>
+      </div>
+      <pre id="debug" class="log" style="max-height:120px"></pre>
+    </div>
+  </main>
+  <script src="common.js"></script>
+  <script src="lib/hls.min.js"></script>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var streamUrl = params.get("url");
+    var tmdbId = params.get("tmdb");
+    var mediaType = params.get("type") || "movie";
+    var season = params.get("season");
+    var episode = params.get("episode");
+
+    var video = document.getElementById("video");
+    var status = document.getElementById("status");
+    var debug = document.getElementById("debug");
+    var subRow = document.getElementById("subRow");
+    var hlsInstance = null;
+    var subtitleTracks = [];
+
+    function dbg(msg) {
+      logLine(debug, msg, null);
+    }
+
+    function destroyHls() {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+    }
+
+    function setActiveTrack(index) {
+      var tracks = video.textTracks;
+      for (var i = 0; i < tracks.length; i++) {
+        tracks[i].mode = i === index ? "showing" : "hidden";
+      }
+      dbg("Subtitle track: " + (index < 0 ? "off" : tracks[index].label));
+    }
+
+    function attachStream(url) {
+      destroyHls();
+      video.removeAttribute("src");
+      video.load();
+
+      var type = detectStreamType(url);
+      dbg("Loading " + type + ": " + url);
+
+      if (type === "m3u8" && window.Hls && Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+          status.className = "status ok";
+          status.textContent = "HLS manifest loaded — press play";
+          video.play().catch(function () {});
+        });
+        hlsInstance.on(Hls.Events.ERROR, function (_, data) {
+          if (data.fatal) {
+            status.className = "status err";
+            status.textContent = "HLS error: " + data.type;
+            dbg("HLS fatal: " + JSON.stringify(data));
+          }
+        });
+      } else if (video.canPlayType("application/vnd.apple.mpegurl") && type === "m3u8") {
+        video.src = url;
+        status.className = "status ok";
+        status.textContent = "Native HLS — press play";
+      } else {
+        video.src = url;
+        status.className = "status ok";
+        status.textContent = "Direct URL — press play";
+      }
+    }
+
+    function renderSubButtons(tracks) {
+      subRow.innerHTML = "";
+      var offBtn = document.createElement("button");
+      offBtn.textContent = "Off";
+      offBtn.className = "secondary";
+      offBtn.addEventListener("click", function () {
+        setActiveTrack(-1);
+      });
+      subRow.appendChild(offBtn);
+
+      tracks.forEach(function (track) {
+        var btn = document.createElement("button");
+        btn.textContent = track.label + " (" + track.language + ")";
+        btn.addEventListener("click", function () {
+          attachSubtitleTrack(track);
+        });
+        subRow.appendChild(btn);
+      });
+    }
+
+    function attachSubtitleTrack(track) {
+      video.querySelectorAll("track").forEach(function (t) {
+        t.remove();
+      });
+      var vttUrl =
+        TizenflixTestConfig.subtitleProxyBase +
+        "/api/subtitle-file?file_id=" +
+        track.file_id;
+      var el = document.createElement("track");
+      el.kind = "subtitles";
+      el.label = track.label;
+      el.srclang = (track.language || "en").slice(0, 2).toLowerCase();
+      el.src = vttUrl;
+      el.default = true;
+      video.appendChild(el);
+      el.addEventListener("load", function () {
+        setActiveTrack(0);
+      });
+      dbg("Attached: " + track.label);
+    }
+
+    async function loadSubtitles() {
+      if (!tmdbId) {
+        dbg("No tmdb id — add ?tmdb= to URL");
+        return;
+      }
+      var q = new URLSearchParams({
+        tmdb: tmdbId,
+        type: mediaType === "series" ? "series" : "movie",
+      });
+      if (season) q.set("season", season);
+      if (episode) q.set("episode", episode);
+
+      try {
+        var res = await fetch(
+          TizenflixTestConfig.subtitleProxyBase + "/api/subtitles?" + q.toString()
+        );
+        var data = await res.json();
+        if (!res.ok) {
+          if (data.keysRequired) {
+            dbg("Subtitles skipped — add API keys to .env (optional)");
+            return;
+          }
+          throw new Error(data.error || res.status);
+        }
+
+        if (!data.tracks || !data.tracks.length) {
+          dbg("No subtitles found for imdb " + data.imdb_id);
+          return;
+        }
+
+        subtitleTracks = data.tracks;
+        dbg("Found " + data.tracks.length + " subtitle track(s)");
+        renderSubButtons(data.tracks);
+      } catch (err) {
+        dbg("Subtitle error: " + err.message);
+      }
+    }
+
+    document.getElementById("playBtn").addEventListener("click", function () {
+      if (video.paused) video.play();
+      else video.pause();
+    });
+
+    document.getElementById("backBtn").addEventListener("click", function () {
+      window.location.href = "stream-fetch.html";
+    });
+
+    document.getElementById("loadSubsBtn").addEventListener("click", loadSubtitles);
+
+    document.addEventListener("keydown", function (e) {
+      if (e.keyCode === 415 || e.keyCode === 19) {
+        if (video.paused) video.play();
+        else video.pause();
+        e.preventDefault();
+      }
+      if (e.keyCode === 10009) {
+        window.location.href = "stream-fetch.html";
+        e.preventDefault();
+      }
+    });
+
+    if (!streamUrl) {
+      status.className = "status info";
+      status.textContent = "No stream URL — pick a demo stream:";
+      var demoPanel = document.createElement("div");
+      demoPanel.className = "panel";
+      demoPanel.innerHTML = "<h2>Demo streams</h2><ul id='demoPick' class='stream-list'></ul>";
+      document.querySelector("main").insertBefore(demoPanel, document.querySelector("main").children[1]);
+      renderDemoStreams(document.getElementById("demoPick"), function (s) {
+        streamUrl = s.url;
+        status.textContent = "Stream: " + detectStreamType(streamUrl);
+        attachStream(streamUrl);
+      });
+    } else {
+      status.className = "status info";
+      status.textContent = "Stream: " + detectStreamType(streamUrl);
+      attachStream(streamUrl);
+      if (tmdbId) loadSubtitles();
+    }
+
+    setupBasicFocus(document.body);
+  </script>
+</body>
+</html>

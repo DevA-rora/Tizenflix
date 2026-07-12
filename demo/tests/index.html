@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tizenflix Test Hub</title>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <header>
+    <h1>Tizenflix — Playback Test Hub</h1>
+    <p>Validate Vidking iframe vs direct stream URLs before building the full app.</p>
+    <nav class="nav-links">
+      <a href="index.html">Hub</a>
+      <a href="vidking-iframe.html">Vidking iframe</a>
+      <a href="vidking-params.html">Vidking params</a>
+      <a href="stream-fetch.html">Stream fetch</a>
+      <a href="custom-player.html">Custom player</a>
+      <a href="gate-test.html">TV gate test</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>Quick start</h2>
+      <pre class="log">npm start
+# Open http://localhost:3000</pre>
+      <p>No API keys required — Vidking iframe and demo MP4/HLS streams work out of the box.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Service status</h2>
+      <div id="svcStatus" class="status info">Checking…</div>
+    </div>
+
+    <div class="panel">
+      <h2>Recommended test order</h2>
+      <ol>
+        <li><a href="vidking-iframe.html">Vidking iframe</a> — no setup needed</li>
+        <li><a href="custom-player.html">Custom player</a> — demo streams without API keys</li>
+        <li><a href="stream-fetch.html">Stream fetch</a> — optional: needs <code>docker compose up -d</code> + TMDB key</li>
+        <li><a href="gate-test.html">TV gate test</a> — deploy via GitHub Pages + TizenBrew</li>
+      </ol>
+    </div>
+
+    <div class="panel">
+      <h2>Optional: full stream resolver</h2>
+      <ol>
+        <li>Copy <code>.env.example</code> to <code>.env</code> and add TMDB + OpenSubtitles keys</li>
+        <li><code>docker compose up -d</code> (port 8787)</li>
+        <li>Subtitle proxy starts automatically with <code>npm start</code> (port 8788)</li>
+      </ol>
+    </div>
+
+    <div class="panel">
+      <h2>Record results</h2>
+      <p>After TV testing, fill in <a href="RESULTS.md">RESULTS.md</a>.</p>
+    </div>
+  </main>
+  <script src="common.js"></script>
+  <script>
+    (async function () {
+      var el = document.getElementById("svcStatus");
+      var lines = [];
+      var sub = await checkServiceHealth(TizenflixTestConfig.subtitleProxyBase + "/api/health");
+      if (sub.ok) {
+        lines.push("Subtitle proxy: running" + (sub.data.opensubtitles ? " (keys set)" : " (no API keys — subtitles disabled)"));
+      } else {
+        lines.push("Subtitle proxy: not running (start with npm start)");
+      }
+      var stream = await checkServiceHealth(TizenflixTestConfig.streamApiBase + "/api/health");
+      if (stream.ok) {
+        lines.push("Stream API (Docker): running");
+      } else {
+        lines.push("Stream API (Docker): offline — use demo streams or docker compose up -d");
+      }
+      lines.push("Vidking + demo streams: always available");
+      el.className = "status ok";
+      el.innerHTML = lines.join("<br>");
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+services:
+  tmdb-embed-api:
+    image: inside4ndroid/tmdb-embed-api:latest
+    container_name: tizenflix-tmdb-embed-api
+    ports:
+      - "8787:8787"
+    environment:
+      TMDB_API_KEY: ${TMDB_API_KEY}
+    volumes:
+      - tmdb-embed-config:/app/utils
+    restart: unless-stopped
+
+volumes:
+  tmdb-embed-config:

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vidking params test</title>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <header>
+    <h1>Vidking URL parameters</h1>
+    <p>Toggle embed options and reload the iframe.</p>
+    <nav class="nav-links">
+      <a href="index.html">Hub</a>
+      <a href="vidking-iframe.html">Vidking iframe</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="row">
+        <label><input type="radio" name="type" value="movie" checked /> Movie</label>
+        <label><input type="radio" name="type" value="tv" /> TV</label>
+      </div>
+      <div class="row">
+        <label for="tmdbId">TMDB ID</label>
+        <input type="text" id="tmdbId" value="27205" />
+        <label for="season">Season</label>
+        <input type="number" id="season" value="1" min="1" style="width:4rem" />
+        <label for="episode">Episode</label>
+        <input type="number" id="episode" value="1" min="1" style="width:4rem" />
+      </div>
+      <div class="row">
+        <label for="color">Color (hex, no #)</label>
+        <input type="text" id="color" value="e50914" style="width:6rem" />
+        <label><input type="checkbox" id="autoPlay" checked /> autoPlay</label>
+        <label><input type="checkbox" id="episodeSelector" checked /> episodeSelector</label>
+        <label><input type="checkbox" id="nextEpisode" checked /> nextEpisode</label>
+        <label for="progress">progress (sec)</label>
+        <input type="number" id="progress" value="0" min="0" style="width:5rem" />
+      </div>
+      <div class="row">
+        <button type="button" id="reloadBtn">Reload embed</button>
+      </div>
+      <pre id="urlOut" class="log" style="max-height:4rem"></pre>
+    </div>
+
+    <div class="panel">
+      <div class="iframe-wrap">
+        <iframe id="player" title="Vidking player" allowfullscreen allow="autoplay; fullscreen"></iframe>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>postMessage log</h2>
+      <div id="log" class="log"></div>
+    </div>
+  </main>
+  <script src="common.js"></script>
+  <script>
+    function getType() {
+      var r = document.querySelector('input[name="type"]:checked');
+      return r ? r.value : "movie";
+    }
+
+    function buildUrl() {
+      var id = document.getElementById("tmdbId").value.trim();
+      var params = new URLSearchParams();
+      params.set("color", document.getElementById("color").value.trim() || "e50914");
+      if (document.getElementById("autoPlay").checked) params.set("autoPlay", "true");
+      if (document.getElementById("episodeSelector").checked) params.set("episodeSelector", "true");
+      if (document.getElementById("nextEpisode").checked) params.set("nextEpisode", "true");
+      var prog = document.getElementById("progress").value;
+      if (prog && Number(prog) > 0) params.set("progress", prog);
+
+      var base;
+      if (getType() === "movie") {
+        base = "https://www.vidking.net/embed/movie/" + id;
+      } else {
+        base =
+          "https://www.vidking.net/embed/tv/" +
+          id + "/" +
+          document.getElementById("season").value + "/" +
+          document.getElementById("episode").value;
+      }
+      return base + "?" + params.toString();
+    }
+
+    function reload() {
+      var url = buildUrl();
+      document.getElementById("urlOut").textContent = url;
+      document.getElementById("player").src = url;
+    }
+
+    document.getElementById("reloadBtn").addEventListener("click", reload);
+    window.addEventListener("message", function (e) {
+      logLine(document.getElementById("log"), formatPlayerEvent(parsePlayerMessage(e.data)), null);
+    });
+
+    reload();
+    setupBasicFocus(document.body);
+  </script>
+</body>
+</html>

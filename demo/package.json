@@ -1,0 +1,20 @@
+{
+  "name": "@dev-arora/tizenflix",
+  "version": "0.0.1",
+  "description": "TizenBrew streaming app test harness (educational purposes only)",
+  "packageType": "mods",
+  "appName": "Tizenflix Dev",
+  "websiteURL": "https://YOUR_GITHUB_USER.github.io/tizenflix/tests/gate-test.html?v=1",
+  "main": "tests/noop.js",
+  "keys": [
+    "MediaPlayPause",
+    "MediaFastForward",
+    "MediaRewind"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "start": "node scripts/dev.mjs",
+    "subtitle-proxy": "node scripts/subtitle-proxy.mjs",
+    "fetch-streams": "node scripts/fetch-streams.mjs"
+  }
+}

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TV gate test</title>
+  <link rel="stylesheet" href="common.css" />
+  <style>
+    .gate-section { min-height: 320px; }
+    .gate-section h2 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TV gate test</h1>
+    <p>Side-by-side: Vidking iframe vs custom player. Deploy via GitHub Pages + TizenBrew mods.</p>
+    <nav class="nav-links">
+      <a href="index.html">Hub</a>
+    </nav>
+  </header>
+  <main>
+    <div id="gateStatus" class="status info">
+      Gate A: Vidking iframe (no npm — works from GitHub Pages).
+      Gate B: custom player needs stream API reachable from TV (use LAN IP or hosted proxy).
+    </div>
+
+    <div class="grid-2">
+      <section class="panel gate-section">
+        <h2>A — Vidking iframe</h2>
+        <p style="color:var(--muted);font-size:0.85rem">Fight Club (TMDB 27205)</p>
+        <div class="iframe-wrap">
+          <iframe
+            id="vidkingFrame"
+            src="https://www.vidking.net/embed/movie/27205?color=e50914&autoPlay=true"
+            allowfullscreen
+            allow="autoplay; fullscreen"
+          ></iframe>
+        </div>
+        <div id="vidkingLog" class="log" style="margin-top:0.5rem;max-height:100px"></div>
+      </section>
+
+      <section class="panel gate-section">
+        <h2>B — Custom player</h2>
+        <p style="color:var(--muted);font-size:0.85rem">
+          Fetches first stream from tmdb-embed-api. Set API host below if not localhost.
+        </p>
+        <div class="row">
+          <label for="apiHost">Stream API host</label>
+          <input type="text" id="apiHost" placeholder="http://192.168.1.x:8787" style="flex:1;min-width:12rem" />
+          <button type="button" id="loadStreamBtn">Load from API</button>
+          <button type="button" id="demoMp4Btn" class="secondary">Demo MP4</button>
+          <button type="button" id="demoHlsBtn" class="secondary">Demo HLS</button>
+        </div>
+        <div class="video-wrap" style="margin-top:0.5rem">
+          <video id="video" controls crossorigin="anonymous"></video>
+        </div>
+        <div id="customLog" class="log" style="margin-top:0.5rem;max-height:100px"></div>
+      </section>
+    </div>
+
+    <div class="panel">
+      <h2>Gate checklist</h2>
+      <ul>
+        <li>A plays video with sound</li>
+        <li>A postMessage events appear in log</li>
+        <li>B returns at least one stream URL</li>
+        <li>B plays in &lt;video&gt; (mp4 or m3u8)</li>
+        <li>Back key (10009) returns to TizenBrew</li>
+      </ul>
+      <p>Record pass/fail in <a href="RESULTS.md">RESULTS.md</a>.</p>
+    </div>
+  </main>
+  <script src="common.js"></script>
+  <script src="lib/hls.min.js"></script>
+  <script>
+    var vidkingLog = document.getElementById("vidkingLog");
+    var customLog = document.getElementById("customLog");
+    var video = document.getElementById("video");
+    var apiHostInput = document.getElementById("apiHost");
+    var hlsInstance = null;
+
+    window.addEventListener("message", function (e) {
+      logLine(vidkingLog, formatPlayerEvent(parsePlayerMessage(e.data)), null);
+    });
+
+    function customDbg(msg) {
+      logLine(customLog, msg, null);
+    }
+
+    function playDemo(index) {
+      var s = TizenflixDemoStreams[index];
+      if (!s) return;
+      customDbg("Demo: " + s.title);
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      var type = detectStreamType(s.url);
+      if (type === "m3u8" && window.Hls && Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(s.url);
+        hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+          video.play().catch(function () {});
+        });
+      } else {
+        video.src = s.url;
+        video.play().catch(function () {});
+      }
+    }
+
+    document.getElementById("demoMp4Btn").addEventListener("click", function () {
+      playDemo(0);
+    });
+    document.getElementById("demoHlsBtn").addEventListener("click", function () {
+      playDemo(1);
+    });
+
+    document.getElementById("loadStreamBtn").addEventListener("click", async function () {
+      var host = apiHostInput.value.trim() || TizenflixTestConfig.streamApiBase;
+      customDbg("Fetching from " + host);
+      try {
+        var res = await fetch(host + "/api/streams/movie/27205");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+        var streams = Array.isArray(data) ? data : data.streams || data.results || [];
+        if (!streams.length) throw new Error("No streams — enable providers on API");
+        var url = streams[0].url;
+        customDbg("Playing: " + detectStreamType(url) + " from " + streams[0].provider);
+
+        if (hlsInstance) {
+          hlsInstance.destroy();
+          hlsInstance = null;
+        }
+
+        var type = detectStreamType(url);
+        if (type === "m3u8" && window.Hls && Hls.isSupported()) {
+          hlsInstance = new Hls();
+          hlsInstance.loadSource(url);
+          hlsInstance.attachMedia(video);
+          hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+            video.play().catch(function () {});
+          });
+        } else {
+          video.src = url;
+        }
+      } catch (err) {
+        customDbg("ERROR: " + err.message);
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.keyCode === 10009) {
+        e.preventDefault();
+      }
+    });
+
+    setupBasicFocus(document.body);
+  </script>
+</body>
+</html>

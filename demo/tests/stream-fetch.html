@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stream fetch test</title>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <header>
+    <h1>Direct stream fetch (tmdb-embed-api)</h1>
+    <p>Requires <code>docker compose up -d</code> on port 8787.</p>
+    <nav class="nav-links">
+      <a href="index.html">Hub</a>
+      <a href="custom-player.html">Custom player</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="row">
+        <label for="mediaType">Type</label>
+        <select id="mediaType">
+          <option value="movie">movie</option>
+          <option value="series">series</option>
+        </select>
+        <label for="tmdbId">TMDB ID</label>
+        <input type="text" id="tmdbId" value="27205" />
+        <label for="season">Season</label>
+        <input type="number" id="season" value="1" min="1" style="width:4rem" />
+        <label for="episode">Episode</label>
+        <input type="number" id="episode" value="1" min="1" style="width:4rem" />
+        <button type="button" id="fetchBtn">Fetch streams</button>
+      </div>
+      <div id="status" class="status info">Click Fetch streams.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Results</h2>
+      <ul id="streamList" class="stream-list"></ul>
+    </div>
+
+    <div class="panel">
+      <h2>Demo streams (no API keys)</h2>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.5rem">
+        Use these when Docker / TMDB API is not set up.
+      </p>
+      <ul id="demoList" class="stream-list"></ul>
+    </div>
+  </main>
+  <script src="common.js"></script>
+  <script>
+    var fetchBtn = document.getElementById("fetchBtn");
+    var status = document.getElementById("status");
+    var streamList = document.getElementById("streamList");
+
+    function playUrl(streamUrl, tmdb, type, season, episode) {
+      var q = new URLSearchParams({
+        url: streamUrl,
+        tmdb: tmdb,
+        type: type === "series" ? "series" : "movie",
+      });
+      if (season) q.set("season", season);
+      if (episode) q.set("episode", episode);
+      window.location.href = "custom-player.html?" + q.toString();
+    }
+
+    function renderStreams(streams, meta) {
+      streamList.innerHTML = "";
+      if (!streams.length) {
+        status.className = "status err";
+        status.textContent =
+          "No streams. Open http://localhost:8787/ and enable providers, or set enableProxy.";
+        return;
+      }
+      status.className = "status ok";
+      status.textContent = "Found " + streams.length + " stream(s).";
+
+      streams.forEach(function (s, i) {
+        var li = document.createElement("li");
+        var type = detectStreamType(s.url);
+        var badgeClass =
+          type === "m3u8" ? "badge-m3u8" : type === "mp4" ? "badge-mp4" : "badge-unknown";
+
+        li.innerHTML =
+          "<strong>" + (s.title || "Stream " + (i + 1)) + "</strong> " +
+          '<span class="badge ' + badgeClass + '">' + type + "</span><br>" +
+          "<span style='color:var(--muted);font-size:0.85rem'>" +
+          "provider: " + (s.provider || "?") + " | quality: " + (s.quality || "?") +
+          "</span><br>" +
+          "<code style='font-size:0.75rem;word-break:break-all'>" + s.url + "</code>";
+
+        var btn = document.createElement("button");
+        btn.textContent = "Play in custom player";
+        btn.style.marginTop = "0.5rem";
+        btn.addEventListener("click", function () {
+          playUrl(s.url, meta.tmdbId, meta.type, meta.season, meta.episode);
+        });
+        li.appendChild(btn);
+        streamList.appendChild(li);
+      });
+    }
+
+    fetchBtn.addEventListener("click", async function () {
+      var type = document.getElementById("mediaType").value;
+      var id = document.getElementById("tmdbId").value.trim();
+      var season = document.getElementById("season").value;
+      var episode = document.getElementById("episode").value;
+
+      status.className = "status info";
+      status.textContent = "Fetching…";
+      streamList.innerHTML = "";
+
+      try {
+        var streams = await fetchStreams(
+          type,
+          id,
+          type === "series" ? season : null,
+          type === "series" ? episode : null
+        );
+        renderStreams(streams, {
+          tmdbId: id,
+          type: type,
+          season: season,
+          episode: episode,
+        });
+      } catch (err) {
+        status.className = "status err";
+        status.textContent =
+          err.message + " — try demo streams below, or run: docker compose up -d";
+      }
+    });
+
+    renderDemoStreams(document.getElementById("demoList"), function (s) {
+      playUrl(s.url, "", "movie", null, null);
+    });
+
+    setupBasicFocus(document.body);
+  </script>
+</body>
+</html>

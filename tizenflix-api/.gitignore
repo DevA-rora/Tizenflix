@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+fixtures/*.m3u8
+fixtures/encrypted-*.txt
+fixtures/decrypt-meta-*.json
+fixtures/capture-*.json
+*.log
+.env
