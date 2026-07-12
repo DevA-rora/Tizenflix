@@ -1,19 +1,27 @@
 var STORAGE_KEY = "tizenflix.apiBase";
 var QUALITY_MODE_KEY = "tizenflix.qualityMode";
-var DEFAULT_API = "http://192.168.86.11:8790";
+var API_PORT = "8790";
 var PLAY_RESOLVE_TIMEOUT_MS = 90000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
+
+function deriveDefaultApi() {
+  if (typeof window !== "undefined" && window.location && window.location.hostname) {
+    var host = window.location.hostname;
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
+      return "http://" + host + ":" + API_PORT;
+    }
+  }
+  return "http://localhost:" + API_PORT;
+}
 
 function getApiBase() {
   try {
     var stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && stored.indexOf("localhost") === -1 && stored.indexOf("127.0.0.1") === -1) {
-      return stored;
-    }
+    if (stored) return stored.replace(/\/$/, "");
   } catch (err) {
     /* TV may block storage */
   }
-  return DEFAULT_API;
+  return deriveDefaultApi();
 }
 
 function setApiBase(url) {
@@ -169,11 +177,23 @@ function logLine(container, message) {
   container.scrollTop = container.scrollHeight;
 }
 
+function apiGet(path) {
+  return fetchWithTimeout(getApiBase() + path, 20000).then(function (res) {
+    if (!res.ok) {
+      return res.text().then(function (text) {
+        throw new Error("API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
+      });
+    }
+    return res.json();
+  });
+}
+
 module.exports = {
   STORAGE_KEY: STORAGE_KEY,
   QUALITY_MODE_KEY: QUALITY_MODE_KEY,
   PLAY_RESOLVE_TIMEOUT_MS: PLAY_RESOLVE_TIMEOUT_MS,
-  DEFAULT_API: DEFAULT_API,
+  deriveDefaultApi: deriveDefaultApi,
+  API_PORT: API_PORT,
   VALID_QUALITY_MODES: VALID_QUALITY_MODES,
   getApiBase: getApiBase,
   setApiBase: setApiBase,
@@ -188,4 +208,6 @@ module.exports = {
   listSourcesToTry: listSourcesToTry,
   detectStreamType: detectStreamType,
   logLine: logLine,
+  apiGet: apiGet,
+  fetchWithTimeout: fetchWithTimeout,
 };

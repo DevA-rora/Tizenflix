@@ -166,6 +166,7 @@ var TizenflixApp = (() => {
         var el = document.getElementById("debugOverlay");
         if (!el) return;
         el.textContent = lines.join("\n");
+        el.classList.remove("hidden");
       }
       function debugLog(msg) {
         var time = (/* @__PURE__ */ new Date()).toLocaleTimeString();
@@ -240,18 +241,25 @@ var TizenflixApp = (() => {
     "app/js/core/config.js"(exports, module) {
       var STORAGE_KEY = "tizenflix.apiBase";
       var QUALITY_MODE_KEY = "tizenflix.qualityMode";
-      var DEFAULT_API = "http://192.168.86.11:8790";
+      var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 9e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
+      function deriveDefaultApi() {
+        if (typeof window !== "undefined" && window.location && window.location.hostname) {
+          var host = window.location.hostname;
+          if (host && host !== "localhost" && host !== "127.0.0.1") {
+            return "http://" + host + ":" + API_PORT;
+          }
+        }
+        return "http://localhost:" + API_PORT;
+      }
       function getApiBase() {
         try {
           var stored = localStorage.getItem(STORAGE_KEY);
-          if (stored && stored.indexOf("localhost") === -1 && stored.indexOf("127.0.0.1") === -1) {
-            return stored;
-          }
+          if (stored) return stored.replace(/\/$/, "");
         } catch (err) {
         }
-        return DEFAULT_API;
+        return deriveDefaultApi();
       }
       function setApiBase(url) {
         var trimmed = (url || "").replace(/\/$/, "");
@@ -379,11 +387,22 @@ var TizenflixApp = (() => {
         container.appendChild(el);
         container.scrollTop = container.scrollHeight;
       }
+      function apiGet(path) {
+        return fetchWithTimeout(getApiBase() + path, 2e4).then(function(res) {
+          if (!res.ok) {
+            return res.text().then(function(text) {
+              throw new Error("API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
+            });
+          }
+          return res.json();
+        });
+      }
       module.exports = {
         STORAGE_KEY,
         QUALITY_MODE_KEY,
         PLAY_RESOLVE_TIMEOUT_MS,
-        DEFAULT_API,
+        deriveDefaultApi,
+        API_PORT,
         VALID_QUALITY_MODES,
         getApiBase,
         setApiBase,
@@ -397,7 +416,9 @@ var TizenflixApp = (() => {
         orderSourcesForPlay,
         listSourcesToTry,
         detectStreamType,
-        logLine
+        logLine,
+        apiGet,
+        fetchWithTimeout
       };
     }
   });
@@ -1087,95 +1108,6 @@ var TizenflixApp = (() => {
     }
   });
 
-  // app/js/screens/home.js
-  var require_home = __commonJS({
-    "app/js/screens/home.js"(exports, module) {
-      function onEnter() {
-      }
-      function render(container) {
-        var el = document.createElement("div");
-        el.className = "screen screen-home";
-        el.innerHTML = '<div class="screen-placeholder"><h2>Home</h2><p>Browse rows and hero banner will render here.</p><p class="app-footer-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p></div>';
-        container.appendChild(el);
-      }
-      module.exports = {
-        onEnter,
-        render
-      };
-    }
-  });
-
-  // app/js/screens/search.js
-  var require_search = __commonJS({
-    "app/js/screens/search.js"(exports, module) {
-      function render(container) {
-        var el = document.createElement("div");
-        el.className = "screen screen-search";
-        el.innerHTML = '<div class="screen-placeholder"><h2>Search</h2><p>Search input and results grid will render here.</p></div>';
-        container.appendChild(el);
-      }
-      module.exports = {
-        render
-      };
-    }
-  });
-
-  // app/js/screens/settings.js
-  var require_settings = __commonJS({
-    "app/js/screens/settings.js"(exports, module) {
-      var config = require_config();
-      function render(container) {
-        var el = document.createElement("div");
-        el.className = "screen screen-settings";
-        el.innerHTML = '<div class="screen-placeholder"><h2>Settings</h2><p>API URL, quality mode, subtitles, and advanced options will live here.</p><p>Quality: <strong>' + config.getQualityMode() + "</strong></p></div>";
-        container.appendChild(el);
-      }
-      module.exports = {
-        render
-      };
-    }
-  });
-
-  // app/js/screens/detail-movie.js
-  var require_detail_movie = __commonJS({
-    "app/js/screens/detail-movie.js"(exports, module) {
-      var params = {};
-      function onEnter(p) {
-        params = p || {};
-      }
-      function render(container) {
-        var el = document.createElement("div");
-        el.className = "screen screen-detail-movie";
-        el.innerHTML = '<div class="screen-placeholder"><h2>Movie</h2><p>TMDB ID: ' + (params.tmdbId || "\u2014") + "</p><p>Poster, synopsis, and Play button will render here.</p></div>";
-        container.appendChild(el);
-      }
-      module.exports = {
-        onEnter,
-        render
-      };
-    }
-  });
-
-  // app/js/screens/detail-tv.js
-  var require_detail_tv = __commonJS({
-    "app/js/screens/detail-tv.js"(exports, module) {
-      var params = {};
-      function onEnter(p) {
-        params = p || {};
-      }
-      function render(container) {
-        var el = document.createElement("div");
-        el.className = "screen screen-detail-tv";
-        el.innerHTML = '<div class="screen-placeholder"><h2>TV Series</h2><p>TMDB ID: ' + (params.tmdbId || "\u2014") + "</p><p>Season and episode picker will render here.</p></div>";
-        container.appendChild(el);
-      }
-      module.exports = {
-        onEnter,
-        render
-      };
-    }
-  });
-
   // app/js/services/api.js
   var require_api = __commonJS({
     "app/js/services/api.js"(exports, module) {
@@ -1185,6 +1117,32 @@ var TizenflixApp = (() => {
       }
       function health() {
         return config.checkHealth(getBase());
+      }
+      function browseRows() {
+        return config.apiGet("/browse/rows");
+      }
+      function browseRow(rowId, page) {
+        var q = page ? "?page=" + encodeURIComponent(page) : "";
+        return config.apiGet("/browse/row/" + encodeURIComponent(rowId) + q);
+      }
+      function search(query, page) {
+        var q = "?q=" + encodeURIComponent(query);
+        if (page) q += "&page=" + encodeURIComponent(page);
+        return config.apiGet("/search" + q);
+      }
+      function getMovie(tmdbId) {
+        return config.apiGet("/title/movie/" + encodeURIComponent(tmdbId));
+      }
+      function getTv(tmdbId) {
+        return config.apiGet("/title/tv/" + encodeURIComponent(tmdbId));
+      }
+      function getSeasons(tmdbId) {
+        return config.apiGet("/title/tv/" + encodeURIComponent(tmdbId) + "/seasons");
+      }
+      function getEpisodes(tmdbId, season) {
+        return config.apiGet(
+          "/title/tv/" + encodeURIComponent(tmdbId) + "/" + encodeURIComponent(season) + "/episodes"
+        );
       }
       function resolveMovie(tmdbId) {
         return config.resolveMovie(getBase(), tmdbId);
@@ -1199,6 +1157,13 @@ var TizenflixApp = (() => {
         getBase,
         setBase: config.setApiBase,
         health,
+        browseRows,
+        browseRow,
+        search,
+        getMovie,
+        getTv,
+        getSeasons,
+        getEpisodes,
         resolveMovie,
         resolveTvEpisode,
         sourcesForPlay
@@ -1206,38 +1171,521 @@ var TizenflixApp = (() => {
     }
   });
 
-  // app/js/screens/player.js
-  var require_player2 = __commonJS({
-    "app/js/screens/player.js"(exports, module) {
-      var player = require_player();
+  // app/js/services/playback.js
+  var require_playback = __commonJS({
+    "app/js/services/playback.js"(exports, module) {
       var api = require_api();
-      var params = {};
-      function onEnter(p) {
-        params = p || {};
-      }
-      function onLeave() {
+      var player = require_player();
+      var debug = require_debug();
+      function playResolved(play, title, onStatus) {
         var video = document.getElementById("video");
-        if (video) player.destroyPlayer(video);
+        var wrap = document.getElementById("videoWrap");
+        if (!video || !wrap) return Promise.reject(new Error("Video element missing"));
+        var sources = api.sourcesForPlay(play);
+        if (!sources.length) {
+          var msg = play.warnings && play.warnings.length ? play.warnings.join("; ") : "No playable sources";
+          return Promise.reject(new Error(msg));
+        }
+        wrap.classList.remove("hidden");
+        var titleEl = document.getElementById("playbackTitle");
+        if (titleEl) titleEl.textContent = title || play.title || "";
+        debug.debugClear();
+        debug.debugLog("Playing: " + (title || play.title || ""));
+        function log(msg2) {
+          debug.debugLog(msg2);
+          if (onStatus) onStatus(msg2);
+        }
+        player.playSources(video, sources, log, wrap, title || play.title || "Playback");
+        return Promise.resolve();
+      }
+      function playMovie(tmdbId, title, onStatus) {
+        if (onStatus) onStatus("Resolving movie...");
+        return api.resolveMovie(tmdbId).then(function(play) {
+          return playResolved(play, title, onStatus);
+        });
+      }
+      function playTvEpisode(tmdbId, season, episode, title, onStatus) {
+        if (onStatus) onStatus("Resolving episode...");
+        return api.resolveTvEpisode(tmdbId, season, episode).then(function(play) {
+          return playResolved(play, title, onStatus);
+        });
+      }
+      function stop() {
+        var video = document.getElementById("video");
+        var wrap = document.getElementById("videoWrap");
+        if (video) {
+          player.destroyPlayer(video);
+          video.removeAttribute("controls");
+          video.removeAttribute("crossorigin");
+        }
         player.exitPlaybackMode();
+        if (wrap) wrap.classList.add("hidden");
+      }
+      module.exports = {
+        playResolved,
+        playMovie,
+        playTvEpisode,
+        stop
+      };
+    }
+  });
+
+  // app/js/components/hero.js
+  var require_hero = __commonJS({
+    "app/js/components/hero.js"(exports, module) {
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+      function truncate(text, max) {
+        if (!text) return "";
+        if (text.length <= max) return text;
+        return text.slice(0, max - 1).trim() + "\u2026";
+      }
+      function renderHero(item, handlers) {
+        var type = item.type || item.mediaType || item.media_type || "movie";
+        var badge = type === "tv" ? "N SERIES" : "FILM";
+        var backdrop = item.backdrop || "";
+        var title = item.title || item.name || "Untitled";
+        var overview = truncate(item.overview || "", 220);
+        var rank = item.rank ? "#" + item.rank + " in " + (type === "tv" ? "TV Shows" : "Movies") + " Today" : "";
+        var el = document.createElement("section");
+        el.className = "hero";
+        el.setAttribute("data-tmdb-id", String(item.id));
+        el.setAttribute("data-media-type", type);
+        el.innerHTML = `<div class="hero-backdrop" style="background-image:url('` + escapeHtml(backdrop) + `')"></div><div class="hero-gradient"></div><div class="hero-content"><div class="hero-badge"><span class="hero-n">N</span> ` + (type === "tv" ? "SERIES" : "FILM") + '</div><h1 class="hero-title">' + escapeHtml(title) + "</h1>" + (rank ? '<div class="hero-rank"><span class="top10">TOP 10</span> ' + escapeHtml(rank) + "</div>" : "") + '<p class="hero-overview">' + escapeHtml(overview) + '</p><div class="hero-actions"><button type="button" class="btn btn-play focusable" data-action="play">\u25B6 Play</button><button type="button" class="btn btn-info focusable" data-action="info">More info</button></div></div>';
+        var playBtn = el.querySelector('[data-action="play"]');
+        var infoBtn = el.querySelector('[data-action="info"]');
+        if (playBtn && handlers && handlers.onPlay) {
+          playBtn.addEventListener("click", function() {
+            handlers.onPlay(item);
+          });
+        }
+        if (infoBtn && handlers && handlers.onInfo) {
+          infoBtn.addEventListener("click", function() {
+            handlers.onInfo(item);
+          });
+        }
+        return el;
+      }
+      module.exports = {
+        renderHero
+      };
+    }
+  });
+
+  // app/js/components/card.js
+  var require_card = __commonJS({
+    "app/js/components/card.js"(exports, module) {
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+      function createCard(item, onSelect) {
+        var type = item.type || item.mediaType || item.media_type || "movie";
+        var title = item.title || item.name || "Untitled";
+        var poster = item.poster || "";
+        var el = document.createElement("button");
+        el.type = "button";
+        el.className = "card focusable";
+        el.setAttribute("data-tmdb-id", String(item.id));
+        el.setAttribute("data-media-type", type);
+        el.setAttribute("aria-label", title);
+        el.innerHTML = `<div class="card-poster" style="background-image:url('` + escapeHtml(poster) + `')"><span class="card-n">N</span></div><span class="card-title">` + escapeHtml(title) + "</span>";
+        el.addEventListener("click", function() {
+          if (onSelect) onSelect(item);
+        });
+        return el;
+      }
+      module.exports = {
+        createCard
+      };
+    }
+  });
+
+  // app/js/components/row.js
+  var require_row = __commonJS({
+    "app/js/components/row.js"(exports, module) {
+      var card = require_card();
+      function createRow(title, items, onSelect) {
+        var row = document.createElement("section");
+        row.className = "content-row";
+        var heading = document.createElement("h2");
+        heading.className = "row-title";
+        heading.textContent = title;
+        row.appendChild(heading);
+        var track = document.createElement("div");
+        track.className = "row-track";
+        for (var i = 0; i < items.length; i++) {
+          track.appendChild(card.createCard(items[i], onSelect));
+        }
+        row.appendChild(track);
+        return row;
+      }
+      module.exports = {
+        createRow
+      };
+    }
+  });
+
+  // app/js/screens/home.js
+  var require_home = __commonJS({
+    "app/js/screens/home.js"(exports, module) {
+      var api = require_api();
+      var router = require_router();
+      var hero = require_hero();
+      var row = require_row();
+      var playback = require_playback();
+      var viewMode = "home";
+      function setMode(mode) {
+        viewMode = mode || "home";
+      }
+      function filterRows(rows) {
+        if (viewMode === "trending") {
+          return rows.filter(function(r) {
+            return r.id.indexOf("trending") !== -1;
+          });
+        }
+        if (viewMode === "tv") {
+          return rows.filter(function(r) {
+            return r.id.indexOf("-tv") !== -1;
+          });
+        }
+        if (viewMode === "movies") {
+          return rows.filter(function(r) {
+            return r.id.indexOf("-movies") !== -1;
+          });
+        }
+        return rows;
+      }
+      function openItem(item) {
+        if (item.type === "tv") {
+          router.navigate("detail-tv", { tmdbId: item.id, title: item.title });
+        } else {
+          router.navigate("detail-movie", { tmdbId: item.id, title: item.title });
+        }
+      }
+      function playItem(item, onStatus) {
+        if (item.type === "tv") {
+          return playback.playTvEpisode(item.id, 1, 1, item.title, onStatus);
+        }
+        return playback.playMovie(item.id, item.title, onStatus);
+      }
+      function showError(el, message) {
+        var banner = document.createElement("div");
+        banner.className = "error-banner";
+        banner.textContent = message;
+        el.appendChild(banner);
+      }
+      function loadContent(el) {
+        api.browseRows().then(function(data) {
+          var rows = filterRows(data.rows || []);
+          if (!rows.length) {
+            showError(el, "No browse rows available.");
+            return null;
+          }
+          var heroRowId = "trending-tv";
+          for (var h = 0; h < rows.length; h++) {
+            if (rows[h].id === "trending-tv") {
+              heroRowId = rows[h].id;
+              break;
+            }
+          }
+          return api.browseRow(heroRowId).then(function(heroData) {
+            return { rows, heroItems: heroData.items || [] };
+          });
+        }).then(function(bundle) {
+          if (!bundle) return;
+          el.innerHTML = "";
+          if (bundle.heroItems.length && viewMode === "home") {
+            var featured = bundle.heroItems[0];
+            featured.rank = 1;
+            el.appendChild(
+              hero.renderHero(featured, {
+                onPlay: function(item) {
+                  playItem(item, window.TizenflixApp && window.TizenflixApp.showStatus).catch(function(err) {
+                    if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+                  });
+                },
+                onInfo: openItem
+              })
+            );
+          }
+          var pending = bundle.rows.length;
+          var done = 0;
+          function rowLoaded() {
+            done += 1;
+          }
+          for (var i = 0; i < bundle.rows.length; i++) {
+            (function(rowDef) {
+              api.browseRow(rowDef.id).then(function(rowData) {
+                var items = rowData.items || [];
+                if (items.length) {
+                  el.appendChild(row.createRow(rowDef.title, items, openItem));
+                }
+              }).catch(function() {
+              }).then(rowLoaded);
+            })(bundle.rows[i]);
+          }
+        }).catch(function(err) {
+          el.innerHTML = "";
+          var msg = err.message || String(err);
+          if (msg.indexOf("503") !== -1 || msg.indexOf("TMDB") !== -1) {
+            showError(
+              el,
+              "Catalog unavailable \u2014 set TMDB_API_KEY in tizenflix-api/.env and restart the API. Browser: use Settings to point API URL to http://localhost:8790"
+            );
+          } else {
+            showError(el, "Could not load catalog: " + msg);
+          }
+        });
       }
       function render(container) {
         var el = document.createElement("div");
-        el.className = "screen screen-player";
-        el.innerHTML = '<div class="screen-placeholder"><h2>Player</h2><p>Fullscreen playback chrome will mount here.</p></div>';
+        el.className = "screen screen-home";
+        el.innerHTML = '<div class="loading-msg">Loading catalog\u2026</div>';
+        container.appendChild(el);
+        loadContent(el);
+      }
+      module.exports = {
+        setMode,
+        render
+      };
+    }
+  });
+
+  // app/js/screens/search.js
+  var require_search = __commonJS({
+    "app/js/screens/search.js"(exports, module) {
+      var api = require_api();
+      var router = require_router();
+      var card = require_card();
+      function openItem(item) {
+        if (item.type === "tv") {
+          router.navigate("detail-tv", { tmdbId: item.id, title: item.title });
+        } else {
+          router.navigate("detail-movie", { tmdbId: item.id, title: item.title });
+        }
+      }
+      function render(container) {
+        var el = document.createElement("div");
+        el.className = "screen screen-search";
+        el.innerHTML = '<h2>Search</h2><form class="search-form" id="searchForm"><input type="text" id="searchInput" class="focusable" placeholder="Movies, TV shows\u2026" autocomplete="off" /><button type="submit" class="btn btn-play focusable">Search</button></form><div id="searchResults" class="search-results"></div>';
+        container.appendChild(el);
+        var form = el.querySelector("#searchForm");
+        var input = el.querySelector("#searchInput");
+        var results = el.querySelector("#searchResults");
+        form.addEventListener("submit", function(e) {
+          e.preventDefault();
+          var q = (input.value || "").trim();
+          if (!q) return;
+          results.innerHTML = '<div class="loading-msg">Searching\u2026</div>';
+          api.search(q).then(function(data) {
+            var items = data.results || [];
+            results.innerHTML = "";
+            if (!items.length) {
+              results.innerHTML = '<p class="loading-msg">No results for \u201C' + q + "\u201D.</p>";
+              return;
+            }
+            for (var i = 0; i < items.length; i++) {
+              results.appendChild(card.createCard(items[i], openItem));
+            }
+          }).catch(function(err) {
+            results.innerHTML = '<div class="error-banner">Search failed: ' + (err.message || err) + "</div>";
+          });
+        });
+      }
+      module.exports = {
+        render
+      };
+    }
+  });
+
+  // app/js/screens/settings.js
+  var require_settings = __commonJS({
+    "app/js/screens/settings.js"(exports, module) {
+      var api = require_api();
+      var config = require_config();
+      function render(container) {
+        var el = document.createElement("div");
+        el.className = "screen screen-settings";
+        el.innerHTML = '<h2>Settings</h2><div class="settings-field"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p><p class="settings-hint">Quality: <strong>' + config.getQualityMode() + '</strong> (adaptive)</p><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p><p class="settings-hint">Browser dev: use <code>http://localhost:8790</code> if the API runs on this PC.</p>';
+        container.appendChild(el);
+        var input = el.querySelector("#apiBaseInput");
+        var saveBtn = el.querySelector("#saveApiBtn");
+        var status = el.querySelector("#settingsStatus");
+        saveBtn.addEventListener("click", function() {
+          var url = (input.value || "").trim().replace(/\/$/, "");
+          if (!url) {
+            status.textContent = "Enter an API URL.";
+            return;
+          }
+          api.setBase(url);
+          status.textContent = "Testing\u2026";
+          api.health().then(function(h) {
+            status.textContent = "API OK \u2014 " + (h.service || "tizenflix-api");
+            if (window.TizenflixApp) window.TizenflixApp.showStatus("API connected", false);
+          }).catch(function(err) {
+            status.textContent = "API unreachable: " + err.message;
+          });
+        });
+      }
+      module.exports = {
+        render
+      };
+    }
+  });
+
+  // app/js/screens/mylist.js
+  var require_mylist = __commonJS({
+    "app/js/screens/mylist.js"(exports, module) {
+      function render(container) {
+        var el = document.createElement("div");
+        el.className = "screen screen-mylist";
+        el.innerHTML = '<div class="loading-msg" style="padding:48px"><h2>My List</h2><p>Your saved titles will appear here.</p></div>';
         container.appendChild(el);
       }
       module.exports = {
-        onEnter,
-        onLeave,
-        render,
-        play: function(playResponse, title) {
-          var video = document.getElementById("video");
-          var wrap = document.getElementById("videoWrap");
-          if (!video || !wrap) return;
-          wrap.classList.remove("hidden");
-          var sources = api.sourcesForPlay(playResponse);
-          player.playSources(video, sources, null, wrap, title || playResponse.title);
+        render
+      };
+    }
+  });
+
+  // app/js/screens/detail-movie.js
+  var require_detail_movie = __commonJS({
+    "app/js/screens/detail-movie.js"(exports, module) {
+      var api = require_api();
+      var router = require_router();
+      var playback = require_playback();
+      var params = {};
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+      function onEnter(p) {
+        params = p || {};
+      }
+      function render(container) {
+        var el = document.createElement("div");
+        el.className = "screen screen-detail screen-detail-movie";
+        el.innerHTML = '<div class="loading-msg">Loading\u2026</div>';
+        container.appendChild(el);
+        if (!params.tmdbId) {
+          el.innerHTML = '<div class="error-banner">Missing movie ID</div>';
+          return;
         }
+        api.getMovie(params.tmdbId).then(function(title) {
+          var meta = [];
+          if (title.year) meta.push(title.year);
+          if (title.runtime) meta.push(title.runtime + " min");
+          if (title.rating) meta.push("\u2605 " + title.rating.toFixed(1));
+          el.innerHTML = `<div class="detail-hero"><div class="detail-backdrop" style="background-image:url('` + escapeHtml(title.backdrop || title.poster || "") + `')"></div><div class="detail-gradient"></div><div class="detail-content"><h1 class="detail-title">` + escapeHtml(title.title) + '</h1><p class="detail-meta">' + escapeHtml(meta.join(" \xB7 ")) + '</p><p class="detail-overview">' + escapeHtml(title.overview || "") + '</p><div class="detail-actions"><button type="button" class="btn btn-play focusable" id="detailPlayBtn">\u25B6 Play</button><button type="button" class="btn btn-info focusable" id="detailBackBtn">\u2190 Back</button></div></div></div>';
+          var playBtn = el.querySelector("#detailPlayBtn");
+          var backBtn = el.querySelector("#detailBackBtn");
+          playBtn.addEventListener("click", function() {
+            playback.playMovie(title.id, title.title, status).catch(function(err) {
+              if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+            });
+          });
+          backBtn.addEventListener("click", function() {
+            router.back();
+          });
+        }).catch(function(err) {
+          el.innerHTML = '<div class="error-banner">Failed to load movie: ' + escapeHtml(err.message) + "</div>";
+        });
+        function status(msg) {
+          if (window.TizenflixApp) window.TizenflixApp.showStatus(msg, false);
+        }
+      }
+      module.exports = {
+        onEnter,
+        render
+      };
+    }
+  });
+
+  // app/js/screens/detail-tv.js
+  var require_detail_tv = __commonJS({
+    "app/js/screens/detail-tv.js"(exports, module) {
+      var api = require_api();
+      var router = require_router();
+      var playback = require_playback();
+      var params = {};
+      var selectedSeason = 1;
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+      function onEnter(p) {
+        params = p || {};
+        selectedSeason = p && p.season || 1;
+      }
+      function renderEpisodes(el, tmdbId, showTitle) {
+        var listEl = el.querySelector(".episode-list");
+        if (!listEl) return;
+        listEl.innerHTML = "<h3>Season " + selectedSeason + '</h3><div class="loading-msg">Loading episodes\u2026</div>';
+        api.getEpisodes(tmdbId, selectedSeason).then(function(data) {
+          var episodes = data.episodes || [];
+          listEl.innerHTML = "<h3>Season " + selectedSeason + "</h3>";
+          if (!episodes.length) {
+            listEl.innerHTML += '<p class="loading-msg">No episodes found.</p>';
+            return;
+          }
+          for (var i = 0; i < episodes.length; i++) {
+            (function(ep) {
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "episode-item focusable";
+              btn.innerHTML = "<strong>E" + ep.episode + ": " + escapeHtml(ep.title) + "</strong><span>" + escapeHtml(ep.overview || "") + "</span>";
+              btn.addEventListener("click", function() {
+                var label = showTitle + " S" + ep.season + "E" + ep.episode;
+                playback.playTvEpisode(tmdbId, ep.season, ep.episode, label, status).catch(function(err) {
+                  if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+                });
+              });
+              listEl.appendChild(btn);
+            })(episodes[i]);
+          }
+        }).catch(function(err) {
+          listEl.innerHTML = "<h3>Season " + selectedSeason + '</h3><div class="error-banner">' + escapeHtml(err.message) + "</div>";
+        });
+        function status(msg) {
+          if (window.TizenflixApp) window.TizenflixApp.showStatus(msg, false);
+        }
+      }
+      function render(container) {
+        var el = document.createElement("div");
+        el.className = "screen screen-detail screen-detail-tv";
+        el.innerHTML = '<div class="loading-msg">Loading\u2026</div>';
+        container.appendChild(el);
+        if (!params.tmdbId) {
+          el.innerHTML = '<div class="error-banner">Missing series ID</div>';
+          return;
+        }
+        api.getTv(params.tmdbId).then(function(title) {
+          var meta = [];
+          if (title.year) meta.push(title.year);
+          if (title.rating) meta.push("\u2605 " + title.rating.toFixed(1));
+          el.innerHTML = `<div class="detail-hero"><div class="detail-backdrop" style="background-image:url('` + escapeHtml(title.backdrop || title.poster || "") + `')"></div><div class="detail-gradient"></div><div class="detail-content"><h1 class="detail-title">` + escapeHtml(title.title) + '</h1><p class="detail-meta">' + escapeHtml(meta.join(" \xB7 ")) + '</p><p class="detail-overview">' + escapeHtml(title.overview || "") + '</p><div class="detail-actions"><button type="button" class="btn btn-play focusable" id="detailPlayS1E1">\u25B6 Play S1E1</button><button type="button" class="btn btn-info focusable" id="detailBackBtn">\u2190 Back</button></div></div></div><div class="episode-list"></div>';
+          el.querySelector("#detailPlayS1E1").addEventListener("click", function() {
+            playback.playTvEpisode(title.id, 1, 1, title.title + " S1E1", status).catch(function(err) {
+              if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+            });
+          });
+          el.querySelector("#detailBackBtn").addEventListener("click", function() {
+            router.back();
+          });
+          renderEpisodes(el, title.id, title.title);
+        }).catch(function(err) {
+          el.innerHTML = '<div class="error-banner">Failed to load series: ' + escapeHtml(err.message) + "</div>";
+        });
+        function status(msg) {
+          if (window.TizenflixApp) window.TizenflixApp.showStatus(msg, false);
+        }
+      }
+      module.exports = {
+        onEnter,
+        render
       };
     }
   });
@@ -1249,37 +1697,80 @@ var TizenflixApp = (() => {
       var focus = require_focus();
       var debug = require_debug();
       var player = require_player();
+      var playback = require_playback();
       var home = require_home();
       var search = require_search();
       var settings = require_settings();
+      var mylist = require_mylist();
       var detailMovie = require_detail_movie();
       var detailTv = require_detail_tv();
-      var playerScreen = require_player2();
+      function showStatus(message, isError) {
+        var bar = document.getElementById("statusBar");
+        if (!bar) return;
+        bar.textContent = message;
+        bar.classList.remove("hidden", "is-error");
+        if (isError) bar.classList.add("is-error");
+        clearTimeout(showStatus._timer);
+        showStatus._timer = setTimeout(function() {
+          bar.classList.add("hidden");
+        }, 5e3);
+      }
       function updateFocusHint(label) {
         var el = document.getElementById("focusHint");
         if (el) el.textContent = "Focused: " + label;
       }
-      function wireNav() {
-        var nav = document.getElementById("appNav");
+      function browseScreen(mode) {
+        return {
+          onEnter: function() {
+            home.setMode(mode);
+          },
+          render: home.render
+        };
+      }
+      function setSidebarActive(screen) {
+        var nav = document.getElementById("sidebar");
+        if (!nav) return;
+        var items = nav.querySelectorAll(".nav-item");
+        for (var i = 0; i < items.length; i++) {
+          items[i].classList.remove("active");
+          if (items[i].getAttribute("data-screen") === screen) {
+            items[i].classList.add("active");
+          }
+        }
+      }
+      function wireSidebar() {
+        var nav = document.getElementById("sidebar");
         if (!nav) return;
         nav.addEventListener("click", function(e) {
           var btn = e.target;
-          if (!btn || !btn.getAttribute) return;
+          while (btn && btn !== nav && !btn.getAttribute("data-screen")) {
+            btn = btn.parentNode;
+          }
+          if (!btn || btn === nav) return;
           var screen = btn.getAttribute("data-screen");
           if (!screen) return;
-          router.navigate(screen);
-          var links = nav.querySelectorAll("button");
-          for (var i = 0; i < links.length; i++) {
-            links[i].classList.remove("nav-active");
-          }
-          btn.classList.add("nav-active");
+          router.replace(screen);
+          setSidebarActive(screen);
         });
+      }
+      function wirePlayback() {
+        var stopBtn = document.getElementById("btnStop");
+        if (stopBtn) {
+          stopBtn.addEventListener("click", function() {
+            playback.stop();
+          });
+        }
       }
       function wireGlobalKeys() {
         document.addEventListener("keydown", function(e) {
           if (e.keyCode === 10009 || e.key === "Back") {
-            if (!document.body.classList.contains("is-playing")) {
-              router.back();
+            if (document.body.classList.contains("is-playing")) {
+              playback.stop();
+              e.preventDefault();
+              return;
+            }
+            if (router.back()) {
+              e.preventDefault();
             }
           }
           if (player.isMediaPlayPauseKey(e)) {
@@ -1289,20 +1780,28 @@ var TizenflixApp = (() => {
         });
       }
       function init() {
+        if (!player.isTizenTv()) {
+          document.body.classList.add("browser-dev");
+        }
         debug.debugClear();
-        debug.debugLog("Tizenflix app \u2014 Tizen TV: " + (player.isTizenTv() ? "yes" : "no"));
-        router.register("home", home);
+        debug.debugLog("Tizenflix \u2014 Tizen TV: " + (player.isTizenTv() ? "yes" : "no"));
+        router.register("home", browseScreen("home"));
+        router.register("trending", browseScreen("trending"));
+        router.register("tv", browseScreen("tv"));
+        router.register("movies", browseScreen("movies"));
         router.register("search", search);
         router.register("settings", settings);
+        router.register("mylist", mylist);
         router.register("detail-movie", detailMovie);
         router.register("detail-tv", detailTv);
-        router.register("player", playerScreen);
         router.init({
-          root: document.getElementById("appRoot"),
+          root: document.getElementById("screen"),
           initial: "home",
           onFocusHint: updateFocusHint
         });
-        wireNav();
+        setSidebarActive("home");
+        wireSidebar();
+        wirePlayback();
         wireGlobalKeys();
         focus.setupFocus(document.body, updateFocusHint);
       }
@@ -1311,8 +1810,13 @@ var TizenflixApp = (() => {
       } else {
         init();
       }
+      window.TizenflixApp = {
+        router,
+        showStatus
+      };
       module.exports = {
-        router
+        router,
+        showStatus
       };
     }
   });

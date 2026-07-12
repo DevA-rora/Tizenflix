@@ -20,6 +20,7 @@ function render() {
   var el = document.getElementById("debugOverlay");
   if (!el) return;
   el.textContent = lines.join("\n");
+  el.classList.remove("hidden");
 }
 
 function debugLog(msg) {

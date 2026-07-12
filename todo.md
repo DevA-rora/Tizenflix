@@ -1,10 +1,10 @@
 # Todo
-- [ ] Phase 1 UI: home browse rows → `app/js/screens/home.js`
-- [ ] Phase 1 UI: movie/TV detail + play → `app/js/screens/detail-*.js`
 
 # Doing
 
 # Done
+- [x] Netflix-style UI (sidebar, hero, browse rows) — browser testable at `:3010/app/index.html`
+- [x] Movie/TV detail screens + Play → `app/js/screens/detail-*.js`
 - [x] Organize app directory for UI development → `tizenflix-app/STRUCTURE.md`
 - [x] Gate test passed (Inception + Off Campus episodes) → `tizenflix-app/RESULTS.md`
 - [x] Research TizenBrew apps & build plan → `docs/tizenbrew-app-research.md`

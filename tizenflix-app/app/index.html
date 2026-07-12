@@ -8,38 +8,57 @@
   <link rel="stylesheet" href="css/ui.css" />
   <link rel="stylesheet" href="css/player.css" />
 </head>
-<body class="app-shell">
-  <noscript><p class="noscript-warn">JavaScript is required for Tizenflix.</p></noscript>
-  <div id="focusHint">Focused: —</div>
+<body class="app-body">
+  <div id="app" class="shell">
+    <nav id="sidebar" class="sidebar" aria-label="Main navigation">
+      <button type="button" class="nav-item focusable" data-screen="search" title="Search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <span class="nav-label">Search</span>
+      </button>
+      <button type="button" class="nav-item focusable active" data-screen="home" title="Home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span class="nav-label">Home</span>
+      </button>
+      <button type="button" class="nav-item focusable" data-screen="trending" title="Trending">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+        <span class="nav-label">Trending</span>
+      </button>
+      <button type="button" class="nav-item focusable" data-screen="tv" title="TV Shows">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+        <span class="nav-label">TV</span>
+      </button>
+      <button type="button" class="nav-item focusable" data-screen="movies" title="Movies">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>
+        <span class="nav-label">Movies</span>
+      </button>
+      <button type="button" class="nav-item focusable" data-screen="mylist" title="My List">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+        <span class="nav-label">My List</span>
+      </button>
+      <button type="button" class="nav-item focusable nav-bottom" data-screen="settings" title="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <span class="nav-label">Settings</span>
+      </button>
+    </nav>
 
-  <nav class="app-nav setup-only" aria-label="Main">
-    <h1 class="app-logo">TIZENFLIX</h1>
-    <div class="app-nav-links" id="appNav">
-      <button type="button" data-screen="home" class="nav-active">Home</button>
-      <button type="button" data-screen="search">Search</button>
-      <button type="button" data-screen="settings">Settings</button>
-    </div>
-  </nav>
+    <main id="main" class="main">
+      <div id="screen" class="screen"><p class="loading-msg">Loading Tizenflix…</p></div>
+    </main>
+  </div>
 
-  <main id="appRoot" class="app-main" role="main"></main>
-
-  <!-- Player layer — shared by player screen -->
   <div id="videoWrap" class="video-wrap hidden">
     <div class="video-aspect">
       <video id="video" playsinline></video>
     </div>
-    <p id="nowPlaying" class="now-playing">Video appears here when playback starts.</p>
-  </div>
-
-  <pre id="debugOverlay" class="debug-overlay hidden">Debug log...</pre>
-
-  <div id="playbackBar" class="playback-bar">
-    <div class="row">
-      <button type="button" id="playPauseBtn">Play / Pause</button>
-      <button type="button" id="stopBtnBar" class="secondary">Stop</button>
-      <span id="playbackStatus" style="color:#b3b3b3;font-size:24px;">Playing...</span>
+    <div class="playback-bar">
+      <button type="button" id="btnStop" class="btn btn-stop focusable">← Back</button>
+      <span id="playbackTitle" class="playback-title"></span>
     </div>
   </div>
+
+  <div id="statusBar" class="status-bar hidden"></div>
+  <pre id="debugOverlay" class="debug-overlay hidden">Debug log…</pre>
+  <div id="focusHint" class="focus-hint">↑↓←→ navigate · Enter select · Back stop</div>
 
   <script src="lib/hls.min.js"></script>
   <script src="dist/app.bundle.js"></script>

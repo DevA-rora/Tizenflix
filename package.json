@@ -1,10 +1,10 @@
 {
   "name": "tizenflix",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "TizenBrew module for Tizenflix (LAN dev — websiteURL points at your PC)",
   "packageType": "mods",
   "appName": "Tizenflix",
-  "websiteURL": "http://192.168.86.11:3010/app/index.html",
+  "websiteURL": "http://192.168.86.49:3010/app/index.html",
   "main": "tizenflix-app/app/dev-noop.js",
   "keys": [
     "MediaPlayPause",

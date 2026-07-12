@@ -1,85 +1,517 @@
-/* Main Tizenflix app shell — Netflix-style layout foundation */
+/* Netflix-style Tizenflix UI */
 
-.app-shell {
-  min-height: 100vh;
+.app-body {
+  overflow-x: hidden;
   background-color: #141414;
 }
 
-.app-nav {
+.shell {
+  display: -webkit-flex;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* --- Sidebar --- */
+.sidebar {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  z-index: 100;
+  bottom: 0;
+  z-index: 200;
+  width: 72px;
   display: -webkit-flex;
   display: flex;
+  -webkit-flex-direction: column;
+  flex-direction: column;
   -webkit-align-items: center;
   align-items: center;
-  padding: 24px 48px;
-  background: linear-gradient(to bottom, rgba(20, 20, 20, 0.95) 0%, rgba(20, 20, 20, 0) 100%);
+  padding: 24px 0;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 100%);
 }
 
-.app-logo {
-  margin: 0;
-  font-size: 36px;
-  font-weight: bold;
-  color: #e50914;
-  letter-spacing: 1px;
+.nav-item {
+  width: 56px;
+  min-height: 56px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #b3b3b3;
+  cursor: pointer;
 }
 
-.app-nav-links {
-  margin-left: 48px;
-  display: -webkit-flex;
-  display: flex;
-}
-
-.app-nav-links button {
-  min-height: 48px;
-  padding: 10px 20px;
-  margin-right: 12px;
-  background-color: transparent;
-  font-size: 24px;
-}
-
-.app-nav-links button.tv-focus,
-.app-nav-links button.nav-active {
-  background-color: #333333;
-}
-
-.app-main {
-  padding: 120px 48px 48px;
-  max-width: 1920px;
+.nav-item svg {
+  width: 28px;
+  height: 28px;
+  fill: currentColor;
+  display: block;
   margin: 0 auto;
+}
+
+.nav-item .nav-label {
+  display: none;
+}
+
+.nav-item.active {
+  color: #ffffff;
+  border-bottom: 3px solid #e50914;
+  border-radius: 0;
+}
+
+.nav-item.nav-bottom {
+  margin-top: auto;
+}
+
+.nav-item.tv-focus {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* --- Main content --- */
+.main {
+  -webkit-flex: 1;
+  flex: 1;
+  margin-left: 72px;
+  min-height: 100vh;
 }
 
 .screen {
   display: block;
+  min-height: 100vh;
 }
 
-.screen-placeholder {
-  padding: 48px;
-  background-color: #1f1f1f;
-  border: 2px solid #333333;
-  border-radius: 6px;
+.screen-home {
+  padding-bottom: 64px;
 }
 
-.screen-placeholder h2 {
+/* --- Hero --- */
+.hero {
+  position: relative;
+  min-height: 72vh;
+  margin-bottom: 24px;
+}
+
+.hero-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-size: cover;
+  background-position: center top;
+  background-color: #1a1a1a;
+}
+
+.hero-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    #141414 0%,
+    rgba(20, 20, 20, 0.6) 40%,
+    rgba(20, 20, 20, 0.2) 70%,
+    rgba(20, 20, 20, 0.4) 100%
+  );
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 640px;
+  padding: 120px 48px 48px;
+}
+
+.hero-badge {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+  color: #ffffff;
+}
+
+.hero-n {
+  color: #e50914;
+  font-weight: bold;
+}
+
+.hero-title {
   margin: 0 0 16px;
-  font-size: 34px;
+  font-size: 52px;
+  font-weight: bold;
+  line-height: 1.1;
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
 }
 
-.screen-placeholder p {
+.hero-rank {
+  margin-bottom: 16px;
+  font-size: 22px;
+  color: #ffffff;
+}
+
+.top10 {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 8px;
+  border: 2px solid #808080;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.hero-overview {
   margin: 0 0 24px;
-  color: #b3b3b3;
-  font-size: 26px;
+  font-size: 24px;
+  line-height: 1.4;
+  color: #e5e5e5;
+  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.9);
 }
 
-.app-footer-hint {
+.hero-actions {
+  display: -webkit-flex;
+  display: flex;
+}
+
+.hero-actions .btn {
+  margin-right: 16px;
+}
+
+.btn {
+  min-height: 52px;
+  padding: 12px 28px;
+  border: none;
+  border-radius: 4px;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-play {
+  background-color: #ffffff;
+  color: #141414;
+}
+
+.btn-info {
+  background-color: rgba(109, 109, 110, 0.7);
+  color: #ffffff;
+}
+
+.btn-play.tv-focus,
+.btn-info.tv-focus {
+  -webkit-transform: scale(1.05);
+  transform: scale(1.05);
+}
+
+/* --- Content rows --- */
+.content-row {
+  margin-bottom: 32px;
+  padding-left: 48px;
+}
+
+.row-title {
+  margin: 0 0 16px;
+  font-size: 26px;
+  font-weight: normal;
+  color: #e5e5e5;
+}
+
+.row-track {
+  display: -webkit-flex;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.row-track::-webkit-scrollbar {
+  height: 8px;
+}
+
+.row-track::-webkit-scrollbar-thumb {
+  background: #444444;
+  border-radius: 4px;
+}
+
+/* --- Cards --- */
+.card {
+  -webkit-flex: 0 0 auto;
+  flex: 0 0 auto;
+  width: 180px;
+  margin-right: 12px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card-poster {
+  position: relative;
+  width: 180px;
+  height: 270px;
+  border-radius: 4px;
+  background-color: #2a2a2a;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+
+.card-n {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  background-color: #e50914;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 22px;
+  border-radius: 2px;
+}
+
+.card-title {
+  display: block;
+  margin-top: 8px;
+  font-size: 18px;
+  color: #b3b3b3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card.tv-focus .card-poster {
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 0 2px #e50914;
+  -webkit-transform: scale(1.08);
+  transform: scale(1.08);
+}
+
+/* --- Detail screens --- */
+.screen-detail {
+  min-height: 100vh;
+}
+
+.detail-hero {
+  position: relative;
+  min-height: 60vh;
+}
+
+.detail-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1a1a;
+}
+
+.detail-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, #141414 10%, rgba(20, 20, 20, 0.5) 60%, rgba(20, 20, 20, 0.3) 100%);
+}
+
+.detail-content {
+  position: relative;
+  z-index: 2;
+  padding: 80px 48px 48px;
+  max-width: 800px;
+}
+
+.detail-title {
+  margin: 0 0 12px;
+  font-size: 48px;
+  font-weight: bold;
+}
+
+.detail-meta {
+  margin: 0 0 20px;
+  font-size: 22px;
+  color: #46d369;
+}
+
+.detail-overview {
+  margin: 0 0 28px;
+  font-size: 24px;
+  line-height: 1.45;
+  color: #e5e5e5;
+}
+
+.detail-actions {
+  margin-bottom: 32px;
+}
+
+.episode-list {
+  padding: 0 48px 48px;
+}
+
+.episode-list h3 {
+  margin: 0 0 16px;
+  font-size: 28px;
+  font-weight: normal;
+}
+
+.episode-item {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  margin-bottom: 12px;
+  padding: 16px 20px;
+  text-align: left;
+  background-color: #2a2a2a;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.episode-item strong {
+  display: block;
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.episode-item span {
+  font-size: 20px;
+  color: #b3b3b3;
+}
+
+.episode-item.tv-focus {
+  border-color: #ffffff;
+  background-color: #333333;
+}
+
+/* --- Search --- */
+.screen-search {
+  padding: 48px;
+}
+
+.search-form {
+  display: -webkit-flex;
+  display: flex;
+  margin-bottom: 32px;
+}
+
+.search-form input {
+  -webkit-flex: 1;
+  flex: 1;
+  margin-right: 16px;
+}
+
+.search-results {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-wrap: wrap;
+  flex-wrap: wrap;
+}
+
+.search-results .card {
+  margin-bottom: 24px;
+}
+
+/* --- Settings --- */
+.screen-settings {
+  padding: 48px;
+  max-width: 900px;
+}
+
+.screen-settings h2 {
+  margin: 0 0 24px;
+  font-size: 36px;
+}
+
+.settings-field {
+  margin-bottom: 24px;
+}
+
+.settings-field label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.settings-field input {
+  width: 100%;
+  max-width: 600px;
+}
+
+.settings-hint {
   margin-top: 32px;
   font-size: 22px;
   color: #666666;
 }
 
-.app-footer-hint a {
+.settings-hint a {
   color: #b3b3b3;
+}
+
+/* --- Loading / errors --- */
+.loading-msg,
+.error-banner {
+  padding: 48px;
+  font-size: 26px;
+  color: #b3b3b3;
+}
+
+.error-banner {
+  color: #e87c03;
+  background-color: rgba(232, 124, 3, 0.15);
+  border-left: 4px solid #e87c03;
+  margin: 24px 48px;
+}
+
+.status-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  -webkit-transform: translateX(-50%);
+  transform: translateX(-50%);
+  z-index: 300;
+  padding: 14px 28px;
+  background-color: rgba(0, 0, 0, 0.9);
+  border: 2px solid #333333;
+  border-radius: 4px;
+  font-size: 22px;
+  color: #ffffff;
+}
+
+.status-bar.is-error {
+  border-color: #e50914;
+  color: #e50914;
+}
+
+/* --- Browser dev --- */
+body.browser-dev #focusHint {
+  display: block;
+}
+
+body.browser-dev.is-playing #focusHint {
+  display: none;
+}
+
+.debug-overlay.hidden {
+  display: none;
+}
+
+.debug-overlay:not(.hidden) {
+  display: block;
+}
+
+.playback-title {
+  margin-left: 24px;
+  font-size: 22px;
+  color: #b3b3b3;
+}
+
+.btn-stop {
+  background-color: #333333;
 }

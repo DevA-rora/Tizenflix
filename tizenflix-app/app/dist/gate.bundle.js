@@ -9,18 +9,25 @@ var TizenflixGate = (() => {
     "app/js/core/config.js"(exports, module) {
       var STORAGE_KEY = "tizenflix.apiBase";
       var QUALITY_MODE_KEY = "tizenflix.qualityMode";
-      var DEFAULT_API = "http://192.168.86.11:8790";
+      var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 9e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
+      function deriveDefaultApi() {
+        if (typeof window !== "undefined" && window.location && window.location.hostname) {
+          var host = window.location.hostname;
+          if (host && host !== "localhost" && host !== "127.0.0.1") {
+            return "http://" + host + ":" + API_PORT;
+          }
+        }
+        return "http://localhost:" + API_PORT;
+      }
       function getApiBase() {
         try {
           var stored = localStorage.getItem(STORAGE_KEY);
-          if (stored && stored.indexOf("localhost") === -1 && stored.indexOf("127.0.0.1") === -1) {
-            return stored;
-          }
+          if (stored) return stored.replace(/\/$/, "");
         } catch (err) {
         }
-        return DEFAULT_API;
+        return deriveDefaultApi();
       }
       function setApiBase(url) {
         var trimmed = (url || "").replace(/\/$/, "");
@@ -148,11 +155,22 @@ var TizenflixGate = (() => {
         container.appendChild(el);
         container.scrollTop = container.scrollHeight;
       }
+      function apiGet(path) {
+        return fetchWithTimeout(getApiBase() + path, 2e4).then(function(res) {
+          if (!res.ok) {
+            return res.text().then(function(text) {
+              throw new Error("API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
+            });
+          }
+          return res.json();
+        });
+      }
       module.exports = {
         STORAGE_KEY,
         QUALITY_MODE_KEY,
         PLAY_RESOLVE_TIMEOUT_MS,
-        DEFAULT_API,
+        deriveDefaultApi,
+        API_PORT,
         VALID_QUALITY_MODES,
         getApiBase,
         setApiBase,
@@ -166,7 +184,9 @@ var TizenflixGate = (() => {
         orderSourcesForPlay,
         listSourcesToTry,
         detectStreamType,
-        logLine
+        logLine,
+        apiGet,
+        fetchWithTimeout
       };
     }
   });
@@ -193,6 +213,7 @@ var TizenflixGate = (() => {
         var el = document.getElementById("debugOverlay");
         if (!el) return;
         el.textContent = lines.join("\n");
+        el.classList.remove("hidden");
       }
       function debugLog(msg) {
         var time = (/* @__PURE__ */ new Date()).toLocaleTimeString();

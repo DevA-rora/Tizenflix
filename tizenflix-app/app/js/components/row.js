@@ -1,20 +1,29 @@
 /**
- * Horizontal content row (stub).
+ * Horizontal content row.
  */
 
-function create(options) {
+var card = require("./card.js");
+
+function createRow(title, items, onSelect) {
   var row = document.createElement("section");
   row.className = "content-row";
-  row.innerHTML =
-    "<h3 class=\"content-row-title\">" +
-    (options.title || "Row") +
-    "</h3>" +
-    '<div class="content-row-track" data-row="' +
-    (options.id || "") +
-    '"></div>';
+
+  var heading = document.createElement("h2");
+  heading.className = "row-title";
+  heading.textContent = title;
+  row.appendChild(heading);
+
+  var track = document.createElement("div");
+  track.className = "row-track";
+
+  for (var i = 0; i < items.length; i++) {
+    track.appendChild(card.createCard(items[i], onSelect));
+  }
+
+  row.appendChild(track);
   return row;
 }
 
 module.exports = {
-  create: create,
+  createRow: createRow,
 };

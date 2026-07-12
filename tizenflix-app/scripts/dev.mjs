@@ -35,6 +35,32 @@ function lanAddresses() {
   return out;
 }
 
+function warnTizenBrewUrlMismatch(ips) {
+  const modPkgPath = path.join(ROOT, "..", "package.json");
+  try {
+    const raw = fs.readFileSync(modPkgPath, "utf8");
+    const mod = JSON.parse(raw);
+    const url = mod.websiteURL || "";
+    const match = url.match(/^http:\/\/([^:]+):(\d+)/);
+    if (!match) return;
+    const configuredIp = match[1];
+    const configuredPort = match[2];
+    if (configuredPort !== String(PORT)) {
+      console.log("  ⚠ websiteURL port is " + configuredPort + " but server is on " + PORT);
+    }
+    if (configuredIp !== "localhost" && !ips.includes(configuredIp)) {
+      console.log("");
+      console.log("  ⚠ TizenBrew websiteURL IP mismatch!");
+      console.log("    package.json has: " + configuredIp);
+      console.log("    Your LAN IP is:   " + (ips[0] || "(unknown)"));
+      console.log("    Update root package.json websiteURL, push, and refresh the GitHub module on TV.");
+      console.log("");
+    }
+  } catch {
+    /* optional check */
+  }
+}
+
 function safePath(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0]);
   const rel = decoded === "/" ? "/app/index.html" : decoded;
@@ -75,8 +101,9 @@ server.listen(PORT, "0.0.0.0", () => {
     console.log("  App:   http://" + ip + ":" + PORT + "/app/index.html");
     console.log("  Gate:  http://" + ip + ":" + PORT + "/app/gate/index.html");
   }
+  warnTizenBrewUrlMismatch(ips);
   console.log("");
-  console.log("Also run tizenflix-api with PUBLIC_BASE set to your LAN IP.");
+  console.log("Also run tizenflix-api with PUBLIC_BASE=http://" + (ips[0] || "YOUR_LAN_IP") + ":8790");
   console.log("See docs/tv-setup.md for loading this on your TV via TizenBrew.");
   console.log("");
 });
