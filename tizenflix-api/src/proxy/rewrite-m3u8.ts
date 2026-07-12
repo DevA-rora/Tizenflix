@@ -93,7 +93,8 @@ export function simplifyMasterForTv(content: string, maxRungs = 3): string {
 export function rewriteM3u8(
   content: string,
   manifestUrl: string,
-  publicBase: string
+  publicBase: string,
+  referer?: string
 ): string {
   const simplified = simplifyMasterForTv(content);
   const lines = simplified.split(/\r?\n/);
@@ -110,14 +111,14 @@ export function rewriteM3u8(
     if (trimmed.startsWith("#")) {
       const rewritten = trimmed.replace(URI_ATTR_RE, (_match, uri: string) => {
         const absolute = resolvePlaylistUrl(manifestUrl, uri);
-        return `URI="${buildProxyUrl(publicBase, absolute)}"`;
+        return `URI="${buildProxyUrl(publicBase, absolute, referer)}"`;
       });
       out.push(rewritten);
       continue;
     }
 
     const absolute = resolvePlaylistUrl(manifestUrl, trimmed);
-    out.push(buildProxyUrl(publicBase, absolute));
+    out.push(buildProxyUrl(publicBase, absolute, referer));
   }
 
   return out.join("\n");

@@ -35,6 +35,9 @@ function render(container) {
     "</button>" +
     '<p class="settings-hint">Dev mode shows focus hints and the debug log overlay.</p>' +
     "</div>" +
+    '<p class="settings-hint">Play backend: <strong>' +
+    config.getPlayBackend() +
+    '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle backend</button></p>' +
     '<p class="settings-hint">Quality: <strong>' +
     config.getQualityMode() +
     "</strong> (adaptive)</p>" +
@@ -45,7 +48,19 @@ function render(container) {
   var input = el.querySelector("#apiBaseInput");
   var saveBtn = el.querySelector("#saveApiBtn");
   var devBtn = el.querySelector("#devModeBtn");
+  var backendBtn = el.querySelector("#backendCycleBtn");
   var status = el.querySelector("#settingsStatus");
+
+  if (backendBtn) {
+    backendBtn.addEventListener("click", function () {
+      var order = ["auto", "tmdb-native", "vidking", "streamflix"];
+      var current = config.getPlayBackend();
+      var idx = order.indexOf(current);
+      var next = order[(idx + 1) % order.length];
+      config.setPlayBackend(next);
+      backendBtn.parentNode.querySelector("strong").textContent = next;
+    });
+  }
 
   devBtn.addEventListener("click", function () {
     var next = !config.getDevMode();

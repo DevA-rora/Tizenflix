@@ -9,8 +9,13 @@ import { buildProxyUrl } from "../proxy/proxy-url.js";
 import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from "../proxy/upstream.js";
 import { validatePlaySources } from "../proxy/validate-sources.js";
 import { resolvePlayableSources, listProviders } from "../normalize/to-play-response.js";
+import { parseBackendParam, resolveWithBackend } from "../normalize/resolve-backend.js";
+import { fetchMetadata } from "../api/metadata.js";
+import { enrichWithOpenSubtitles } from "../subtitles/opensubtitles.js";
 import { ProgressService } from "../store/progress.js";
 import { ProviderHealthService } from "../store/provider-health.js";
+import { getAllProviders } from "../streamflix/providers/registry.js";
+import { TMDB_NATIVE_SOURCES } from "../streamflix/tmdb-native/registry.js";
 import * as tmdb from "../tmdb/client.js";
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../fixtures");
@@ -22,8 +27,8 @@ export interface RouteContext {
   providerHealth: ProviderHealthService;
 }
 
-function proxyWrap(publicBase: string, url: string): string {
-  return buildProxyUrl(publicBase, url);
+function proxyWrap(publicBase: string, url: string, referer?: string): string {
+  return buildProxyUrl(publicBase, url, referer);
 }
 
 function withProxiedUrls(
@@ -34,7 +39,7 @@ function withProxiedUrls(
     ...play,
     sources: play.sources.map((s) => ({
       ...s,
-      url: proxyWrap(publicBase, s.url),
+      url: proxyWrap(publicBase, s.url, s.upstreamHeaders?.Referer),
     })),
     subtitles: play.subtitles.map((sub) => ({
       ...sub,
@@ -105,8 +110,12 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         browseRows: "/browse/rows",
         browseRow: "/browse/row/:id",
         providers: "/providers",
-        playMovie: "/play/movie/:tmdbId",
-        playTv: "/play/tv/:tmdbId/:season/:episode",
+        playMovie: "/play/movie/:tmdbId?backend=vidking|tmdb-native|streamflix|auto",
+        playTv: "/play/tv/:tmdbId/:season/:episode?backend=vidking|tmdb-native|streamflix|auto",
+        playTmdbNativeMovie: "/play/tmdb-native/movie/:tmdbId",
+        playTmdbNativeTv: "/play/tmdb-native/tv/:tmdbId/:season/:episode",
+        playStreamflixMovie: "/play/streamflix/movie/:tmdbId",
+        playStreamflixTv: "/play/streamflix/tv/:tmdbId/:season/:episode",
         playReport: "POST /play/report",
         subtitlesMovie: "/subtitles/movie/:tmdbId",
         subtitlesTv: "/subtitles/tv/:tmdbId/:season/:episode",
@@ -276,8 +285,50 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   app.get("/providers", async (_req, res) => {
     try {
       const base = await listProviders();
-      const providers = providerHealth.list(base);
+      const streamflixProviders = getAllProviders().map((p) => ({
+        id: p.id,
+        name: p.name,
+        endpoint: "streamflix",
+        status: p.enabled ? "unknown" : "disabled",
+        language: p.language,
+      }));
+      const providers = providerHealth.list([...base, ...streamflixProviders]);
       res.json({ providers });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/providers/streamflix", (_req, res) => {
+    try {
+      const providers = getAllProviders().map((p) => ({
+        id: p.id,
+        name: p.name,
+        language: p.language,
+        supportsMovies: p.supportsMovies,
+        supportsTv: p.supportsTv,
+        enabled: p.enabled !== false && p.implementationStatus !== "stub",
+        implementationStatus: p.implementationStatus ?? "stub",
+        requiresPlaywright: p.requiresPlaywright ?? false,
+      }));
+      res.json({ count: providers.length, providers });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/providers/tmdb-native", (_req, res) => {
+    try {
+      const sources = TMDB_NATIVE_SOURCES.map((s) => ({
+        id: s.id,
+        name: s.name,
+        mainUrl: s.mainUrl,
+        supportsMovies: s.supportsMovies,
+        supportsTv: s.supportsTv,
+        priority: s.priority,
+        duplicateOf: s.duplicateOf ?? null,
+      }));
+      res.json({ count: sources.length, sources });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -310,9 +361,15 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     res: Response,
     tizenProfile: boolean
   ) {
+    const meta = await fetchMetadata(play.type, play.tmdbId);
+    const enriched = await enrichWithOpenSubtitles(play, {
+      imdbId: meta.imdbId,
+      title: meta.title,
+    }, publicBase);
+
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
-    const validated = await validatePlaySources(play, publicBase, fetch, {
+    const validated = await validatePlaySources(enriched, publicBase, fetch, {
       tizenProfile,
       reportProvider: (provider, success) => providerHealth.report(provider, success),
       providerScore: providerScoreFromList(providerList),
@@ -320,21 +377,36 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     res.json(withProxiedUrls(publicBase, validated));
   }
 
+  async function resolvePlayRequest(
+    options: Parameters<typeof resolveWithBackend>[0],
+    res: Response,
+    tizenProfile: boolean
+  ) {
+    const baseProviders = await listProviders();
+    const providerList = providerHealth.list(baseProviders);
+    const play = await resolveWithBackend({
+      ...options,
+      providerScore: providerScoreFromList(providerList),
+    });
+    await validateAndRespond(play, res, tizenProfile);
+  }
+
   app.get("/play/movie/:tmdbId", async (req, res) => {
     try {
       const tizenProfile = req.query.profile === "tizen";
-      const baseProviders = await listProviders();
-      const providerList = providerHealth.list(baseProviders);
-      const play = await resolvePlayableSources({
-        type: "movie",
-        tmdbId: req.params.tmdbId,
-        server: typeof req.query.server === "string" ? req.query.server : undefined,
-        allServers: req.query.all !== "false",
-        firstSuccessOnly: false,
-        profile: tizenProfile ? "tizen" : undefined,
-        providerScore: providerScoreFromList(providerList),
-      });
-      await validateAndRespond(play, res, tizenProfile);
+      await resolvePlayRequest(
+        {
+          type: "movie",
+          tmdbId: req.params.tmdbId,
+          server: typeof req.query.server === "string" ? req.query.server : undefined,
+          allServers: req.query.all !== "false",
+          firstSuccessOnly: false,
+          profile: tizenProfile ? "tizen" : undefined,
+          backend: parseBackendParam(req.query.backend),
+        },
+        res,
+        tizenProfile
+      );
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -343,20 +415,97 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   app.get("/play/tv/:tmdbId/:season/:episode", async (req, res) => {
     try {
       const tizenProfile = req.query.profile === "tizen";
-      const baseProviders = await listProviders();
-      const providerList = providerHealth.list(baseProviders);
-      const play = await resolvePlayableSources({
-        type: "tv",
-        tmdbId: req.params.tmdbId,
-        season: req.params.season,
-        episode: req.params.episode,
-        server: typeof req.query.server === "string" ? req.query.server : undefined,
-        allServers: req.query.all !== "false",
-        firstSuccessOnly: false,
-        profile: tizenProfile ? "tizen" : undefined,
-        providerScore: providerScoreFromList(providerList),
-      });
-      await validateAndRespond(play, res, tizenProfile);
+      await resolvePlayRequest(
+        {
+          type: "tv",
+          tmdbId: req.params.tmdbId,
+          season: req.params.season,
+          episode: req.params.episode,
+          server: typeof req.query.server === "string" ? req.query.server : undefined,
+          allServers: req.query.all !== "false",
+          firstSuccessOnly: false,
+          profile: tizenProfile ? "tizen" : undefined,
+          backend: parseBackendParam(req.query.backend),
+        },
+        res,
+        tizenProfile
+      );
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/play/streamflix/movie/:tmdbId", async (req, res) => {
+    try {
+      const tizenProfile = req.query.profile === "tizen";
+      await resolvePlayRequest(
+        {
+          type: "movie",
+          tmdbId: req.params.tmdbId,
+          backend: "streamflix",
+          profile: tizenProfile ? "tizen" : undefined,
+        },
+        res,
+        tizenProfile
+      );
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/play/streamflix/tv/:tmdbId/:season/:episode", async (req, res) => {
+    try {
+      const tizenProfile = req.query.profile === "tizen";
+      await resolvePlayRequest(
+        {
+          type: "tv",
+          tmdbId: req.params.tmdbId,
+          season: req.params.season,
+          episode: req.params.episode,
+          backend: "streamflix",
+          profile: tizenProfile ? "tizen" : undefined,
+        },
+        res,
+        tizenProfile
+      );
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/play/tmdb-native/movie/:tmdbId", async (req, res) => {
+    try {
+      const tizenProfile = req.query.profile === "tizen";
+      await resolvePlayRequest(
+        {
+          type: "movie",
+          tmdbId: req.params.tmdbId,
+          backend: "tmdb-native",
+          profile: tizenProfile ? "tizen" : undefined,
+        },
+        res,
+        tizenProfile
+      );
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/play/tmdb-native/tv/:tmdbId/:season/:episode", async (req, res) => {
+    try {
+      const tizenProfile = req.query.profile === "tizen";
+      await resolvePlayRequest(
+        {
+          type: "tv",
+          tmdbId: req.params.tmdbId,
+          season: req.params.season,
+          episode: req.params.episode,
+          backend: "tmdb-native",
+          profile: tizenProfile ? "tizen" : undefined,
+        },
+        res,
+        tizenProfile
+      );
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -406,6 +555,24 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         typeof req.query.server === "string" ? req.query.server : undefined
       );
       res.json({ subtitles });
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/subtitle/opensubtitles", async (req, res) => {
+    const download =
+      typeof req.query.download === "string" ? req.query.download : "";
+    if (!download.startsWith("http")) {
+      return res.status(400).json({ error: "download query param required" });
+    }
+    try {
+      const { fetchOpenSubtitleVtt } = await import("../subtitles/opensubtitles.js");
+      const vtt = await fetchOpenSubtitleVtt(download);
+      if (!vtt) return res.status(502).json({ error: "Could not fetch subtitle" });
+      res.setHeader("content-type", "text/vtt; charset=utf-8");
+      res.setHeader("access-control-allow-origin", "*");
+      res.send(vtt);
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -534,7 +701,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   }
 
   app.post("/download/movie/:tmdbId", expressJson, (req, res) => {
-    void startDownload(req, res, "movie", req.params.tmdbId);
+    void startDownload(req, res, "movie", String(req.params.tmdbId));
   });
 
   app.post("/download/tv/:tmdbId/:season/:episode", expressJson, (req, res) => {
@@ -542,9 +709,9 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       req,
       res,
       "tv",
-      req.params.tmdbId,
-      req.params.season,
-      req.params.episode
+      String(req.params.tmdbId),
+      String(req.params.season),
+      String(req.params.episode)
     );
   });
 
@@ -573,13 +740,15 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     if (typeof target !== "string" || !target.startsWith("http")) {
       return res.status(400).json({ error: "url query param required" });
     }
+    const referer =
+      typeof req.query.referer === "string" ? req.query.referer : undefined;
     try {
       if (looksLikeBinarySegment(target)) {
-        await pipeProxiedStream(target, res);
+        await pipeProxiedStream(target, res, fetch, { referer });
         return;
       }
 
-      const result = await fetchProxiedStream(target, publicBase);
+      const result = await fetchProxiedStream(target, publicBase, fetch, { referer });
       res.status(result.status);
       if (result.contentType) res.setHeader("content-type", result.contentType);
       res.setHeader("access-control-allow-origin", "*");

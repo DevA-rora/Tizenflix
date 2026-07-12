@@ -1,16 +1,18 @@
 # Tizenflix API
 
-Netflix-style streaming backend for Tizen/Android TV clients. Resolves [Vidking](https://www.vidking.net/) / Videasy / WingsDatabase streams and exposes a REST API for catalog, playback, subtitles, progress, and offline downloads.
+Netflix-style streaming backend for Tizen/Android TV clients. Resolves [Vidking](https://www.vidking.net/) / Videasy / WingsDatabase streams, **TMDB-native embed APIs** (VixSrc, 2Embed, …), and optional Streamflix scrapers.
 
 Educational purposes only.
 
 ## Setup
 
 ```bash
-npm install
+npm install          # runs postinstall → playwright install chromium
 cp .env.example .env   # add TMDB_API_KEY
-npx playwright install chromium   # optional, for capture script
+npm run setup        # re-install Chromium if postinstall was skipped
 ```
+
+**Streamflix** (SFlix, Ridomovies, etc.) needs Playwright Chromium for Cloudflare bypass. Skip browser download in CI only: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install`.
 
 ### Environment
 
@@ -20,6 +22,9 @@ npx playwright install chromium   # optional, for capture script
 | `PORT` | API port (default `8790`) |
 | `PUBLIC_BASE` | Base URL clients use (set LAN IP for TV) |
 | `DATA_DIR` | Progress, downloads, job state (default `./data`) |
+| `DOH_URL` | DNS-over-HTTPS for Streamflix (default Cloudflare) |
+| `STREAMFLIX_REQUIRE_PLAYWRIGHT` | Exit API boot if Chromium missing (`1`) |
+| `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` | Skip Chromium download on `npm install` (CI) |
 
 ## HTTP API
 
@@ -98,11 +103,21 @@ The TV app only talks to your API. Vidking headers are injected server-side. m3u
 npm test
 ```
 
+## Benchmarks
+
+```bash
+npm run benchmark-tmdb-native   # v4: Vidking vs each TMDB-native source
+npm run benchmark-streamflix    # v3: scraper tier (optional)
+```
+
+See `docs/streamflix-cutover.md` for interpretation.
+
 ## Architecture
 
 ```
 TMDB (catalog) ──┐
-                 ├──► Tizenflix API ──► WingsDatabase (resolve/decrypt)
+                 ├──► Tizenflix API ──► Vidking (WingsDatabase decrypt)
+                 │                   └──► TMDB-native (VixSrc, 2Embed, …)
 Progress/downloads (local JSON) ──┘         └──► /proxy/stream ──► CDN
 ```
 

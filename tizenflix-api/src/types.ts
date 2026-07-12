@@ -35,6 +35,8 @@ export interface PlayableSource {
   type: "mp4" | "m3u8" | "dash" | "unknown";
   url: string;
   priority: number;
+  /** Per-source upstream headers for Streamflix embed hosts */
+  upstreamHeaders?: Record<string, string>;
 }
 
 export interface PlayResponse {
@@ -54,7 +56,37 @@ export interface PlayResponse {
     default?: boolean;
   }>;
   nextEpisode: null | { season: string; episode: string };
+  backend?: "vidking" | "streamflix" | "tmdb-native" | "auto";
+  resolveMs?: number;
+  onlySourceId?: string;
+  sourceResults?: Array<{
+    sourceId: string;
+    sourceName: string;
+    ok: boolean;
+    ms: number;
+    servers: number;
+    hls: number;
+    subtitles: number;
+    cfBypassUsed?: boolean;
+    error?: string;
+    layer?: "preflight" | "api_hop" | "extract" | "network" | "infra";
+    duplicateOf?: string;
+  }>;
+  providerResults?: Array<{
+    provider: string;
+    providerId: string;
+    ok: boolean;
+    ms: number;
+    servers: number;
+    hls: number;
+    subtitles: number;
+    cfBypassUsed?: boolean;
+    error?: string;
+    layer?: "infra" | "network" | "provider" | "extractor";
+  }>;
 }
+
+export type PlayBackend = "vidking" | "streamflix" | "tmdb-native" | "auto";
 
 export interface ResolveOptions {
   type: MediaType;
@@ -66,6 +98,8 @@ export interface ResolveOptions {
   firstSuccessOnly?: boolean;
   profile?: "tizen" | "default";
   providerScore?: (provider: string) => number;
+  backend?: PlayBackend;
+  onlySourceId?: string;
 }
 
 export interface ServerResult {

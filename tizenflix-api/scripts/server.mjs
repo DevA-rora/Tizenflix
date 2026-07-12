@@ -9,8 +9,24 @@ import { registerRoutes } from "../src/server/register-routes.ts";
 import { ProgressService } from "../src/store/progress.ts";
 import { ProviderHealthService } from "../src/store/provider-health.ts";
 import { DownloadService } from "../src/download/jobs.ts";
+import {
+  checkPlaywrightReady,
+  formatPlaywrightSetupHelp,
+} from "../src/streamflix/network/playwright-health.ts";
 
 const config = loadConfig();
+
+const pwHealth = await checkPlaywrightReady();
+if (!pwHealth.ready) {
+  if (process.env.STREAMFLIX_REQUIRE_PLAYWRIGHT === "1") {
+    console.error(formatPlaywrightSetupHelp());
+    process.exit(1);
+  }
+  console.warn(`Streamflix CF bypass: ${pwHealth.message}`);
+  console.warn(formatPlaywrightSetupHelp());
+} else {
+  console.log(`Streamflix CF bypass: ${pwHealth.message}`);
+}
 const app = express();
 
 registerRoutes(app, {

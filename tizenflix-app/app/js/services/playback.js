@@ -102,6 +102,8 @@ function playResolved(play, title, onStatus, session) {
 
   wrap.classList.remove("hidden");
   player.showPlaybackChrome(wrap, title || play.title || "");
+  player.applySubtitles(video, play.subtitles || []);
+  player.bindSubtitleButton(video);
   debug.debugClear();
   debug.debugLog("Playing: " + (title || play.title || ""));
 

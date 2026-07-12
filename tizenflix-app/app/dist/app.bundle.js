@@ -319,6 +319,7 @@ var TizenflixApp = (() => {
       var STORAGE_KEY = "tizenflix.apiBase";
       var QUALITY_MODE_KEY = "tizenflix.qualityMode";
       var DEV_MODE_KEY = "tizenflix.devMode";
+      var BACKEND_KEY = "tizenflix.playBackend";
       var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 9e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -346,8 +347,26 @@ var TizenflixApp = (() => {
       function buildPlayQuery(extra) {
         var parts = [];
         if (isTizenClient()) parts.push("profile=tizen");
+        var backend = getPlayBackend();
+        if (backend) parts.push("backend=" + backend);
         if (extra) parts.push(extra);
         return parts.length ? parts.join("&") : null;
+      }
+      function getPlayBackend() {
+        try {
+          var stored = localStorage.getItem(BACKEND_KEY);
+          if (stored === "vidking" || stored === "streamflix" || stored === "auto" || stored === "tmdb-native") return stored;
+        } catch (err) {
+        }
+        return "auto";
+      }
+      function setPlayBackend(mode) {
+        var m = mode === "streamflix" || mode === "auto" || mode === "tmdb-native" ? mode : "vidking";
+        try {
+          localStorage.setItem(BACKEND_KEY, m);
+        } catch (err) {
+        }
+        return m;
       }
       function deriveDefaultApi() {
         if (typeof window !== "undefined" && window.location && window.location.hostname) {
@@ -520,6 +539,8 @@ var TizenflixApp = (() => {
         getDevMode,
         setDevMode,
         buildPlayQuery,
+        getPlayBackend,
+        setPlayBackend,
         getApiBase,
         setApiBase,
         getQualityMode,
@@ -722,6 +743,72 @@ var TizenflixApp = (() => {
       var currentProvider = null;
       var playbackReported = false;
       var nonFatalRecoveries = 0;
+      var activeSubtitles = [];
+      var activeSubtitleIndex = -1;
+      function clearSubtitleTracks(video) {
+        if (!video) return;
+        var tracks = video.querySelectorAll("track");
+        for (var i = 0; i < tracks.length; i++) {
+          tracks[i].parentNode.removeChild(tracks[i]);
+        }
+      }
+      function applySubtitleTrack(video, trackIndex) {
+        if (!video || !video.textTracks) return;
+        var i;
+        for (i = 0; i < video.textTracks.length; i++) {
+          video.textTracks[i].mode = i === trackIndex ? "showing" : "hidden";
+        }
+        activeSubtitleIndex = trackIndex;
+      }
+      function applySubtitles(video, subtitles) {
+        activeSubtitles = subtitles || [];
+        clearSubtitleTracks(video);
+        activeSubtitleIndex = -1;
+        var btn = document.getElementById("btnSubtitles");
+        if (!activeSubtitles.length) {
+          if (btn) btn.classList.add("hidden");
+          return;
+        }
+        var defaultIndex = 0;
+        for (var i = 0; i < activeSubtitles.length; i++) {
+          var sub = activeSubtitles[i];
+          if (!sub || !sub.url) continue;
+          var track = document.createElement("track");
+          track.kind = "subtitles";
+          track.label = sub.label || sub.language || "Sub";
+          track.srclang = (sub.language || "en").slice(0, 2);
+          track.src = sub.url;
+          if (sub.default) defaultIndex = i;
+          video.appendChild(track);
+        }
+        if (btn) {
+          btn.classList.remove("hidden");
+          btn.textContent = "CC: Off";
+        }
+      }
+      function cycleSubtitles(video) {
+        if (!video || !activeSubtitles.length) return;
+        var btn = document.getElementById("btnSubtitles");
+        var next = activeSubtitleIndex + 1;
+        if (next >= activeSubtitles.length) {
+          applySubtitleTrack(video, -1);
+          if (btn) btn.textContent = "CC: Off";
+          return;
+        }
+        applySubtitleTrack(video, next);
+        if (btn) {
+          var label = activeSubtitles[next].label || activeSubtitles[next].language || "On";
+          btn.textContent = "CC: " + label;
+        }
+      }
+      function bindSubtitleButton(video) {
+        var btn = document.getElementById("btnSubtitles");
+        if (!btn || btn._tizenflixBound) return;
+        btn._tizenflixBound = true;
+        btn.addEventListener("click", function() {
+          cycleSubtitles(video);
+        });
+      }
       var READY_TIMEOUT_MS = 12e3;
       var HLS_PRIME_BUFFER_SEC = 20;
       var HLS_PRIME_TIMEOUT_MS = 25e3;
@@ -1390,6 +1477,9 @@ var TizenflixApp = (() => {
         enterPlaybackMode,
         showPlaybackChrome,
         exitPlaybackMode,
+        applySubtitles,
+        bindSubtitleButton,
+        cycleSubtitles,
         isTizenTv,
         logVideoState,
         safePlay,
@@ -1490,6 +1580,8 @@ var TizenflixApp = (() => {
         }
         wrap.classList.remove("hidden");
         player.showPlaybackChrome(wrap, title || play.title || "");
+        player.applySubtitles(video, play.subtitles || []);
+        player.bindSubtitleButton(video);
         debug.debugClear();
         debug.debugLog("Playing: " + (title || play.title || ""));
         function log(msg) {
@@ -2040,12 +2132,23 @@ var TizenflixApp = (() => {
         var devOn = config.getDevMode();
         var el = document.createElement("div");
         el.className = "screen screen-settings";
-        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button><p class="settings-hint">Dev mode shows focus hints and the debug log overlay.</p></div><p class="settings-hint">Quality: <strong>' + config.getQualityMode() + '</strong> (adaptive)</p><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p><p class="settings-hint">Browser dev: use <code>http://localhost:8790</code> if the API runs on this PC.</p>';
+        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button><p class="settings-hint">Dev mode shows focus hints and the debug log overlay.</p></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle backend</button></p><p class="settings-hint">Quality: <strong>' + config.getQualityMode() + '</strong> (adaptive)</p><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p><p class="settings-hint">Browser dev: use <code>http://localhost:8790</code> if the API runs on this PC.</p>';
         container.appendChild(el);
         var input = el.querySelector("#apiBaseInput");
         var saveBtn = el.querySelector("#saveApiBtn");
         var devBtn = el.querySelector("#devModeBtn");
+        var backendBtn = el.querySelector("#backendCycleBtn");
         var status = el.querySelector("#settingsStatus");
+        if (backendBtn) {
+          backendBtn.addEventListener("click", function() {
+            var order = ["auto", "tmdb-native", "vidking", "streamflix"];
+            var current = config.getPlayBackend();
+            var idx = order.indexOf(current);
+            var next = order[(idx + 1) % order.length];
+            config.setPlayBackend(next);
+            backendBtn.parentNode.querySelector("strong").textContent = next;
+          });
+        }
         devBtn.addEventListener("click", function() {
           var next = !config.getDevMode();
           applyDevModeFromSettings(next);

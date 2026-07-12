@@ -1,0 +1,1928 @@
+{
+  "generatedAt": "2026-07-12T11:24:46.395Z",
+  "live": true,
+  "playwright": {
+    "ready": true,
+    "message": "Chromium ready"
+  },
+  "sourceCount": 12,
+  "preflight": [
+    {
+      "sourceId": "vixsrc",
+      "sourceName": "VixSrc",
+      "mainUrl": "https://vixsrc.to",
+      "reachable": true,
+      "status": 200,
+      "ms": 803
+    },
+    {
+      "sourceId": "videasy",
+      "sourceName": "Videasy",
+      "mainUrl": "https://api.videasy.net",
+      "reachable": true,
+      "status": 404,
+      "ms": 633
+    },
+    {
+      "sourceId": "moviesapi",
+      "sourceName": "Moviesapi",
+      "mainUrl": "https://moviesapi.club",
+      "reachable": false,
+      "status": null,
+      "ms": 242,
+      "error": "fetch failed"
+    },
+    {
+      "sourceId": "twoembed",
+      "sourceName": "2Embed",
+      "mainUrl": "https://www.2embed.cc",
+      "reachable": true,
+      "status": 200,
+      "ms": 1066
+    },
+    {
+      "sourceId": "vidsrcnet",
+      "sourceName": "Vidsrc.net",
+      "mainUrl": "https://vidsrc-embed.ru",
+      "reachable": true,
+      "status": 200,
+      "ms": 891
+    },
+    {
+      "sourceId": "vidlink",
+      "sourceName": "VidLink",
+      "mainUrl": "https://vidlink.pro",
+      "reachable": true,
+      "status": 200,
+      "ms": 619
+    },
+    {
+      "sourceId": "vidsrcru",
+      "sourceName": "Vidsrc.Ru",
+      "mainUrl": "https://vidsrc.ru",
+      "reachable": true,
+      "status": 200,
+      "ms": 625
+    },
+    {
+      "sourceId": "vidflix",
+      "sourceName": "Vidflix",
+      "mainUrl": "https://vidflix.club",
+      "reachable": true,
+      "status": 200,
+      "ms": 592
+    },
+    {
+      "sourceId": "vidrock",
+      "sourceName": "Vidrock",
+      "mainUrl": "https://vidrock.net",
+      "reachable": true,
+      "status": 200,
+      "ms": 934
+    },
+    {
+      "sourceId": "vidzee",
+      "sourceName": "Vidzee",
+      "mainUrl": "https://player.vidzee.wtf",
+      "reachable": true,
+      "status": 200,
+      "ms": 528
+    },
+    {
+      "sourceId": "primesrc",
+      "sourceName": "PrimeSrc",
+      "mainUrl": "https://primesrc.me",
+      "reachable": true,
+      "status": 200,
+      "ms": 626
+    },
+    {
+      "sourceId": "vidsrcto",
+      "sourceName": "Vidsrc.to",
+      "mainUrl": "https://vidsrc.to",
+      "reachable": true,
+      "status": 200,
+      "ms": 1279
+    }
+  ],
+  "results": [
+    {
+      "title": "Inception",
+      "type": "movie",
+      "tmdbId": "27205",
+      "vidking": {
+        "ms": 1950,
+        "hls": 5,
+        "error": null
+      },
+      "tmdbNative": {
+        "ms": 12113,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 2079,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 3671,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=Inception&mediaType=movie&year=2010&tmdbId=27205&imdbId=tt1375666; Yoru (Videasy): HTTP 404 for https://api.videasy.net/cdn/sources-with-title?title=Inception&mediaType=movie&year=2010&tmdbId=27205&imdbId=tt1375666; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=Inception&mediaType=movie&year=2010&tmdbId=27205&imdbId=tt1375666; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=Inception&mediaType=movie&year=2010&tmdbId=27205&imdbId=tt1375666; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=Inception&mediaType=movie&year=2010&tmdbId=27205&imdbId=tt1375666; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=Inception&mediaType=movie&year=2010&tmdbId=27205&imdbId=tt1375666",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "moviesapi",
+            "sourceName": "Moviesapi",
+            "ok": false,
+            "ms": 1095,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Moviesapi: fetch failed",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 5701,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 1524,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 3597,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12014,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tie"
+    },
+    {
+      "title": "Off Campus S1E1",
+      "type": "tv",
+      "tmdbId": "273240",
+      "vidking": {
+        "ms": 1049,
+        "hls": 4,
+        "error": null
+      },
+      "tmdbNative": {
+        "ms": 12005,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 1540,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 2124,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=Off%20Campus&mediaType=tv&year=2026&tmdbId=273240&imdbId=tt33546863&episodeId=1&seasonId=1; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=Off%20Campus&mediaType=tv&year=2026&tmdbId=273240&imdbId=tt33546863&episodeId=1&seasonId=1; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=Off%20Campus&mediaType=tv&year=2026&tmdbId=273240&imdbId=tt33546863&episodeId=1&seasonId=1; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=Off%20Campus&mediaType=tv&year=2026&tmdbId=273240&imdbId=tt33546863&episodeId=1&seasonId=1; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=Off%20Campus&mediaType=tv&year=2026&tmdbId=273240&imdbId=tt33546863&episodeId=1&seasonId=1",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 4462,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 774,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2752,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12000,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tie"
+    },
+    {
+      "title": "The Matrix",
+      "type": "movie",
+      "tmdbId": "603",
+      "vidking": {
+        "ms": 707,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12004,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 938,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 2306,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=The%20Matrix&mediaType=movie&year=1999&tmdbId=603&imdbId=tt0133093; Yoru (Videasy): HTTP 404 for https://api.videasy.net/cdn/sources-with-title?title=The%20Matrix&mediaType=movie&year=1999&tmdbId=603&imdbId=tt0133093; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=The%20Matrix&mediaType=movie&year=1999&tmdbId=603&imdbId=tt0133093; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=The%20Matrix&mediaType=movie&year=1999&tmdbId=603&imdbId=tt0133093; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=The%20Matrix&mediaType=movie&year=1999&tmdbId=603&imdbId=tt0133093; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=The%20Matrix&mediaType=movie&year=1999&tmdbId=603&imdbId=tt0133093",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "moviesapi",
+            "sourceName": "Moviesapi",
+            "ok": false,
+            "ms": 338,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Moviesapi: fetch failed",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 4112,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12004,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12004,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 623,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2651,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    },
+    {
+      "title": "Breaking Bad S1E1",
+      "type": "tv",
+      "tmdbId": "1396",
+      "vidking": {
+        "ms": 845,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12003,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 987,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 1970,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=Breaking%20Bad&mediaType=tv&year=2008&tmdbId=1396&imdbId=tt0903747&episodeId=1&seasonId=1; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=Breaking%20Bad&mediaType=tv&year=2008&tmdbId=1396&imdbId=tt0903747&episodeId=1&seasonId=1; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=Breaking%20Bad&mediaType=tv&year=2008&tmdbId=1396&imdbId=tt0903747&episodeId=1&seasonId=1; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=Breaking%20Bad&mediaType=tv&year=2008&tmdbId=1396&imdbId=tt0903747&episodeId=1&seasonId=1; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=Breaking%20Bad&mediaType=tv&year=2008&tmdbId=1396&imdbId=tt0903747&episodeId=1&seasonId=1",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 3805,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 3961,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2641,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    },
+    {
+      "title": "Interstellar",
+      "type": "movie",
+      "tmdbId": "157336",
+      "vidking": {
+        "ms": 720,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12003,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 1147,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 2405,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=Interstellar&mediaType=movie&year=2014&tmdbId=157336&imdbId=tt0816692; Yoru (Videasy): HTTP 404 for https://api.videasy.net/cdn/sources-with-title?title=Interstellar&mediaType=movie&year=2014&tmdbId=157336&imdbId=tt0816692; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=Interstellar&mediaType=movie&year=2014&tmdbId=157336&imdbId=tt0816692; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=Interstellar&mediaType=movie&year=2014&tmdbId=157336&imdbId=tt0816692; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=Interstellar&mediaType=movie&year=2014&tmdbId=157336&imdbId=tt0816692; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=Interstellar&mediaType=movie&year=2014&tmdbId=157336&imdbId=tt0816692",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "moviesapi",
+            "sourceName": "Moviesapi",
+            "ok": false,
+            "ms": 399,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Moviesapi: fetch failed",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 8721,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2796,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12000,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    },
+    {
+      "title": "The Office S1E1",
+      "type": "tv",
+      "tmdbId": "2316",
+      "vidking": {
+        "ms": 628,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12004,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 986,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 1979,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=The%20Office&mediaType=tv&year=2005&tmdbId=2316&imdbId=tt0386676&episodeId=1&seasonId=1; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=The%20Office&mediaType=tv&year=2005&tmdbId=2316&imdbId=tt0386676&episodeId=1&seasonId=1; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=The%20Office&mediaType=tv&year=2005&tmdbId=2316&imdbId=tt0386676&episodeId=1&seasonId=1; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=The%20Office&mediaType=tv&year=2005&tmdbId=2316&imdbId=tt0386676&episodeId=1&seasonId=1; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=The%20Office&mediaType=tv&year=2005&tmdbId=2316&imdbId=tt0386676&episodeId=1&seasonId=1",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 4705,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 638,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2654,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    },
+    {
+      "title": "Pulp Fiction",
+      "type": "movie",
+      "tmdbId": "680",
+      "vidking": {
+        "ms": 645,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12006,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 932,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 2346,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=Pulp%20Fiction&mediaType=movie&year=1994&tmdbId=680&imdbId=tt0110912; Yoru (Videasy): HTTP 404 for https://api.videasy.net/cdn/sources-with-title?title=Pulp%20Fiction&mediaType=movie&year=1994&tmdbId=680&imdbId=tt0110912; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=Pulp%20Fiction&mediaType=movie&year=1994&tmdbId=680&imdbId=tt0110912; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=Pulp%20Fiction&mediaType=movie&year=1994&tmdbId=680&imdbId=tt0110912; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=Pulp%20Fiction&mediaType=movie&year=1994&tmdbId=680&imdbId=tt0110912; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=Pulp%20Fiction&mediaType=movie&year=1994&tmdbId=680&imdbId=tt0110912",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "moviesapi",
+            "sourceName": "Moviesapi",
+            "ok": false,
+            "ms": 370,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Moviesapi: fetch failed",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12004,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12004,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 3824,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12004,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12004,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 653,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2601,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    },
+    {
+      "title": "Stranger Things S1E1",
+      "type": "tv",
+      "tmdbId": "66732",
+      "vidking": {
+        "ms": 621,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12005,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 1011,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 1895,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=Stranger%20Things&mediaType=tv&year=2016&tmdbId=66732&imdbId=tt4574334&episodeId=1&seasonId=1; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=Stranger%20Things&mediaType=tv&year=2016&tmdbId=66732&imdbId=tt4574334&episodeId=1&seasonId=1; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=Stranger%20Things&mediaType=tv&year=2016&tmdbId=66732&imdbId=tt4574334&episodeId=1&seasonId=1; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=Stranger%20Things&mediaType=tv&year=2016&tmdbId=66732&imdbId=tt4574334&episodeId=1&seasonId=1; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=Stranger%20Things&mediaType=tv&year=2016&tmdbId=66732&imdbId=tt4574334&episodeId=1&seasonId=1",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 3844,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 663,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2675,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    },
+    {
+      "title": "The Dark Knight",
+      "type": "movie",
+      "tmdbId": "155",
+      "vidking": {
+        "ms": 734,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12002,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 928,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "moviesapi",
+            "sourceName": "Moviesapi",
+            "ok": false,
+            "ms": 364,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Moviesapi: fetch failed",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 3788,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12001,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 663,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2639,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12000,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12000,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    },
+    {
+      "title": "Game of Thrones S1E1",
+      "type": "tv",
+      "tmdbId": "1399",
+      "vidking": {
+        "ms": 774,
+        "hls": 0,
+        "error": "No sources returned; No sources returned; No sources returned; No sources returned; No sources returned"
+      },
+      "tmdbNative": {
+        "ms": 12004,
+        "hls": 1,
+        "error": null,
+        "sources": [
+          {
+            "sourceId": "vixsrc",
+            "sourceName": "VixSrc",
+            "ok": true,
+            "ms": 947,
+            "hls": 1,
+            "subtitles": 0,
+            "error": null,
+            "layer": null,
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "videasy",
+            "sourceName": "Videasy",
+            "ok": false,
+            "ms": 2033,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Neon (Videasy): HTTP 404 for https://api.videasy.net/mb-flix/sources-with-title?title=Game%20of%20Thrones&mediaType=tv&year=2011&tmdbId=1399&imdbId=tt0944947&episodeId=1&seasonId=1; Cypher (Videasy): HTTP 404 for https://api.videasy.net/downloader2/sources-with-title?title=Game%20of%20Thrones&mediaType=tv&year=2011&tmdbId=1399&imdbId=tt0944947&episodeId=1&seasonId=1; Sage (Videasy): HTTP 404 for https://api.videasy.net/1movies/sources-with-title?title=Game%20of%20Thrones&mediaType=tv&year=2011&tmdbId=1399&imdbId=tt0944947&episodeId=1&seasonId=1; Breach (Videasy): HTTP 404 for https://api.videasy.net/m4uhd/sources-with-title?title=Game%20of%20Thrones&mediaType=tv&year=2011&tmdbId=1399&imdbId=tt0944947&episodeId=1&seasonId=1; Vyse (Videasy): HTTP 404 for https://api.videasy.net/hdmovie/sources-with-title?title=Game%20of%20Thrones&mediaType=tv&year=2011&tmdbId=1399&imdbId=tt0944947&episodeId=1&seasonId=1",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": "vidking"
+          },
+          {
+            "sourceId": "twoembed",
+            "sourceName": "2Embed",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcnet",
+            "sourceName": "Vidsrc.net",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidlink",
+            "sourceName": "VidLink",
+            "ok": false,
+            "ms": 3676,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "https://vidlink.pro: VidLink: no playlist in API response",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcru",
+            "sourceName": "Vidsrc.Ru",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidflix",
+            "sourceName": "Vidflix",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidrock",
+            "sourceName": "Vidrock",
+            "ok": false,
+            "ms": 4263,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "api_hop: no server entries",
+            "layer": "api_hop",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidzee",
+            "sourceName": "Vidzee",
+            "ok": false,
+            "ms": 2627,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "Nflix (Vidzee): Vidzee: master key failed; Duke (Vidzee): Vidzee: master key failed; Glory (Vidzee): Vidzee: master key failed; Nazy (Vidzee): Vidzee: master key failed; Atlas (Vidzee): Vidzee: master key failed; Drag (Vidzee): Vidzee: master key failed; Achilles (Vidzee): Vidzee: master key failed; Viet (Vidzee): Vidzee: master key failed",
+            "layer": "extract",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "primesrc",
+            "sourceName": "PrimeSrc",
+            "ok": false,
+            "ms": 12002,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          },
+          {
+            "sourceId": "vidsrcto",
+            "sourceName": "Vidsrc.to",
+            "ok": false,
+            "ms": 12003,
+            "hls": 0,
+            "subtitles": 0,
+            "error": "network: source timeout",
+            "layer": "network",
+            "cfBypassUsed": false,
+            "duplicateOf": null
+          }
+        ],
+        "winningSource": "VixSrc"
+      },
+      "winner": "tmdb-native"
+    }
+  ],
+  "sourceMatrix": [
+    {
+      "sourceId": "vixsrc",
+      "sourceName": "VixSrc",
+      "cells": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "wins": 8,
+      "totalMs": 10938,
+      "runs": 10,
+      "avgMs": 1094
+    },
+    {
+      "sourceId": "videasy",
+      "sourceName": "Videasy",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 22982,
+      "runs": 10,
+      "avgMs": 2298
+    },
+    {
+      "sourceId": "moviesapi",
+      "sourceName": "Moviesapi",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 1913,
+      "runs": 5,
+      "avgMs": 383
+    },
+    {
+      "sourceId": "twoembed",
+      "sourceName": "2Embed",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 120025,
+      "runs": 10,
+      "avgMs": 12003
+    },
+    {
+      "sourceId": "vidsrcnet",
+      "sourceName": "Vidsrc.net",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 120027,
+      "runs": 10,
+      "avgMs": 12003
+    },
+    {
+      "sourceId": "vidlink",
+      "sourceName": "VidLink",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 50200,
+      "runs": 10,
+      "avgMs": 5020
+    },
+    {
+      "sourceId": "vidsrcru",
+      "sourceName": "Vidsrc.Ru",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 120026,
+      "runs": 10,
+      "avgMs": 12003
+    },
+    {
+      "sourceId": "vidflix",
+      "sourceName": "Vidflix",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 120029,
+      "runs": 10,
+      "avgMs": 12003
+    },
+    {
+      "sourceId": "vidrock",
+      "sourceName": "Vidrock",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 20911,
+      "runs": 10,
+      "avgMs": 2091
+    },
+    {
+      "sourceId": "vidzee",
+      "sourceName": "Vidzee",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 28179,
+      "runs": 10,
+      "avgMs": 2818
+    },
+    {
+      "sourceId": "primesrc",
+      "sourceName": "PrimeSrc",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 120020,
+      "runs": 10,
+      "avgMs": 12002
+    },
+    {
+      "sourceId": "vidsrcto",
+      "sourceName": "Vidsrc.to",
+      "cells": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wins": 0,
+      "totalMs": 120019,
+      "runs": 10,
+      "avgMs": 12002
+    }
+  ],
+  "summary": {
+    "vidkingWins": 0,
+    "tmdbNativeWins": 8,
+    "ties": 2,
+    "unresolved": 0
+  }
+}

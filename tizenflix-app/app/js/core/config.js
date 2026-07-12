@@ -1,6 +1,7 @@
 var STORAGE_KEY = "tizenflix.apiBase";
 var QUALITY_MODE_KEY = "tizenflix.qualityMode";
 var DEV_MODE_KEY = "tizenflix.devMode";
+var BACKEND_KEY = "tizenflix.playBackend";
 var API_PORT = "8790";
 var PLAY_RESOLVE_TIMEOUT_MS = 90000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -34,8 +35,31 @@ function setDevMode(enabled) {
 function buildPlayQuery(extra) {
   var parts = [];
   if (isTizenClient()) parts.push("profile=tizen");
+  var backend = getPlayBackend();
+  if (backend) parts.push("backend=" + backend);
   if (extra) parts.push(extra);
   return parts.length ? parts.join("&") : null;
+}
+
+function getPlayBackend() {
+  try {
+    var stored = localStorage.getItem(BACKEND_KEY);
+    if (stored === "vidking" || stored === "streamflix" || stored === "auto" || stored === "tmdb-native") return stored;
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return "auto";
+}
+
+function setPlayBackend(mode) {
+  var m =
+    mode === "streamflix" || mode === "auto" || mode === "tmdb-native" ? mode : "vidking";
+  try {
+    localStorage.setItem(BACKEND_KEY, m);
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return m;
 }
 
 function deriveDefaultApi() {
@@ -240,6 +264,8 @@ module.exports = {
   getDevMode: getDevMode,
   setDevMode: setDevMode,
   buildPlayQuery: buildPlayQuery,
+  getPlayBackend: getPlayBackend,
+  setPlayBackend: setPlayBackend,
   getApiBase: getApiBase,
   setApiBase: setApiBase,
   getQualityMode: getQualityMode,

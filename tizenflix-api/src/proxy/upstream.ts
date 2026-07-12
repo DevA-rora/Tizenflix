@@ -16,6 +16,26 @@ export const UPSTREAM_HEADERS: HeadersInit = {
 
 const UPSTREAM_TIMEOUT_MS = 12_000;
 
+export interface UpstreamHeaderOptions {
+  referer?: string;
+}
+
+export function buildUpstreamHeaders(options?: UpstreamHeaderOptions): HeadersInit {
+  if (!options?.referer) return UPSTREAM_HEADERS;
+  const base = VIDKING_HEADERS as Record<string, string>;
+  let origin = base.Origin;
+  try {
+    origin = new URL(options.referer).origin;
+  } catch {
+    /* keep default */
+  }
+  return {
+    ...base,
+    Referer: options.referer,
+    Origin: origin,
+  };
+}
+
 export interface ProxyStreamResult {
   status: number;
   contentType: string | null;
@@ -31,11 +51,12 @@ export function looksLikeBinarySegment(url: string): boolean {
 export async function pipeProxiedStream(
   targetUrl: string,
   res: Response,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  headerOptions?: UpstreamHeaderOptions
 ): Promise<void> {
   const upstream = await fetchWithTimeout(
     targetUrl,
-    { headers: UPSTREAM_HEADERS, redirect: "follow" },
+    { headers: buildUpstreamHeaders(headerOptions), redirect: "follow" },
     UPSTREAM_TIMEOUT_MS,
     fetchImpl
   );
@@ -51,18 +72,19 @@ export async function pipeProxiedStream(
     return;
   }
 
-  await pipeline(Readable.fromWeb(upstream.body as ReadableStream<Uint8Array>), res);
+  await pipeline(Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream), res);
 }
 
 /** Fetch upstream media; rewrite m3u8 playlists for Tizen-safe playback */
 export async function fetchProxiedStream(
   targetUrl: string,
   publicBase: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  headerOptions?: UpstreamHeaderOptions
 ): Promise<ProxyStreamResult> {
   const upstream = await fetchWithTimeout(
     targetUrl,
-    { headers: UPSTREAM_HEADERS, redirect: "follow" },
+    { headers: buildUpstreamHeaders(headerOptions), redirect: "follow" },
     UPSTREAM_TIMEOUT_MS,
     fetchImpl
   );
@@ -78,7 +100,7 @@ export async function fetchProxiedStream(
       return {
         status: upstream.status,
         contentType: "application/vnd.apple.mpegurl",
-        body: rewriteM3u8(text, targetUrl, publicBase),
+        body: rewriteM3u8(text, targetUrl, publicBase, headerOptions?.referer),
         rewritten: true,
       };
     }

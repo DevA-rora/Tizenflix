@@ -1,0 +1,171 @@
+import { superStreamProvider } from "./super-stream.js";
+import { sflixProvider } from "./sflix.js";
+import { serienStreamProvider } from "./serien-stream.js";
+import { streamingCommunityItProvider } from "./streaming-community-it.js";
+import { streamingCommunityEnProvider } from "./streaming-community-en.js";
+import { animeWorldProvider } from "./anime-world.js";
+import { mkissaProvider } from "./mkissa.js";
+import { aniWorldProvider } from "./ani-world.js";
+import { ridomoviesProvider } from "./ridomovies.js";
+import { anikotoProvider } from "./anikoto.js";
+import { wiflixProvider } from "./wiflix.js";
+import { anyMovieProvider } from "./anymovie.js";
+import { hiAnimeProvider } from "./hianime.js";
+import { mStreamProvider } from "./m-stream.js";
+import { frenchAnimeProvider } from "./french-anime.js";
+import { filmPalastProvider } from "./film-palast.js";
+import { poseidonHd2Provider } from "./poseidon-hd2.js";
+import { cuevanaEuProvider } from "./cuevana-eu.js";
+import { latanimeProvider } from "./latanime.js";
+import { doramasflixProvider } from "./doramasflix.js";
+import { cineCalidadProvider } from "./cine-calidad.js";
+import { seriesFlixProvider } from "./series-flix.js";
+import { flixLatamProvider } from "./flix-latam.js";
+import { laCartoonsProvider } from "./la-cartoons.js";
+import { animefenixProvider } from "./animefenix.js";
+import { animeFlvProvider } from "./anime-flv.js";
+import { animeAv1Provider } from "./anime-av1.js";
+import { animeOnlineNinjaProvider } from "./anime-online-ninja.js";
+import { soloLatinoProvider } from "./solo-latino.js";
+import { cine24hProvider } from "./cine24h.js";
+import { pelisplustoProvider } from "./pelisplusto.js";
+import { pelisflixHdProvider } from "./pelisflix-hd.js";
+import { cableVisionHdProvider } from "./cable-vision-hd.js";
+import { altadefinizione01Provider } from "./altadefinizione01.js";
+import { guardaFlixProvider } from "./guarda-flix.js";
+import { cb01Provider } from "./cb01.js";
+import { animeUnityProvider } from "./anime-unity.js";
+import { animeSaturnProvider } from "./anime-saturn.js";
+import { frenchStreamProvider } from "./french-stream.js";
+import { guardaSerieProvider } from "./guarda-serie.js";
+import { einschaltenProvider } from "./einschalten.js";
+import { hdFilmeProvider } from "./hd-filme.js";
+import { megaKinoProvider } from "./mega-kino.js";
+import { filmyOnlineCcProvider } from "./filmy-online-cc.js";
+import { zeriunProvider } from "./zeriun.js";
+import { tvporinternetHdProvider } from "./tvporinternet-hd.js";
+import { frembedProvider } from "./frembed.js";
+import { kidrazProvider } from "./kidraz.js";
+import { frenchMangaProvider } from "./french-manga.js";
+import { iptvOrgProvider } from "./iptv-org.js";
+import { iptvSpainProvider } from "./iptv-spain.js";
+import { tvLibrefutbolProvider } from "./tv-librefutbol.js";
+import { pelotaLibreTvHdProvider } from "./pelota-libre-tv-hd.js";
+import { plutoTvMxProvider } from "./pluto-tv-mx.js";
+import { plutoTvArProvider } from "./pluto-tv-ar.js";
+import { plutoTvDeProvider } from "./pluto-tv-de.js";
+import { plutoTvEsProvider } from "./pluto-tv-es.js";
+import { plutoTvFrProvider } from "./pluto-tv-fr.js";
+import { plutoTvItProvider } from "./pluto-tv-it.js";
+import { plutoTvUsProvider } from "./pluto-tv-us.js";
+import { cineCityProvider } from "./cine-city.js";
+import { vavooDeProvider } from "./vavoo-de.js";
+import { vavooItProvider } from "./vavoo-it.js";
+import { vavooFrProvider } from "./vavoo-fr.js";
+import { vavooEsProvider } from "./vavoo-es.js";
+import { vavooPlProvider } from "./vavoo-pl.js";
+import type { ContentProvider } from "./types.js";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const CONFIG_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../data/streamflix-providers.json");
+
+const ALL_PROVIDERS: ContentProvider[] = [
+  sflixProvider,
+  ridomoviesProvider,
+  superStreamProvider,
+  streamingCommunityEnProvider,
+  serienStreamProvider,
+  streamingCommunityItProvider,
+  animeWorldProvider,
+  mkissaProvider,
+  aniWorldProvider,
+  anikotoProvider,
+  wiflixProvider,
+  anyMovieProvider,
+  hiAnimeProvider,
+  mStreamProvider,
+  frenchAnimeProvider,
+  filmPalastProvider,
+  poseidonHd2Provider,
+  cuevanaEuProvider,
+  latanimeProvider,
+  doramasflixProvider,
+  cineCalidadProvider,
+  seriesFlixProvider,
+  flixLatamProvider,
+  laCartoonsProvider,
+  animefenixProvider,
+  animeFlvProvider,
+  animeAv1Provider,
+  animeOnlineNinjaProvider,
+  soloLatinoProvider,
+  cine24hProvider,
+  pelisplustoProvider,
+  pelisflixHdProvider,
+  cableVisionHdProvider,
+  altadefinizione01Provider,
+  guardaFlixProvider,
+  cb01Provider,
+  animeUnityProvider,
+  animeSaturnProvider,
+  frenchStreamProvider,
+  guardaSerieProvider,
+  einschaltenProvider,
+  hdFilmeProvider,
+  megaKinoProvider,
+  filmyOnlineCcProvider,
+  zeriunProvider,
+  tvporinternetHdProvider,
+  frembedProvider,
+  kidrazProvider,
+  frenchMangaProvider,
+  iptvOrgProvider,
+  iptvSpainProvider,
+  tvLibrefutbolProvider,
+  pelotaLibreTvHdProvider,
+  plutoTvMxProvider,
+  plutoTvArProvider,
+  plutoTvDeProvider,
+  plutoTvEsProvider,
+  plutoTvFrProvider,
+  plutoTvItProvider,
+  plutoTvUsProvider,
+  cineCityProvider,
+  vavooDeProvider,
+  vavooItProvider,
+  vavooFrProvider,
+  vavooEsProvider,
+  vavooPlProvider,
+];
+
+function loadDisabled(): Set<string> {
+  if (!existsSync(CONFIG_PATH)) return new Set();
+  try {
+    const cfg = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as { disabled?: string[] };
+    return new Set(cfg.disabled ?? []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function getAllProviders(): ContentProvider[] {
+  const disabled = loadDisabled();
+  return ALL_PROVIDERS.map((p) => ({
+    ...p,
+    enabled: p.enabled !== false && !disabled.has(p.id),
+  }));
+}
+
+export function getEnabledProviders(type: "movie" | "tv"): ContentProvider[] {
+  return getAllProviders().filter((p) => {
+    if (p.enabled === false) return false;
+    if (p.implementationStatus === "stub") return false;
+    return type === "movie" ? p.supportsMovies : p.supportsTv;
+  });
+}
+
+export function findProviderById(id: string): ContentProvider | undefined {
+  return getAllProviders().find((p) => p.id === id);
+}

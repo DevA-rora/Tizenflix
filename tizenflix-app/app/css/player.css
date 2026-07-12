@@ -42,8 +42,12 @@
   text-align: center;
 }
 
-.now-playing.is-live {
-  color: #46d369;
+.playback-bar .btn-subtitles {
+  margin-left: 12px;
+}
+
+.playback-bar #btnSubtitles.hidden {
+  display: none;
 }
 
 body.is-playing #app {
