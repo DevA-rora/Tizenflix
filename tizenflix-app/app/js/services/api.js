@@ -27,6 +27,10 @@ function search(query, page) {
   return config.apiGet("/search" + q);
 }
 
+function searchSuggest(query) {
+  return config.apiGet("/search/suggest?q=" + encodeURIComponent(query));
+}
+
 function getMovie(tmdbId) {
   return config.apiGet("/title/movie/" + encodeURIComponent(tmdbId));
 }
@@ -68,6 +72,21 @@ function hasPlayableSources(play) {
   return sourcesForPlay(play).length > 0;
 }
 
+function getProviders() {
+  return config.apiGet("/providers/tmdb-native");
+}
+
+function continueWatching(limit) {
+  var q = limit ? "?limit=" + encodeURIComponent(limit) : "";
+  return config.apiGet("/continue-watching" + q).then(function (data) {
+    return data.items || [];
+  });
+}
+
+function saveProgress(payload) {
+  return config.apiPost("/progress", payload);
+}
+
 module.exports = {
   getBase: getBase,
   setBase: config.setApiBase,
@@ -75,6 +94,7 @@ module.exports = {
   browseRows: browseRows,
   browseRow: browseRow,
   search: search,
+  searchSuggest: searchSuggest,
   getMovie: getMovie,
   getTv: getTv,
   getSeasons: getSeasons,
@@ -83,4 +103,7 @@ module.exports = {
   resolveTvEpisode: resolveTvEpisode,
   sourcesForPlay: sourcesForPlay,
   hasPlayableSources: hasPlayableSources,
+  getProviders: getProviders,
+  continueWatching: continueWatching,
+  saveProgress: saveProgress,
 };

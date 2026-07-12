@@ -10,7 +10,23 @@
 | **2** | `tmdb-native` | TMDB-id → embed API (VixSrc, 2Embed, VidsrcNet, …) — **no scraper layer** |
 | **3** | `streamflix` | 27+ HTML scraper providers (SFlix, Ridomovies, …) — optional, LAN-only |
 
-**`backend=auto`** resolves **VixSrc first** (TMDB-native), then appends **Vidking** streams as fallback. Scraper farm excluded for speed.
+**`backend=auto`** races **6 TMDB-native sources** (priority order below) in parallel with **Vidking**, merges one stream per source, then appends Vidking rungs at priority 1000+. Scraper farm excluded.
+
+### Auto source priority (July 2026)
+
+| Priority | ID | RE notes |
+|----------|-----|----------|
+| 0 | `vixsrc` | Primary — single HLS master |
+| 1 | `twoembed` | StreamWish unpack + Playwright m3u8 fallback |
+| 2 | `vidsrcnet` | 11 Playerjs decryptors + Playwright fallback |
+| 3 | `vidzee` | AES-GCM api-key (`c4a8f1d7…`) + CBC link decrypt |
+| 4 | `vidsrcto` | RC4 keys + Vidplay/Filemoon chain |
+| 5 | `vidrock` | Plain `/api/movie/{id}` + AES-GCM URL decrypt |
+| 1000+ | Vidking | Multi-quality fallback |
+
+Override list: `GET /play/movie/27205?backend=auto&sources=vixsrc,vidrock`
+
+Smoke probe: `npx tsx scripts/probe-extractors.mjs` (requires Playwright for 2Embed/VidsrcNet/Vidsrc.to when embed hosts are slow).
 
 ## TMDB-native sources (12 English-global)
 
@@ -24,8 +40,8 @@
 | vidlink | VidLink | ✓ | ✓ | Playwright intercept |
 | vidsrcru | Vidsrc.Ru | ✓ | ✓ | Playwright intercept |
 | vidflix | Vidflix | ✓ | ✓ | API hop |
-| vidrock | Vidrock | ✓ | ✓ | multi-mirror API |
-| vidzee | Vidzee | ✓ | ✓ | 14 servers + AES |
+| vidrock | Vidrock | ✓ | ✓ | `/api/movie/{tmdbId}` + AES-GCM URL decrypt |
+| vidzee | Vidzee | ✓ | ✓ | dynamic api-key + AES (static pass rotates — check embed JS) |
 | primesrc | PrimeSrc | ✓ | ✓ | multi-mirror API |
 | vidsrcto | Vidsrc.to | ✓ | ✓ | keys API |
 
@@ -79,8 +95,8 @@ GET /providers/tmdb-native
 
 | Strategy | Verdict |
 |----------|---------|
-| **Primary backend** | **VixSrc** via `backend=auto` or `tmdb-native` (~1.5s, 10/10 coverage in v4) |
-| **Fallback** | Vidking when VixSrc missing or user wants multi-quality rungs |
+| **Primary backend** | **`backend=auto`** — VixSrc + 5 backups + Vidking |
+| **Maintenance** | Re-probe embed JS when decrypt fails (`probe-extractors.mjs`); Vidrock/Vidzee keys live in frontend bundles |
 | **Scraper farm** | Optional (`backend=streamflix`) — not for production auto |
 | **Other TMDB-native sources** | Fixable with more RE work; benchmark used 12s timeouts + parallel contention |
 

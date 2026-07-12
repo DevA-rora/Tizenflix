@@ -15,7 +15,26 @@ var BROWSE_SCREENS = {
   trending: true,
   tv: true,
   movies: true,
+  search: true,
 };
+
+var IMMERSIVE_SCREENS = {
+  "detail-movie": true,
+  "detail-tv": true,
+};
+
+function setImmersiveMode(enabled) {
+  if (enabled) {
+    document.body.classList.add("immersive-detail");
+  } else {
+    document.body.classList.remove("immersive-detail");
+  }
+}
+
+function updateImmersiveMode() {
+  var name = current();
+  setImmersiveMode(!!(name && IMMERSIVE_SCREENS[name]));
+}
 
 function register(name, screen) {
   screens[name] = screen;
@@ -33,7 +52,17 @@ function render() {
   if (screen && typeof screen.render === "function") {
     screen.render(rootEl);
   }
+  updateImmersiveMode();
   focus.afterScreenRender(name || "");
+}
+
+function leaveCurrentScreen() {
+  var name = current();
+  if (!name) return;
+  var screen = screens[name];
+  if (screen && typeof screen.onLeave === "function") {
+    screen.onLeave();
+  }
 }
 
 function navigate(name, params) {
@@ -48,6 +77,7 @@ function navigate(name, params) {
 }
 
 function replace(name, params) {
+  leaveCurrentScreen();
   stack = [];
   navigate(name, params);
 }

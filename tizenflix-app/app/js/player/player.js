@@ -5,6 +5,7 @@ var hlsInstance = null;
 var playbackEntered = false;
 var activeCleanups = [];
 var playGeneration = 0;
+var resumeAtSeconds = null;
 var currentProvider = null;
 var playbackReported = false;
 var nonFatalRecoveries = 0;
@@ -26,6 +27,16 @@ function applySubtitleTrack(video, trackIndex) {
     video.textTracks[i].mode = i === trackIndex ? "showing" : "hidden";
   }
   activeSubtitleIndex = trackIndex;
+}
+
+function selectSubtitle(video, trackIndex) {
+  if (!video) return;
+  if (trackIndex < 0) {
+    applySubtitleTrack(video, -1);
+    return;
+  }
+  if (trackIndex >= activeSubtitles.length) return;
+  applySubtitleTrack(video, trackIndex);
 }
 
 function applySubtitles(video, subtitles) {
@@ -184,10 +195,6 @@ function showPlaybackChrome(videoWrap, title) {
   playbackEntered = false;
   document.body.classList.add("is-playing");
   showVideoWrap(videoWrap);
-  var titleEl = document.getElementById("playbackTitle");
-  if (titleEl) titleEl.textContent = title || "";
-  var status = document.getElementById("playbackStatus");
-  if (status && title) status.textContent = "Preparing: " + title;
 }
 
 function exitPlaybackMode() {
@@ -221,7 +228,7 @@ function safePlay(video, onError) {
 }
 
 function prepareVideoElement(video, videoWrap) {
-  video.setAttribute("controls", "controls");
+  video.removeAttribute("controls");
   showVideoWrap(videoWrap);
 }
 
@@ -274,6 +281,24 @@ function whenCanPlay(video, callback, timeoutMs, onTimeout, session) {
   });
 }
 
+function applyResumePosition(video) {
+  if (!video || resumeAtSeconds == null || resumeAtSeconds <= 0) return;
+  var duration = video.duration;
+  if (!duration || !isFinite(duration)) return;
+  var target = Math.min(resumeAtSeconds, Math.max(0, duration - 10));
+  try {
+    video.currentTime = target;
+    debug.debugLog("Resumed at " + Math.floor(target) + "s");
+  } catch (err) {
+    debug.debugLog("Resume seek failed: " + err.message);
+  }
+  resumeAtSeconds = null;
+}
+
+function setResumePosition(seconds) {
+  resumeAtSeconds = seconds > 0 ? seconds : null;
+}
+
 function hintResumeIfPaused(video, onLog) {
   setTimeout(function () {
     if (video.paused && video.readyState >= 2) {
@@ -304,6 +329,7 @@ function startPlaybackWhenReady(video, videoWrap, title, onLog, options) {
     function () {
       if (!isActiveSession(session)) return;
       logVideoState(video, "canplay ready");
+      applyResumePosition(video);
       attemptPlay(video, onLog);
     },
     options.timeoutMs || READY_TIMEOUT_MS,
@@ -742,7 +768,11 @@ function playDirect(video, url, onLog, videoWrap, title, needsCors) {
   playDirectVideo(video, url, onLog, videoWrap, title, session, needsCors);
 }
 
-function playSources(video, sources, onLog, videoWrap, title) {
+function playSources(video, sources, onLog, videoWrap, title, options) {
+  options = options || {};
+  if (options.startSeconds > 0) {
+    setResumePosition(options.startSeconds);
+  }
   if (!sources || !sources.length) {
     debug.debugLog("No sources to play");
     if (onLog) onLog("No sources to play");
@@ -825,6 +855,29 @@ function togglePlayPause(video, onLog) {
   }
 }
 
+function seekBy(video, deltaSeconds) {
+  if (!video || !deltaSeconds) return;
+  var duration = video.duration;
+  if (!duration || !isFinite(duration)) duration = 0;
+  var next = video.currentTime + deltaSeconds;
+  if (next < 0) next = 0;
+  if (duration > 0 && next > duration) next = duration;
+  try {
+    video.currentTime = next;
+  } catch (err) {
+    debug.debugLog("Seek failed: " + err.message);
+  }
+}
+
+function getPlaybackState(video) {
+  if (!video) return { currentTime: 0, duration: 0, paused: true };
+  return {
+    currentTime: video.currentTime || 0,
+    duration: video.duration && isFinite(video.duration) ? video.duration : 0,
+    paused: !!video.paused,
+  };
+}
+
 function isMediaPlayPauseKey(e) {
   if (!e) return false;
   if (e.key === "MediaPlayPause") return true;
@@ -842,8 +895,11 @@ module.exports = {
   showPlaybackChrome: showPlaybackChrome,
   exitPlaybackMode: exitPlaybackMode,
   applySubtitles: applySubtitles,
+  selectSubtitle: selectSubtitle,
   bindSubtitleButton: bindSubtitleButton,
   cycleSubtitles: cycleSubtitles,
+  seekBy: seekBy,
+  getPlaybackState: getPlaybackState,
   isTizenTv: isTizenTv,
   logVideoState: logVideoState,
   safePlay: safePlay,
@@ -851,6 +907,7 @@ module.exports = {
   isMediaPlayPauseKey: isMediaPlayPauseKey,
   getQualityOptions: getQualityOptions,
   applyQualityMode: applyQualityMode,
+  setResumePosition: setResumePosition,
   getHlsInstance: function () {
     return hlsInstance;
   },

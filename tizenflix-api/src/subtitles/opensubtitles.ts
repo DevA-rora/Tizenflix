@@ -31,16 +31,21 @@ export async function searchOpenSubtitles(options: {
   if (!parts.length) return [];
 
   const url = `${OPENSUBTITLES_BASE}/search/${parts.join("/")}`;
-  const res = await fetchWithTimeout(
-    url,
-    {
-      headers: {
-        "User-Agent": "Tizenflix v0.2",
-        Accept: "application/json",
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          "User-Agent": "Tizenflix v0.2",
+          Accept: "application/json",
+        },
       },
-    },
-    15_000
-  );
+      15_000
+    );
+  } catch {
+    return [];
+  }
 
   if (!res.ok) return [];
   const data = (await res.json()) as Array<{ Subs?: OpenSubtitleEntry[] }>;

@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, requireTmdbKey } from "../src/config.js";
 import { resolvePlayableSources } from "../src/normalize/to-play-response.js";
 import { resolveTmdbNativePlay } from "../src/streamflix/tmdb-native/resolve.js";
+import { AUTO_TMDB_SOURCE_IDS } from "../src/streamflix/tmdb-native/auto-sources.js";
+import { resolveWithBackend } from "../src/normalize/resolve-backend.js";
 import { TMDB_NATIVE_SOURCES } from "../src/streamflix/tmdb-native/registry.js";
 import {
   preflightAllSources,
@@ -23,7 +25,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = loadConfig();
 requireTmdbKey(config);
 
-const SOURCE_TIMEOUT_MS = Number(process.env.BENCHMARK_SOURCE_TIMEOUT_MS ?? 12_000);
+const SOURCE_TIMEOUT_MS = Number(process.env.BENCHMARK_SOURCE_TIMEOUT_MS ?? 30_000);
 const LIVE = process.env.RUN_LIVE_BENCHMARK !== "0";
 
 const TITLES = [
@@ -52,6 +54,36 @@ function mapSources(raw) {
     cfBypassUsed: s.cfBypassUsed ?? false,
     duplicateOf: s.duplicateOf ?? null,
   }));
+}
+
+async function benchAuto(title) {
+  const t0 = Date.now();
+  try {
+    const play = await resolveWithBackend({
+      type: title.type,
+      tmdbId: title.tmdbId,
+      season: title.season,
+      episode: title.episode,
+      backend: "auto",
+      profile: "tizen",
+    });
+    const sourceIds = [...new Set(play.sources.map((s) => s.sourceId).filter(Boolean))];
+    return {
+      ms: Date.now() - t0,
+      hls: play.sources.filter((s) => s.type === "m3u8").length,
+      sourceIds,
+      recommended: play.recommended,
+      error: null,
+    };
+  } catch (err) {
+    return {
+      ms: Date.now() - t0,
+      hls: 0,
+      sourceIds: [],
+      recommended: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 async function benchVidking(title) {
@@ -250,6 +282,7 @@ async function main() {
     const meta = await fetchMetadata(title.type, title.tmdbId);
     const vidking = await benchVidking(title);
     const tmdbNative = await benchTmdbNativeAggregate(title, meta);
+    const auto = await benchAuto(title);
 
     const sourceProbes = [];
     for (let i = 0; i < TMDB_NATIVE_SOURCES.length; i++) {
@@ -280,6 +313,7 @@ async function main() {
       tmdbId: title.tmdbId,
       vidking,
       tmdbNative,
+      auto,
       winner: pickWinner(vidking, tmdbNative),
     };
     results.push(row);
@@ -298,6 +332,7 @@ async function main() {
     preflight,
     results,
     sourceMatrix,
+    autoSourceIds: [...AUTO_TMDB_SOURCE_IDS],
     summary: {
       vidkingWins: results.filter((r) => r.winner === "vidking").length,
       tmdbNativeWins: results.filter((r) => r.winner === "tmdb-native").length,

@@ -9,7 +9,7 @@ import { buildProxyUrl } from "../proxy/proxy-url.js";
 import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from "../proxy/upstream.js";
 import { validatePlaySources } from "../proxy/validate-sources.js";
 import { resolvePlayableSources, listProviders } from "../normalize/to-play-response.js";
-import { parseBackendParam, resolveWithBackend } from "../normalize/resolve-backend.js";
+import { parseBackendParam, parseSourcesParam, resolveWithBackend } from "../normalize/resolve-backend.js";
 import { fetchMetadata } from "../api/metadata.js";
 import { enrichWithOpenSubtitles } from "../subtitles/opensubtitles.js";
 import { ProgressService } from "../store/progress.js";
@@ -188,6 +188,19 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     }
   });
 
+  app.get("/search/suggest", async (req, res) => {
+    const apiKey = tmdbRequired(res, config);
+    if (!apiKey) return;
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return res.status(400).json({ error: "q query param required" });
+    try {
+      const data = await tmdb.searchPerson(apiKey, q, 1);
+      res.json(data);
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.get("/title/movie/:tmdbId", async (req, res) => {
     const apiKey = tmdbRequired(res, config);
     if (!apiKey) return;
@@ -242,10 +255,10 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     try {
       res.json({
         rows: [
-          { id: "trending-movies", title: "Trending Movies" },
-          { id: "trending-tv", title: "Trending TV" },
-          { id: "popular-movies", title: "Popular Movies" },
-          { id: "popular-tv", title: "Popular TV" },
+          { id: "trending-tv", title: "Trending TV", layout: "standard" },
+          { id: "trending-movies", title: "Trending Movies", layout: "spotlight" },
+          { id: "popular-movies", title: "Popular Movies", layout: "standard" },
+          { id: "popular-tv", title: "Popular TV", layout: "standard" },
         ],
       });
     } catch (err) {
@@ -379,13 +392,19 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
 
   async function resolvePlayRequest(
     options: Parameters<typeof resolveWithBackend>[0],
+    req: { query: Record<string, unknown> },
     res: Response,
     tizenProfile: boolean
   ) {
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
+    const sources = parseSourcesParam(req.query.sources);
+    const onlySourceId =
+      typeof req.query.onlySourceId === "string" ? req.query.onlySourceId : undefined;
     const play = await resolveWithBackend({
       ...options,
+      sources,
+      onlySourceId,
       providerScore: providerScoreFromList(providerList),
     });
     await validateAndRespond(play, res, tizenProfile);
@@ -404,6 +423,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           profile: tizenProfile ? "tizen" : undefined,
           backend: parseBackendParam(req.query.backend),
         },
+        req,
         res,
         tizenProfile
       );
@@ -427,6 +447,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           profile: tizenProfile ? "tizen" : undefined,
           backend: parseBackendParam(req.query.backend),
         },
+        req,
         res,
         tizenProfile
       );
@@ -445,6 +466,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           backend: "streamflix",
           profile: tizenProfile ? "tizen" : undefined,
         },
+        req,
         res,
         tizenProfile
       );
@@ -465,6 +487,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           backend: "streamflix",
           profile: tizenProfile ? "tizen" : undefined,
         },
+        req,
         res,
         tizenProfile
       );
@@ -483,6 +506,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           backend: "tmdb-native",
           profile: tizenProfile ? "tizen" : undefined,
         },
+        req,
         res,
         tizenProfile
       );
@@ -503,6 +527,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           backend: "tmdb-native",
           profile: tizenProfile ? "tizen" : undefined,
         },
+        req,
         res,
         tizenProfile
       );

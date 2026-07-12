@@ -11,45 +11,51 @@
 <body class="app-body">
   <div id="app" class="shell">
     <nav id="sidebar" class="sidebar" aria-label="Main navigation">
-      <button type="button" class="nav-item focusable" data-screen="search" title="Search">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <span class="nav-label">Search</span>
-      </button>
-      <button type="button" class="nav-item focusable active" data-screen="home" title="Home">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-        <span class="nav-label">Home</span>
-      </button>
-      <button type="button" class="nav-item focusable" data-screen="random" title="Random">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
-        <span class="nav-label">Random</span>
-      </button>
-      <button type="button" class="nav-item focusable" data-screen="trending" title="Trending">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
-        <span class="nav-label">Trending</span>
-      </button>
-      <button type="button" class="nav-item focusable" data-screen="tv" title="TV Shows">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
-        <span class="nav-label">TV</span>
-      </button>
-      <button type="button" class="nav-item focusable" data-screen="movies" title="Movies">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 3v2h-2V3H8v2H6V3H4v18h2v-2h2v2h8v-2h2v2h2V3h-2zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
-        <span class="nav-label">Movies</span>
-      </button>
-      <button type="button" class="nav-item focusable" data-screen="categories" title="Categories">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 11c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm-6 0c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm6-9C9.79 2 6.32 3.88 4 6.66 4.89 9.5 7.14 11.6 10 12.18V22h4v-9.82c2.86-.58 5.11-2.68 6-5.52C17.68 3.88 14.21 2 11 2h-2z"/></svg>
-        <span class="nav-label">Categories</span>
-      </button>
-      <button type="button" class="nav-item focusable" data-screen="mylist" title="My List">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-        <span class="nav-label">My List</span>
-      </button>
-      <button type="button" class="nav-item focusable nav-bottom" data-screen="settings" title="Settings">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-        <span class="nav-label">Settings</span>
+      <div class="sidebar-nav-items">
+        <button type="button" class="nav-item focusable" data-screen="search" title="Search" aria-label="Search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <span class="nav-label">Search</span>
+        </button>
+        <button type="button" class="nav-item focusable active" data-screen="home" title="Home" aria-label="Home" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          <span class="nav-label">Home</span>
+        </button>
+        <button type="button" class="nav-item focusable" data-screen="random" title="Random" aria-label="Random">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+          <span class="nav-label">Random</span>
+        </button>
+        <button type="button" class="nav-item focusable" data-screen="trending" title="Trending" aria-label="Trending">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+          <span class="nav-label">Trending</span>
+        </button>
+        <button type="button" class="nav-item focusable" data-screen="tv" title="TV Shows" aria-label="TV">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+          <span class="nav-label">TV</span>
+        </button>
+        <button type="button" class="nav-item focusable" data-screen="movies" title="Movies" aria-label="Movies">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 3v2h-2V3H8v2H6V3H4v18h2v-2h2v2h8v-2h2v2h2V3h-2zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
+          <span class="nav-label">Movies</span>
+        </button>
+        <button type="button" class="nav-item focusable" data-screen="categories" title="Categories" aria-label="Categories">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 11c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm-6 0c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm6-9C9.79 2 6.32 3.88 4 6.66 4.89 9.5 7.14 11.6 10 12.18V22h4v-9.82c2.86-.58 5.11-2.68 6-5.52C17.68 3.88 14.21 2 11 2h-2z"/></svg>
+          <span class="nav-label">Categories</span>
+        </button>
+        <button type="button" class="nav-item focusable" data-screen="mylist" title="My List" aria-label="My List">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          <span class="nav-label">My List</span>
+        </button>
+        <button type="button" class="nav-item focusable" data-screen="settings" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          <span class="nav-label">Settings</span>
+        </button>
+      </div>
+      <button type="button" class="nav-item focusable nav-profile" title="Profile" aria-label="Profile">
+        <span class="nav-profile-icon" aria-hidden="true">T</span>
+        <span class="nav-label">Profile</span>
       </button>
     </nav>
 
-    <main id="main" class="main">
+    <main id="main" class="main" role="main">
       <div id="screen" class="screen"><p class="loading-msg">Loading Tizenflix…</p></div>
     </main>
   </div>
@@ -58,15 +64,11 @@
     <div class="video-aspect">
       <video id="video" playsinline></video>
     </div>
-    <div class="playback-bar">
-      <button type="button" id="btnStop" class="btn btn-stop focusable">← Back</button>
-      <button type="button" id="btnSubtitles" class="btn btn-info focusable hidden">CC</button>
-      <span id="playbackTitle" class="playback-title"></span>
-    </div>
   </div>
 
   <div id="statusBar" class="status-bar hidden"></div>
   <pre id="debugOverlay" class="debug-overlay hidden">Debug log…</pre>
+  <div id="focus-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
   <div id="focusHint" class="focus-hint">↑↓←→ navigate · Enter select · Back stop</div>
 
   <script src="lib/hls.min.js"></script>

@@ -1,11 +1,11 @@
 # Todo
 - [ ] Revamp the UI using /frontend-design skill.
 - [ ] Add animations when moving between shows/movies (like Netflix)
-- [ ] Be able to preview the application on laptop so I can make changes without having to be at the TV.
 - [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see how much code we can steal.
 - [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see if we can use OR reverse engineer the servers present so that we should have literally no issues with streaming / API
 
 # Doing
+- [ ] Be able to preview the application on laptop so I can make changes without having to be at the TV.
 - [ ] Copy Netflix sidebar.
 
 # Done

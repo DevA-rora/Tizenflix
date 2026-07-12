@@ -6,6 +6,7 @@ var router = require("./core/router.js");
 var focus = require("./core/focus.js");
 var debug = require("./core/debug.js");
 var config = require("./core/config.js");
+var motion = require("./core/motion.js");
 var player = require("./player/player.js");
 var playback = require("./services/playback.js");
 
@@ -30,9 +31,14 @@ function showStatus(message, isError) {
   }, 5000);
 }
 
-function updateFocusHint(label) {
+function updateFocusHint(meta) {
+  home.onBrowseFocus(meta);
+  var label = typeof meta === "string" ? meta : meta && meta.label ? meta.label : "";
+  var announcer = document.getElementById("focus-announcer");
+  if (announcer && label) announcer.textContent = label;
   var el = document.getElementById("focusHint");
-  if (el) el.textContent = "Focused: " + label;
+  if (!el) return;
+  el.textContent = "Focused: " + label;
 }
 
 function browseScreen(mode) {
@@ -50,8 +56,10 @@ function setSidebarActive(screen) {
   var items = nav.querySelectorAll(".nav-item");
   for (var i = 0; i < items.length; i++) {
     items[i].classList.remove("active");
+    items[i].removeAttribute("aria-current");
     if (items[i].getAttribute("data-screen") === screen) {
       items[i].classList.add("active");
+      items[i].setAttribute("aria-current", "page");
     }
   }
 }
@@ -73,29 +81,29 @@ function wireSidebar() {
 }
 
 function wirePlayback() {
-  var stopBtn = document.getElementById("btnStop");
-  if (stopBtn) {
-    stopBtn.addEventListener("click", function () {
-      playback.stop();
-    });
-  }
+  /* Player chrome handles stop/back via playback.handleBackKey */
 }
 
 function wireGlobalKeys() {
   document.addEventListener("keydown", function (e) {
     if (e.keyCode === 10009 || e.key === "Back") {
       if (document.body.classList.contains("is-playing")) {
-        playback.stop();
+        playback.handleBackKey();
         e.preventDefault();
         return;
       }
       if (router.back()) {
         e.preventDefault();
       }
+      return;
     }
-    if (player.isMediaPlayPauseKey(e)) {
-      var video = document.getElementById("video");
-      if (video) player.togglePlayPause(video);
+    if (document.body.classList.contains("is-playing")) {
+      if (player.isMediaPlayPauseKey(e)) {
+        var video = document.getElementById("video");
+        if (video) player.togglePlayPause(video);
+        e.preventDefault();
+      }
+      return;
     }
   });
 }
@@ -113,6 +121,7 @@ function init() {
     document.body.classList.add("browser-dev");
   }
 
+  motion.applyBodyClass();
   applyDevMode();
 
   debug.debugClear();
@@ -153,6 +162,7 @@ window.TizenflixApp = {
   router: router,
   showStatus: showStatus,
   setSidebarActive: setSidebarActive,
+  updateFocusHint: updateFocusHint,
 };
 
 module.exports = {

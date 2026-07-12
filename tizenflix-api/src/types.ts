@@ -35,6 +35,8 @@ export interface PlayableSource {
   type: "mp4" | "m3u8" | "dash" | "unknown";
   url: string;
   priority: number;
+  /** TMDB-native source id (vixsrc, vidrock, …) for player source picker */
+  sourceId?: string;
   /** Per-source upstream headers for Streamflix embed hosts */
   upstreamHeaders?: Record<string, string>;
 }
@@ -100,6 +102,12 @@ export interface ResolveOptions {
   providerScore?: (provider: string) => number;
   backend?: PlayBackend;
   onlySourceId?: string;
+  onlySourceIds?: string[];
+  /** Override auto TMDB-native source list (comma-separated ids in query) */
+  sources?: string[];
+  onePerSource?: boolean;
+  mergeOrder?: string[];
+  sourceTimeoutMs?: number;
 }
 
 export interface ServerResult {

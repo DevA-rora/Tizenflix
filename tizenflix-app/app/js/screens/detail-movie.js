@@ -1,11 +1,12 @@
 /**
- * Movie detail — backdrop, synopsis, Play.
+ * Movie detail — Netflix-style hero with Play.
  */
 
 var api = require("../services/api.js");
 var router = require("../core/router.js");
 var focus = require("../core/focus.js");
 var playback = require("../services/playback.js");
+var detailHero = require("../components/detail-hero.js");
 
 var params = {};
 
@@ -19,6 +20,10 @@ function escapeHtml(text) {
 
 function onEnter(p) {
   params = p || {};
+}
+
+function onLeave() {
+  detailHero.stopBackgroundVideo();
 }
 
 function render(container) {
@@ -35,47 +40,24 @@ function render(container) {
   api
     .getMovie(params.tmdbId)
     .then(function (title) {
-      var meta = [];
-      if (title.year) meta.push(title.year);
-      if (title.runtime) meta.push(title.runtime + " min");
-      if (title.rating) meta.push("★ " + title.rating.toFixed(1));
+      el.innerHTML = "";
 
-      el.innerHTML =
-        '<div class="detail-hero">' +
-        '<div class="detail-backdrop" style="background-image:url(\'' +
-        escapeHtml(title.backdrop || title.poster || "") +
-        '\')"></div>' +
-        '<div class="detail-gradient"></div>' +
-        '<div class="detail-content">' +
-        "<h1 class=\"detail-title\">" +
-        escapeHtml(title.title) +
-        "</h1>" +
-        '<p class="detail-meta">' +
-        escapeHtml(meta.join(" · ")) +
-        "</p>" +
-        '<p class="detail-overview">' +
-        escapeHtml(title.overview || "") +
-        "</p>" +
-        '<div class="detail-actions" data-focus-row="detail-actions">' +
-        '<button type="button" class="btn btn-play focusable" id="detailPlayBtn">▶ Play</button>' +
-        '<button type="button" class="btn btn-info focusable" id="detailBackBtn">← Back</button>' +
-        "</div>" +
-        "</div></div>";
+      var hero = detailHero.render(title, {
+        playLabel: "▶ Play",
+        onBack: function () {
+          router.back();
+        },
+        onPlay: function () {
+          playback.playMovie(title.id, title.title, status).catch(function (err) {
+            if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+          });
+        },
+      });
+
+      el.appendChild(hero);
 
       var playBtn = el.querySelector("#detailPlayBtn");
-      var backBtn = el.querySelector("#detailBackBtn");
-
-      playBtn.addEventListener("click", function () {
-        playback.playMovie(title.id, title.title, status).catch(function (err) {
-          if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
-        });
-      });
-
-      backBtn.addEventListener("click", function () {
-        router.back();
-      });
-
-      focus.focusElement(playBtn);
+      if (playBtn) focus.focusElement(playBtn);
     })
     .catch(function (err) {
       el.innerHTML =
@@ -89,5 +71,6 @@ function render(container) {
 
 module.exports = {
   onEnter: onEnter,
+  onLeave: onLeave,
   render: render,
 };

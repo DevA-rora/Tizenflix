@@ -1,5 +1,5 @@
-import { createCipheriv, createHash } from "node:crypto";
-import { fetchJson } from "../http.js";
+import { createHash } from "node:crypto";
+import { BROWSER_UA, fetchJson } from "../http.js";
 import type { TmdbNativeEntry, TmdbNativeResolveOpts, TmdbNativeSource } from "./types.js";
 
 const VIXSRC = "https://vixsrc.to";
@@ -15,8 +15,6 @@ const VIDZEE = "https://player.vidzee.wtf";
 const PRIMESRC = "https://primesrc.me";
 const VIDSRC_TO = "https://vidsrc.to";
 
-const VIDROCK_PASS = "x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9";
-
 const VIDEASY_EN_SERVERS = [
   { name: "Neon", endpoint: "mb-flix", movieOnly: false },
   { name: "Yoru", endpoint: "cdn", movieOnly: true },
@@ -31,11 +29,39 @@ const VIDZEE_SERVERS = [
   "Viet", "Velocità", "Hindi", "Bengali", "Tamil", "Telugu", "Malayalam",
 ];
 
-function encVidrock(data: string): string {
-  const key = Buffer.from(VIDROCK_PASS, "utf8");
-  const iv = key.subarray(0, 16);
-  const cipher = createCipheriv("aes-256-cbc", key, iv);
-  return Buffer.concat([cipher.update(data, "utf8"), cipher.final()]).toString("base64url");
+export function buildVidrockApiUrl(opts: {
+  type: "movie" | "tv";
+  tmdbId: string;
+  season?: string;
+  episode?: string;
+}): string {
+  if (opts.type === "movie") return `${VIDROCK}/api/movie/${opts.tmdbId}`;
+  return `${VIDROCK}/api/tv/${opts.tmdbId}/${opts.season ?? "1"}/${opts.episode ?? "1"}`;
+}
+
+async function vidrockEntries(opts: TmdbNativeResolveOpts): Promise<TmdbNativeEntry[]> {
+  const apiUrl = buildVidrockApiUrl({
+    type: opts.type,
+    tmdbId: opts.tmdbId,
+    season: opts.season,
+    episode: opts.episode,
+  });
+
+  const response = await fetchJson<Record<string, { url?: string }>>(apiUrl, {
+    referer: `${VIDROCK}/`,
+    origin: VIDROCK,
+    headers: { "User-Agent": BROWSER_UA },
+  });
+
+  const entries = Object.entries(response)
+    .filter(([, v]) => v?.url)
+    .map(([serverName]) => ({
+      name: `${serverName} (Vidrock)`,
+      url: `${apiUrl}#${serverName}`,
+    }));
+
+  if (!entries.length) throw new Error("Vidrock: api returned no servers");
+  return entries;
 }
 
 function movieTvUrl(
@@ -64,30 +90,6 @@ function syncSource(
   duplicateOf?: string
 ): TmdbNativeSource {
   return { id, name, mainUrl, priority, supportsMovies, supportsTv, duplicateOf, buildEntries: build };
-}
-
-async function vidrockEntries(opts: TmdbNativeResolveOpts): Promise<TmdbNativeEntry[]> {
-  const encoded =
-    opts.type === "movie"
-      ? encVidrock(opts.tmdbId)
-      : encVidrock(`${opts.tmdbId}_${opts.season ?? "1"}_${opts.episode ?? "1"}`);
-  const apiUrl =
-    opts.type === "movie"
-      ? `${VIDROCK}/api/movie/${encoded}`
-      : `${VIDROCK}/api/tv/${encoded}`;
-  try {
-    const response = await fetchJson<Record<string, { url?: string }>>(apiUrl, {
-      headers: { Referer: `${VIDROCK}/`, Origin: VIDROCK },
-    });
-    return Object.entries(response)
-      .filter(([, v]) => v?.url)
-      .map(([serverName]) => ({
-        name: `${serverName} (Vidrock)`,
-        url: `${apiUrl}#${serverName}`,
-      }));
-  } catch {
-    return [];
-  }
 }
 
 async function primeSrcEntries(opts: TmdbNativeResolveOpts): Promise<TmdbNativeEntry[]> {

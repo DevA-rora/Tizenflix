@@ -70,12 +70,38 @@ button.secondary {
   background-color: #333333;
 }
 
+button,
+input[type="text"] {
+  -webkit-transition: -webkit-transform 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
+  transition: transform 200ms ease-out, border-color 200ms ease-out;
+}
+
 button.tv-focus,
 input.tv-focus {
   border: 4px solid #ffffff;
   box-shadow: 0 0 0 4px #e50914;
   -webkit-transform: scale(1.06);
   transform: scale(1.06);
+}
+
+button.card.tv-focus,
+button.nav-item.tv-focus {
+  border: none;
+  box-shadow: none;
+  -webkit-transform: none;
+  transform: none;
+}
+
+.focusable:focus-visible {
+  outline: 4px solid #ffffff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px #e50914;
+}
+
+button.card:focus-visible,
+button.nav-item:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 button:disabled {

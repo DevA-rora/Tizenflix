@@ -1,5 +1,5 @@
 /**
- * Home / browse screen — hero banner + TMDB rows.
+ * Home / browse screen — hero banner + TMDB rows with mixed layouts.
  */
 
 var api = require("../services/api.js");
@@ -10,6 +10,9 @@ var row = require("../components/row.js");
 var playback = require("../services/playback.js");
 
 var viewMode = "home";
+var itemCache = {};
+var heroEl = null;
+var featuredItem = null;
 
 function setMode(mode) {
   viewMode = mode || "home";
@@ -32,6 +35,22 @@ function filterRows(rows) {
     });
   }
   return rows;
+}
+
+function cacheItems(items) {
+  for (var i = 0; i < items.length; i++) {
+    itemCache[String(items[i].id)] = items[i];
+  }
+}
+
+function layoutForRow(rowDef, index) {
+  if (index === 0) return "standard";
+
+  if (rowDef.layout === "spotlight" || rowDef.layout === "standard") {
+    return rowDef.layout;
+  }
+  if (viewMode === "home" && index === 1) return "spotlight";
+  return "standard";
 }
 
 function openItem(item) {
@@ -57,7 +76,39 @@ function showError(el, message) {
   el.appendChild(banner);
 }
 
+function handleFocusChange(meta) {
+  if (!meta || !meta.isCard || !meta.tmdbId) return;
+  if (meta.rowId === "hero") return;
+  if (viewMode !== "home") return;
+
+  var item = itemCache[meta.tmdbId];
+  if (!item || !heroEl) return;
+
+  hero.updateHero(heroEl, item);
+
+  if (meta.rowId) {
+    var main = document.getElementById("main");
+    if (main) {
+      var rowSection = main.querySelector('[data-focus-row="' + meta.rowId + '"]');
+      if (rowSection && rowSection.getAttribute("data-row-layout") === "spotlight") {
+        if (typeof rowSection._updateSpotlightMeta === "function") {
+          rowSection._updateSpotlightMeta(item);
+        }
+        if (typeof rowSection._syncSpotlightLayout === "function") {
+          rowSection._syncSpotlightLayout();
+        }
+        return;
+      }
+    }
+  }
+}
+
 function loadContent(el) {
+  itemCache = {};
+  heroEl = null;
+  featuredItem = null;
+  hero.resetHeroState();
+
   api
     .browseRows()
     .then(function (data) {
@@ -85,45 +136,45 @@ function loadContent(el) {
       el.innerHTML = "";
 
       if (bundle.heroItems.length && viewMode === "home") {
-        var featured = bundle.heroItems[0];
-        featured.rank = 1;
-        el.appendChild(
-          hero.renderHero(featured, {
-            onPlay: function (item) {
-              playItem(item, window.TizenflixApp && window.TizenflixApp.showStatus).catch(function (err) {
-                if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
-              });
-            },
-            onInfo: openItem,
+        featuredItem = bundle.heroItems[0];
+        cacheItems(bundle.heroItems);
+        heroEl = hero.renderHero(featuredItem, {
+          onPlay: function (item) {
+            playItem(item, window.TizenflixApp && window.TizenflixApp.showStatus).catch(function (err) {
+              if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+            });
+          },
+          onInfo: openItem,
+        });
+        el.appendChild(heroEl);
+      }
+
+      var fetches = bundle.rows.map(function (rowDef, rowIndex) {
+        return api
+          .browseRow(rowDef.id)
+          .then(function (rowData) {
+            return { rowDef: rowDef, rowIndex: rowIndex, items: rowData.items || [] };
           })
-        );
-      }
+          .catch(function () {
+            return { rowDef: rowDef, rowIndex: rowIndex, items: [] };
+          });
+      });
 
-      var pending = bundle.rows.length;
-      var done = 0;
-
-      function rowLoaded() {
-        done += 1;
-      }
-
-      for (var i = 0; i < bundle.rows.length; i++) {
-        (function (rowDef) {
-          api
-            .browseRow(rowDef.id)
-            .then(function (rowData) {
-              var items = rowData.items || [];
-              if (items.length) {
-                el.appendChild(row.createRow(rowDef.title, items, openItem));
-              }
-            })
-            .catch(function () {
-              /* skip failed row */
-            })
-            .then(rowLoaded);
-        })(bundle.rows[i]);
-      }
-
-      focus.focusDefaultMain();
+      return Promise.all(fetches).then(function (results) {
+        var renderedCount = 0;
+        for (var r = 0; r < results.length; r++) {
+          var result = results[r];
+          if (!result.items.length) continue;
+          cacheItems(result.items);
+          var layout = layoutForRow(result.rowDef, result.rowIndex);
+          if (renderedCount === 0) layout = "standard";
+          renderedCount += 1;
+          el.appendChild(
+            row.createRow(result.rowDef.title, result.items, openItem, { layout: layout })
+          );
+        }
+        focus.focusDefaultMain();
+      });
     })
     .catch(function (err) {
       el.innerHTML = "";
@@ -162,4 +213,5 @@ function render(container) {
 module.exports = {
   setMode: setMode,
   render: render,
+  onBrowseFocus: handleFocusChange,
 };

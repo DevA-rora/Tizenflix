@@ -2,6 +2,8 @@
  * Zone-based D-pad focus for Tizen TV — sidebar vs main, row-aware Up/Down.
  */
 
+var motion = require("./motion.js");
+
 var FOCUS_SELECTOR =
   "button:not(:disabled), input[type='text']:not(:disabled), a[href], [tabindex='0']";
 
@@ -10,6 +12,9 @@ var currentEl = null;
 var lastSidebarEl = null;
 var rememberedMainEl = null;
 var keyHandler = null;
+var lastFocusRowId = null;
+var lastSearchLeftEl = null;
+var scrollAnimGen = 0;
 
 function getFocusables(root) {
   if (!root) return [];
@@ -30,6 +35,7 @@ function labelFor(el) {
   if (el.id === "saveApiBtn") return "Save & test";
   if (el.id === "devModeBtn") return "Dev mode";
   if (el.id === "detailPlayBtn") return "Play";
+  if (el.id === "detailMyListBtn") return "My List";
   if (el.id === "detailBackBtn") return "Back";
   if (el.id === "btnStop") return "Stop";
   if (el.getAttribute("aria-label")) return el.getAttribute("aria-label");
@@ -62,6 +68,45 @@ function getMainRoot() {
 function resetMainScroll() {
   var main = getMainRoot();
   if (main) main.scrollTop = 0;
+  lastFocusRowId = null;
+  resetAllTrackOffsets();
+}
+
+function resetAllTrackOffsets() {
+  var tracks = document.querySelectorAll(".row-track");
+  for (var i = 0; i < tracks.length; i++) {
+    setTrackOffset(tracks[i], 0);
+  }
+}
+
+function getTrackOffset(track) {
+  if (!track) return 0;
+  if (typeof track._scrollX === "number") return track._scrollX;
+  return 0;
+}
+
+function setTrackOffset(track, offset) {
+  if (!track) return;
+  var x = Math.max(0, offset);
+  track._scrollX = x;
+  var transform = "translate3d(" + -x + "px, 0, 0)";
+  track.style.webkitTransform = transform;
+  track.style.transform = transform;
+}
+
+function getScrollElements(el) {
+  var track = el ? el.closest(".row-track") : null;
+  if (!track) return { track: null, outer: null };
+  var outer = track.parentElement;
+  if (outer && outer.classList.contains("row-track-outer")) {
+    return { track: track, outer: outer };
+  }
+  return { track: track, outer: track };
+}
+
+function getMaxTrackOffset(track, outer) {
+  if (!track || !outer) return 0;
+  return Math.max(0, track.scrollWidth - outer.clientWidth);
 }
 
 function scrollIntoView(el) {
@@ -89,14 +134,246 @@ function scrollIntoView(el) {
   }
 }
 
+function buildFocusMeta(el) {
+  var rowId = getFocusRowId(el);
+  var isCard = !!(el && el.classList && el.classList.contains("card"));
+  return {
+    rowId: rowId,
+    isCard: isCard,
+    tmdbId: isCard ? el.getAttribute("data-tmdb-id") : null,
+    mediaType: isCard ? el.getAttribute("data-media-type") : null,
+    label: labelFor(el),
+  };
+}
+
+function setSidebarExpanded(expanded) {
+  if (document.body) {
+    if (expanded) document.body.classList.add("sidebar-expanded");
+    else document.body.classList.remove("sidebar-expanded");
+  }
+}
+
+function isInSpotlightRow(el) {
+  if (!el || !el.classList || !el.classList.contains("card")) return false;
+  return !!el.closest(".row-spotlight");
+}
+
+function updateSpotlightMode(el) {
+  var rows = document.querySelectorAll(".row-spotlight");
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].classList.remove("is-active");
+    var cards = rows[i].querySelectorAll(".card-spotlight");
+    for (var c = 0; c < cards.length; c++) {
+      if (cards[c] === el) continue;
+      var posterEl = cards[c].querySelector(".card-poster");
+      var posterUrl = cards[c].getAttribute("data-poster");
+      if (posterEl && posterUrl) {
+        posterEl.style.backgroundImage = "url('" + posterUrl.replace(/'/g, "%27") + "')";
+      }
+    }
+  }
+  if (isInSpotlightRow(el)) {
+    document.body.classList.add("home-spotlight-focus");
+    var row = el.closest(".row-spotlight");
+    if (row) row.classList.add("is-active");
+    var posterEl = el.querySelector(".card-poster");
+    var backdropUrl = el.getAttribute("data-backdrop") || el.getAttribute("data-poster");
+    if (posterEl && backdropUrl) {
+      posterEl.classList.add("is-swapping");
+      posterEl.style.backgroundImage = "url('" + backdropUrl.replace(/'/g, "%27") + "')";
+      requestAnimationFrame(function () {
+        posterEl.classList.remove("is-swapping");
+      });
+    }
+  } else {
+    document.body.classList.remove("home-spotlight-focus");
+  }
+}
+
+function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
+  if (!track) return;
+  var maxOffset = getMaxTrackOffset(track, outer);
+  targetOffset = Math.max(0, Math.min(targetOffset, maxOffset));
+  var start = getTrackOffset(track);
+  var distance = targetOffset - start;
+  if (Math.abs(distance) < 2) {
+    setTrackOffset(track, targetOffset);
+    if (onComplete) onComplete();
+    return;
+  }
+
+  if (motion.prefersReducedMotion()) {
+    setTrackOffset(track, targetOffset);
+    if (onComplete) onComplete();
+    return;
+  }
+
+  scrollAnimGen += 1;
+  var gen = scrollAnimGen;
+  var profile = motion.getMotionProfile();
+  duration = duration || profile.scrollMs;
+  var startTime = null;
+
+  function step(timestamp) {
+    if (gen !== scrollAnimGen) return;
+    if (!startTime) startTime = timestamp;
+    var elapsed = timestamp - startTime;
+    var progress = Math.min(elapsed / duration, 1);
+    var eased = 1 - Math.pow(1 - progress, 3);
+    setTrackOffset(track, start + distance * eased);
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else if (onComplete) {
+      onComplete();
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+
+function animateMainScroll(main, targetScroll, duration) {
+  if (!main) return;
+  targetScroll = Math.max(0, targetScroll);
+  var start = main.scrollTop;
+  var distance = targetScroll - start;
+  if (Math.abs(distance) < 2) return;
+
+  if (motion.prefersReducedMotion() || motion.shouldSnapScroll(distance)) {
+    main.scrollTop = targetScroll;
+    return;
+  }
+
+  scrollAnimGen += 1;
+  var gen = scrollAnimGen;
+  var profile = motion.getMotionProfile();
+  duration = duration || profile.mainScrollMs;
+  var startTime = null;
+
+  function step(timestamp) {
+    if (gen !== scrollAnimGen) return;
+    if (!startTime) startTime = timestamp;
+    var elapsed = timestamp - startTime;
+    var progress = Math.min(elapsed / duration, 1);
+    var eased = 1 - Math.pow(1 - progress, 3);
+    main.scrollTop = start + distance * eased;
+    if (progress < 1) requestAnimationFrame(step);
+  }
+
+  requestAnimationFrame(step);
+}
+
+function getCardOffsetInScroller(track, card) {
+  if (!track || !card) return 0;
+  return card.offsetLeft;
+}
+
+function getHorizontalScrollTarget(track, outer, card, padding) {
+  if (!track || !card || !outer) return getTrackOffset(track);
+
+  var cardLeft = getCardOffsetInScroller(track, card);
+  var cardWidth = card.offsetWidth;
+  var viewWidth = outer.clientWidth;
+  var scrollLeft = getTrackOffset(track);
+  var visibleLeft = cardLeft - scrollLeft;
+  var visibleRight = visibleLeft + cardWidth;
+
+  if (visibleLeft < padding) {
+    return cardLeft - padding;
+  }
+  if (visibleRight > viewWidth - padding) {
+    return cardLeft + cardWidth - viewWidth + padding;
+  }
+  return scrollLeft;
+}
+
+function scrollSpotlightRowToTop(el) {
+  var row = el.closest(".row-spotlight");
+  var main = getMainRoot();
+  if (!row || !main) return;
+  var profile = motion.getMotionProfile();
+  animateMainScroll(main, Math.max(0, row.offsetTop - 48), profile.mainScrollMs);
+}
+
+function getSpotlightScrollPadding(el) {
+  return indexInRow(el) === 0 ? 0 : 40;
+}
+
+function scrollRowIntoView(el, onComplete) {
+  if (!el || !el.classList.contains("card")) {
+    if (onComplete) onComplete();
+    return;
+  }
+  var scrollEls = getScrollElements(el);
+  var track = scrollEls.track;
+  var outer = scrollEls.outer;
+  if (!track || !outer) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  var profile = motion.getMotionProfile();
+  var padding = isInSpotlightRow(el) ? getSpotlightScrollPadding(el) : 56;
+  var target;
+  var duration = isInSpotlightRow(el) ? profile.scrollMs + 40 : profile.scrollMs;
+
+  if (isInSpotlightRow(el) && el.classList.contains("tv-focus")) {
+    target = Math.max(0, getCardOffsetInScroller(track, el) - padding);
+  } else {
+    target = getHorizontalScrollTarget(track, outer, el, padding);
+  }
+
+  animateTrackOffset(track, outer, target, duration, onComplete);
+}
+
+function syncSpotlightLayout(el) {
+  if (!isInSpotlightRow(el)) return;
+  var row = el.closest(".row-spotlight");
+  if (row && typeof row._syncSpotlightLayout === "function") {
+    row._syncSpotlightLayout();
+  }
+}
+
+function scheduleScrollAfterLayout(el, rowId, rowChanged) {
+  scrollAnimGen += 1;
+  var gen = scrollAnimGen;
+  var isSpotlight = isInSpotlightRow(el);
+
+  function afterHorizontalScroll() {
+    if (gen !== scrollAnimGen || currentEl !== el) return;
+    if (isSpotlight) syncSpotlightLayout(el);
+  }
+
+  function runScroll() {
+    if (gen !== scrollAnimGen || currentEl !== el) return;
+    if (el.classList.contains("card")) {
+      scrollRowIntoView(el, afterHorizontalScroll);
+    }
+    if (isSpotlight) {
+      if (rowChanged) scrollSpotlightRowToTop(el);
+    } else {
+      scrollIntoView(el);
+    }
+  }
+
+  requestAnimationFrame(runScroll);
+}
+
 function focusElement(el) {
   if (!el) return false;
   clearAllFocus();
   currentEl = el;
   el.classList.add("tv-focus");
-  scrollIntoView(el);
+
+  var rowId = getFocusRowId(el);
+  var rowChanged = rowId !== lastFocusRowId;
+  lastFocusRowId = rowId;
+
+  setSidebarExpanded(isInSidebar(el));
+  updateSpotlightMode(el);
+  scheduleScrollAfterLayout(el, rowId, rowChanged);
+
   if (isInSidebar(el)) lastSidebarEl = el;
-  if (onFocusChange) onFocusChange(labelFor(el));
+  if (onFocusChange) onFocusChange(buildFocusMeta(el));
   return true;
 }
 
@@ -157,10 +434,33 @@ function handleSidebarNav(el, dir) {
   return el;
 }
 
+function getCrossTargetRow(rowId, col) {
+  var main = getMainRoot();
+  if (!main || !rowId) return null;
+  var row = main.querySelector('[data-focus-row="' + rowId + '"]');
+  if (!row) return null;
+  var track = row.querySelector(".row-track");
+  var items = track ? getFocusables(track) : getFocusables(row);
+  if (!items.length) return null;
+  return items[Math.min(col, items.length - 1)];
+}
+
 function handleMainLeft(el) {
   var items = getRowFocusables(getFocusRowId(el));
   var idx = indexInRow(el);
   if (idx > 0) return items[idx - 1];
+
+  var crossLeft = el.getAttribute("data-cross-left");
+  if (crossLeft) {
+    var target = getCrossTargetRow(crossLeft, idx);
+    if (target) return target;
+    if (lastSearchLeftEl && document.body.contains(lastSearchLeftEl)) {
+      return lastSearchLeftEl;
+    }
+    var fallback = getCrossTargetRow("osk-3", 0);
+    if (fallback) return fallback;
+  }
+
   var nav = getSidebarFocusables();
   if (lastSidebarEl && nav.indexOf(lastSidebarEl) !== -1) return lastSidebarEl;
   return nav.length ? nav[0] : el;
@@ -170,6 +470,16 @@ function handleMainRight(el) {
   var items = getRowFocusables(getFocusRowId(el));
   var idx = indexInRow(el);
   if (idx < items.length - 1) return items[idx + 1];
+
+  var crossRight = el.getAttribute("data-cross-right");
+  if (crossRight) {
+    if (el.classList.contains("osk-key") || el.classList.contains("search-suggestion")) {
+      lastSearchLeftEl = el;
+    }
+    var target = getCrossTargetRow(crossRight, idx);
+    if (target) return target;
+  }
+
   return el;
 }
 
@@ -238,9 +548,9 @@ var SCREEN_FOCUS = {
   trending: [".card", "button"],
   tv: [".card", "button"],
   movies: [".card", "button"],
-  search: ["#searchInput", "button"],
+  search: [".osk-key", "button"],
   settings: ["#apiBaseInput", "button"],
-  mylist: ["button"],
+  mylist: [".card", "button"],
   random: ["button"],
   categories: ["button"],
 };
@@ -295,6 +605,7 @@ function onKeyDown(e) {
     if (isUp) next = handleSidebarNav(currentEl, "up");
     else if (isDown) next = handleSidebarNav(currentEl, "down");
     else if (isRight) {
+      setSidebarExpanded(false);
       focusDefaultMain();
       e.preventDefault();
       return;
@@ -328,6 +639,9 @@ function destroy() {
   }
   clearAllFocus();
   currentEl = null;
+  lastFocusRowId = null;
+  setSidebarExpanded(false);
+  document.body.classList.remove("home-spotlight-focus");
 }
 
 /** @deprecated Gate test only — linear focus on a root element */

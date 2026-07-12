@@ -18,6 +18,23 @@ Every UI change in `tizenflix-app` must pass this list before testing on hardwar
 - `.tv-focus` class with `border: 4px solid #fff` + `box-shadow: 0 0 0 4px #e50914`
 - 10-foot UI: body `28px+`, buttons `min-height: 64px`
 
+## Motion tiers
+
+The app uses [`app/js/core/motion.js`](app/js/core/motion.js) for timing profiles:
+
+| Profile | When | Transforms / opacity | Layout (width, margin, scroll) |
+|---------|------|----------------------|--------------------------------|
+| **Browser** | Laptop preview (`body.browser-dev`) | ~200–250ms | Instant snap |
+| **TV** | Tizen UA or `?tvPerf=1` (`body.tv-perf`) | ~150ms | Instant snap |
+
+**Horizontal row scroll:** use `translate3d` on `.row-track` inside `.row-track-outer` (`overflow: hidden`). Do **not** animate `scrollLeft` in rAF loops.
+
+**Spotlight cards:** width/height change instantly on focus; poster crossfade uses `opacity` only (`.card-poster.is-swapping`).
+
+**Hero collapse:** `transform: translateY(-24px) scaleY(0)` + `opacity`, not animated `min-height`.
+
+Preview TV motion in browser: `http://localhost:3010/app/index.html?tvPerf=1`
+
 ## JavaScript — do not use
 
 - `<script type="module">` or `import`/`export` in the TV bundle

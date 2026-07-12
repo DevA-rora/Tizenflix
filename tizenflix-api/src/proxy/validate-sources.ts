@@ -101,10 +101,20 @@ interface RankedSource {
   healthScore: number;
 }
 
+function isVixSrcProvider(provider: string): boolean {
+  return /^vixsrc/i.test(provider);
+}
+
 function sortPlayableSources(ranked: RankedSource[]): PlayableSource[] {
   return ranked
     .slice()
     .sort((a, b) => {
+      if (a.source.priority !== b.source.priority) {
+        return a.source.priority - b.source.priority;
+      }
+      const vixA = isVixSrcProvider(a.source.provider);
+      const vixB = isVixSrcProvider(b.source.provider);
+      if (vixA !== vixB) return vixA ? -1 : 1;
       const segA = a.probe.segmentMs ?? 99999;
       const segB = b.probe.segmentMs ?? 99999;
       if (segA !== segB) return segA - segB;

@@ -1,13 +1,10 @@
-/* Shared video player chrome — used by gate and app player screen */
+/* Netflix-style fullscreen player chrome */
 
 .video-wrap {
   display: block;
   position: relative;
   width: 100%;
-  margin-top: 20px;
   background-color: #000000;
-  border: 3px solid #333333;
-  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -18,7 +15,7 @@
 .video-aspect {
   position: relative;
   width: 100%;
-  padding-top: 56.25%;
+  height: 100vh;
   min-height: 360px;
   background-color: #000000;
 }
@@ -31,23 +28,7 @@
   height: 100%;
   display: block;
   background-color: #000000;
-}
-
-.now-playing {
-  margin: 0;
-  padding: 14px 18px;
-  font-size: 22px;
-  color: #b3b3b3;
-  background-color: #1a1a1a;
-  text-align: center;
-}
-
-.playback-bar .btn-subtitles {
-  margin-left: 12px;
-}
-
-.playback-bar #btnSubtitles.hidden {
-  display: none;
+  object-fit: contain;
 }
 
 body.is-playing #app {
@@ -62,36 +43,23 @@ body.is-playing .setup-only {
   display: none;
 }
 
-body.is-playing #banner {
+body.is-playing #videoWrap {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  z-index: 10001;
-  margin: 0;
-  border-radius: 0;
-  font-size: 22px;
-  padding: 12px 24px;
-}
-
-body.is-playing main,
-body.is-playing .app-main {
-  padding: 0;
-  max-width: none;
-}
-
-body.is-playing .panel-player,
-body.is-playing .screen-player {
+  width: 100vw;
+  height: 100vh;
   margin: 0;
   border: none;
   border-radius: 0;
-  padding: 0;
+  z-index: 10000;
   background-color: #000000;
 }
 
-body.is-playing .panel-player h2,
-body.is-playing .player-controls {
-  display: none;
+body.is-playing .video-aspect {
+  padding-top: 0;
+  height: 100vh;
+  min-height: 0;
 }
 
 .debug-overlay {
@@ -114,30 +82,358 @@ body.is-playing .player-controls {
 }
 
 body.is-playing .debug-overlay {
-  bottom: 72px;
+  bottom: 0;
 }
 
-body.is-playing .log-compact {
-  display: none;
-}
+/* --- Player chrome overlay --- */
 
-body.is-playing #videoWrap {
+.player-chrome {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  z-index: 10000;
-  background-color: #000000;
+  right: 0;
+  bottom: 0;
+  z-index: 10002;
+  pointer-events: none;
+  opacity: 0;
+  -webkit-transition: opacity 0.25s ease;
+  transition: opacity 0.25s ease;
 }
 
-body.is-playing .video-aspect {
-  padding-top: 0;
-  height: calc(100vh - 72px);
-  min-height: 0;
+.player-chrome-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.player-chrome-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-vignette-top,
+.player-vignette-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.player-vignette-top {
+  top: 0;
+  height: 180px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 100%);
+}
+
+.player-vignette-bottom {
+  bottom: 0;
+  height: 240px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.45) 55%, rgba(0, 0, 0, 0) 100%);
+}
+
+/* Top bar — back left, server right */
+
+.player-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: space-between;
+  justify-content: space-between;
+  padding: 32px 48px 0;
+}
+
+.player-icon-btn {
+  width: 56px;
+  height: 56px;
+  min-height: 56px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.player-icon-btn svg {
+  width: 36px;
+  height: 36px;
+  fill: currentColor;
+  display: block;
+  margin: 0 auto;
+}
+
+.player-icon-btn.tv-focus {
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 0 4px #e50914;
+  border-radius: 4px;
+}
+
+/* Progress bar — thin track, vertical scrub tick, time right */
+
+.player-progress-wrap {
+  position: absolute;
+  left: 48px;
+  right: 48px;
+  bottom: 88px;
+  z-index: 2;
+}
+
+.player-progress-time {
+  display: block;
+  text-align: right;
+  font-size: 20px;
+  color: #ffffff;
+  margin-bottom: 8px;
+  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.player-progress-track {
+  position: relative;
+  height: 3px;
+  background-color: rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+}
+
+.player-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0;
+  background-color: #e50914;
+  border-radius: 2px;
+}
+
+.player-progress-scrub {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 16px;
+  margin-top: -8px;
+  margin-left: -1px;
+  background-color: #e50914;
+  border-radius: 1px;
+}
+
+.player-progress-wrap.tv-focus {
+  outline: none;
+  box-shadow: 0 0 0 4px #e50914;
+  border-radius: 4px;
+}
+
+/* Bottom dock — transport left, title center, actions right */
+
+.player-dock {
+  position: absolute;
+  left: 48px;
+  right: 48px;
+  bottom: 24px;
+  z-index: 2;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+}
+
+.player-dock-left,
+.player-dock-right {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-flex-shrink: 0;
+  flex-shrink: 0;
+}
+
+.player-dock-left .player-dock-btn {
+  margin-right: 8px;
+}
+
+.player-dock-right .player-dock-btn {
+  margin-left: 8px;
+}
+
+.player-dock-title {
+  -webkit-flex: 1;
+  flex: 1;
+  text-align: center;
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 16px;
+  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.player-dock-btn {
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.player-dock-btn svg {
+  width: 28px;
+  height: 28px;
+  fill: currentColor;
+  display: block;
+  margin: 0 auto;
+}
+
+.player-dock-btn.tv-focus {
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 0 4px #e50914;
+  border-radius: 4px;
+}
+
+/* Episode rail */
+
+.player-rail {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  z-index: 10003;
+  background-color: rgba(20, 20, 20, 0.92);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.player-rail.hidden {
+  display: none;
+}
+
+.player-rail-header {
+  padding: 32px 24px 16px;
+  font-size: 26px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.player-rail-list {
+  padding: 0 16px 24px;
+}
+
+.player-rail-card {
+  display: block;
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 3px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.player-rail-card-active {
+  border-color: #ffffff;
+}
+
+.player-rail-thumb {
+  width: 100%;
+  height: 200px;
+  background-color: #2a2a2a;
+  background-size: cover;
+  background-position: center;
+}
+
+.player-rail-meta {
+  padding: 12px;
+  color: #e5e5e5;
+  font-size: 20px;
+}
+
+.player-rail-card.tv-focus {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 4px #e50914;
+}
+
+/* Panels — subs, server, settings */
+
+.player-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55vh;
+  z-index: 10004;
+  background-color: rgba(20, 20, 20, 0.96);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 32px 48px;
+}
+
+.player-panel.hidden {
+  display: none;
+}
+
+.player-panel-title {
+  margin: 0 0 24px;
+  font-size: 28px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.player-panel-hint {
+  margin: 24px 0 12px;
+  font-size: 18px;
+  color: #b3b3b3;
+}
+
+.player-panel-item {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 16px 20px;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 24px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-panel-item.is-active {
+  background-color: rgba(229, 9, 20, 0.35);
+}
+
+.player-panel-item.tv-focus {
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 0 4px #e50914;
+}
+
+.player-panel-loading {
+  color: #b3b3b3;
+  font-size: 22px;
+}
+
+/* Gate test legacy bar — unchanged */
+.now-playing {
+  margin: 0;
+  padding: 14px 18px;
+  font-size: 22px;
+  color: #b3b3b3;
+  background-color: #1a1a1a;
+  text-align: center;
+}
+
+.playback-bar {
+  display: none;
 }
 
 body.is-playing .now-playing {
@@ -145,21 +441,14 @@ body.is-playing .now-playing {
 }
 
 body.is-playing .playback-bar {
-  display: block;
-}
-
-.playback-bar {
   display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 10003;
-  padding: 16px 48px;
-  background-color: rgba(0, 0, 0, 0.85);
-  border-top: 2px solid #333333;
 }
 
-.playback-bar .row {
-  margin-bottom: 0;
+body.is-playing .panel-player h2,
+body.is-playing .player-controls {
+  display: none;
+}
+
+body.is-playing .log-compact {
+  display: none;
 }

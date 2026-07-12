@@ -63,6 +63,39 @@ function mockFetch(blockPattern?: RegExp) {
 }
 
 describe("validatePlaySources tizen profile", () => {
+  it("prefers lower source priority and VixSrc over faster Vidking servers", async () => {
+    const fetchImpl = mockFetch();
+    const play: PlayResponse = {
+      ...samplePlay(),
+      sources: [
+        {
+          id: "vixsrc-720p-0",
+          provider: "VixSrc/Server1",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/vixsrc/720p.m3u8",
+          priority: 0,
+        },
+        {
+          id: "oxygen-720p-0",
+          provider: "Oxygen",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/oxygen/720p.m3u8",
+          priority: 2,
+        },
+      ],
+      recommended: "oxygen-720p-0",
+    };
+
+    const result = await validatePlaySources(play, PUBLIC_BASE, fetchImpl, {
+      tizenProfile: true,
+    });
+
+    expect(result.sources[0]?.provider).toBe("VixSrc/Server1");
+    expect(result.recommended).toBe("vixsrc-720p-0");
+  });
+
   it("returns playable m3u8 only and skips MP4 without warnings", async () => {
     const fetchImpl = mockFetch();
     const result = await validatePlaySources(samplePlay(), PUBLIC_BASE, fetchImpl, {

@@ -1,5 +1,9 @@
+import * as cheerio from "cheerio";
 import type { ExtractorDef } from "../types.js";
 import { fetchJson, fetchText } from "../http.js";
+import { interceptEmbedRequest } from "./base/playwright-embed.js";
+import { filemoonExtractor } from "./filemoon.js";
+import { vidplayExtractor } from "./vidplay.js";
 
 const MAIN_URL = "https://vidsrc.to";
 const KEYS_URL = "https://raw.githubusercontent.com/Ciarands/vidsrc-keys/main/keys.json";
@@ -56,13 +60,65 @@ function decryptUrl(key: string, encUrl: string): string {
   return decodeURIComponent(decrypted.toString("utf8"));
 }
 
+function scrapeMediaId(html: string): string | null {
+  const $ = cheerio.load(html);
+  const fromList = $("ul.episodes li a").attr("data-id");
+  if (fromList) return fromList;
+  const fromAny = $("[data-id]").first().attr("data-id");
+  if (fromAny) return fromAny;
+  const fromScript =
+    html.match(/data-id\s*[:=]\s*["']([^"']+)["']/)?.[1] ??
+    html.match(/episode_id\s*[:=]\s*["']([^"']+)["']/)?.[1] ??
+    html.match(/data-id=["']([^"']+)["']/)?.[1];
+  return fromScript ?? null;
+}
+
+async function extractDownstream(title: string, finalUrl: string) {
+  if (title === "F2Cloud" || title === "Vidplay") {
+    return vidplayExtractor.extract(finalUrl);
+  }
+  if (title === "Filemoon") {
+    return filemoonExtractor.extract(finalUrl);
+  }
+  const { extractVideo } = await import("./registry.js");
+  return extractVideo(finalUrl, title);
+}
+
 async function extractVidsrcTo(link: string) {
-  const html = await fetchText(link);
-  const mediaId = html.match(/data-id="([^"]+)"/)?.[1];
+  try {
+    return await extractVidsrcToChain(link);
+  } catch {
+    const hit = await interceptEmbedRequest(
+      link,
+      [
+        { pattern: /\/ajax\/embed\//, type: "json" },
+        { pattern: /\.m3u8/i, type: "m3u8" },
+      ],
+      60_000
+    );
+    if (hit.url.includes(".m3u8")) {
+      return {
+        source: hit.url,
+        subtitles: [],
+        headers: { Referer: `${MAIN_URL}/` },
+        type: "m3u8" as const,
+      };
+    }
+    throw new Error("Vidsrc.to: playwright intercept did not yield m3u8");
+  }
+}
+
+async function extractVidsrcToChain(link: string) {
+  const html = await fetchText(link, { referer: `${MAIN_URL}/` });
+  const mediaId = scrapeMediaId(html);
   if (!mediaId) throw new Error("Vidsrc.to: media id not found");
 
   const keys = await fetchJson<{ encrypt: string[]; decrypt: string[] }>(KEYS_URL);
-  const token = encodeKey(keys.encrypt[0]!, mediaId);
+  const encryptKey = keys.encrypt[0];
+  const decryptKey = keys.decrypt[0];
+  if (!encryptKey || !decryptKey) throw new Error("Vidsrc.to: keys missing");
+
+  const token = encodeKey(encryptKey, mediaId);
   const sourcesRes = await fetchJson<{ result?: Array<{ id: string; title: string }> }>(
     `${MAIN_URL}/ajax/embed/episode/${mediaId}/sources?token=${token}`,
     { referer: link }
@@ -72,22 +128,40 @@ async function extractVidsrcTo(link: string) {
   if (!sources.length) throw new Error("Vidsrc.to: no sources");
 
   let lastErr: Error | null = null;
+  let video: Awaited<ReturnType<typeof extractDownstream>> | null = null;
+
   for (const source of sources) {
     try {
-      const token2 = encodeKey(keys.encrypt[0]!, source.id);
+      const token2 = encodeKey(encryptKey, source.id);
       const embedRes = await fetchJson<{ result: { url: string } }>(
         `${MAIN_URL}/ajax/embed/source/${source.id}?token=${token2}`,
         { referer: link }
       );
-      const finalUrl = decryptUrl(keys.decrypt[0]!, embedRes.result.url);
+      const finalUrl = decryptUrl(decryptKey, embedRes.result.url);
       if (finalUrl === embedRes.result.url) continue;
-      const { extractVideo } = await import("./registry.js");
-      return extractVideo(finalUrl, source.title);
+      video = await extractDownstream(source.title, finalUrl);
+      break;
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
     }
   }
-  throw lastErr ?? new Error("Vidsrc.to: all sources failed");
+
+  if (!video) throw lastErr ?? new Error("Vidsrc.to: all sources failed");
+
+  let subtitles = video.subtitles ?? [];
+  try {
+    const subs = await fetchJson<Array<{ label: string; file: string }>>(
+      `${MAIN_URL}/ajax/embed/episode/${mediaId}/subtitles`,
+      { referer: link }
+    );
+    if (Array.isArray(subs) && subs.length) {
+      subtitles = subs.map((s) => ({ label: s.label, file: s.file }));
+    }
+  } catch {
+    /* optional */
+  }
+
+  return { ...video, subtitles };
 }
 
 export const vidsrcToExtractor: ExtractorDef = {
@@ -95,3 +169,6 @@ export const vidsrcToExtractor: ExtractorDef = {
   mainUrl: MAIN_URL,
   extract: (link) => extractVidsrcTo(link),
 };
+
+/** Exported for unit tests */
+export const vidsrcToCrypto = { encodeKey, decryptUrl, decodeData };

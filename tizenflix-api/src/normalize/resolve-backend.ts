@@ -1,5 +1,8 @@
 import { resolvePlayableSources } from "../normalize/to-play-response.js";
-import { resolveTmdbNativeFromOptions } from "../streamflix/tmdb-native/resolve.js";
+import {
+  autoTmdbSourceIdsForType,
+  resolveTmdbNativeFromOptions,
+} from "../streamflix/tmdb-native/resolve.js";
 import type { PlayResponse, ResolveOptions } from "../types.js";
 
 function tagBackend(play: PlayResponse, backend: PlayResponse["backend"], ms: number): PlayResponse {
@@ -13,23 +16,37 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ result: T; ms: number }
 }
 
 function mergeAutoResults(
-  vidking: PlayResponse | null,
   tmdbNative: PlayResponse | null,
-  vidkingMs: number,
-  tmdbNativeMs: number
+  vidking: PlayResponse | null,
+  tmdbNativeMs: number,
+  vidkingMs: number
 ): PlayResponse {
-  if (!vidking && !tmdbNative) {
-    throw new Error("No playable sources from Vidking or TMDB-native backends");
+  if (!tmdbNative && !vidking) {
+    throw new Error("No playable sources from TMDB-native or Vidking backends");
   }
   if (!vidking) {
-    return tagBackend(tmdbNative!, "tmdb-native", tmdbNativeMs);
+    return tagBackend({ ...tmdbNative!, backend: "auto" }, "auto", tmdbNativeMs);
   }
-  if (!tmdbNative) {
-    return tagBackend(vidking, "vidking", vidkingMs);
+  if (!tmdbNative?.sources.length) {
+    const sources = vidking.sources.map((s) => ({
+      ...s,
+      priority: s.priority + 1000,
+    }));
+    return {
+      ...vidking,
+      sources,
+      recommended: sources[0]?.id ?? null,
+      warnings: [
+        ...(vidking.warnings ?? []),
+        `auto: tmdb-native unavailable, vidking ${vidkingMs}ms`,
+      ],
+      backend: "auto",
+      resolveMs: Math.max(tmdbNativeMs, vidkingMs),
+    };
   }
 
   const sources = [
-    ...tmdbNative.sources.map((s) => ({ ...s, priority: s.priority })),
+    ...tmdbNative.sources,
     ...vidking.sources.map((s) => ({
       ...s,
       priority: s.priority + 1000,
@@ -47,7 +64,7 @@ function mergeAutoResults(
   const warnings = [
     ...(tmdbNative.warnings ?? []),
     ...(vidking.warnings ?? []),
-    `auto: vixsrc/tmdb-native ${tmdbNativeMs}ms, vidking ${vidkingMs}ms`,
+    `auto: tmdb-native ${tmdbNativeMs}ms, vidking ${vidkingMs}ms`,
   ];
 
   return {
@@ -62,7 +79,7 @@ function mergeAutoResults(
     nextEpisode: vidking.nextEpisode ?? tmdbNative.nextEpisode,
     warnings,
     backend: "auto",
-    resolveMs: Math.max(vidkingMs, tmdbNativeMs),
+    resolveMs: Math.max(tmdbNativeMs, vidkingMs),
   };
 }
 
@@ -92,24 +109,36 @@ export async function resolveWithBackend(
     return tagBackend(result, "streamflix", ms);
   }
 
-  // auto — VixSrc (tmdb-native) primary, Vidking fallback
-  const [vidkingSettled, tmdbSettled] = await Promise.allSettled([
-    timed(() => resolvePlayableSources(options, fetchImpl)),
+  const autoIds =
+    options.onlySourceIds ??
+    options.sources ??
+    autoTmdbSourceIdsForType(options.type);
+
+  const [tmdbSettled, vidkingSettled] = await Promise.allSettled([
     timed(() =>
-      resolveTmdbNativeFromOptions({ ...options, onlySourceId: "vixsrc" }, fetchImpl)
+      resolveTmdbNativeFromOptions(
+        {
+          ...options,
+          onlySourceIds: autoIds,
+          onePerSource: true,
+          mergeOrder: autoIds,
+        },
+        fetchImpl
+      )
     ),
+    timed(() => resolvePlayableSources(options, fetchImpl)),
   ]);
 
-  const vidking =
-    vidkingSettled.status === "fulfilled" ? vidkingSettled.value.result : null;
   const tmdbNative =
     tmdbSettled.status === "fulfilled" ? tmdbSettled.value.result : null;
-  const vidkingMs =
-    vidkingSettled.status === "fulfilled" ? vidkingSettled.value.ms : 0;
+  const vidking =
+    vidkingSettled.status === "fulfilled" ? vidkingSettled.value.result : null;
   const tmdbNativeMs =
     tmdbSettled.status === "fulfilled" ? tmdbSettled.value.ms : 0;
+  const vidkingMs =
+    vidkingSettled.status === "fulfilled" ? vidkingSettled.value.ms : 0;
 
-  return mergeAutoResults(vidking, tmdbNative, vidkingMs, tmdbNativeMs);
+  return mergeAutoResults(tmdbNative, vidking, tmdbNativeMs, vidkingMs);
 }
 
 export function parseBackendParam(raw: unknown): ResolveOptions["backend"] {
@@ -122,4 +151,12 @@ export function parseBackendParam(raw: unknown): ResolveOptions["backend"] {
     return raw;
   }
   return "auto";
+}
+
+export function parseSourcesParam(raw: unknown): string[] | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  return raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 }

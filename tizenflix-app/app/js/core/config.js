@@ -2,6 +2,7 @@ var STORAGE_KEY = "tizenflix.apiBase";
 var QUALITY_MODE_KEY = "tizenflix.qualityMode";
 var DEV_MODE_KEY = "tizenflix.devMode";
 var BACKEND_KEY = "tizenflix.playBackend";
+var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
 var API_PORT = "8790";
 var PLAY_RESOLVE_TIMEOUT_MS = 90000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -36,6 +37,9 @@ function buildPlayQuery(extra) {
   var parts = [];
   if (isTizenClient()) parts.push("profile=tizen");
   var backend = getPlayBackend();
+  if (extra && /(?:^|&)backend=/.test(extra)) {
+    backend = null;
+  }
   if (backend) parts.push("backend=" + backend);
   if (extra) parts.push(extra);
   return parts.length ? parts.join("&") : null;
@@ -60,6 +64,26 @@ function setPlayBackend(mode) {
     /* TV may block storage */
   }
   return m;
+}
+
+function getPreferredSourceId() {
+  try {
+    var stored = localStorage.getItem(PREFERRED_SOURCE_KEY);
+    if (stored && typeof stored === "string") return stored;
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return null;
+}
+
+function setPreferredSourceId(sourceId) {
+  try {
+    if (!sourceId) localStorage.removeItem(PREFERRED_SOURCE_KEY);
+    else localStorage.setItem(PREFERRED_SOURCE_KEY, String(sourceId));
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return sourceId || null;
 }
 
 function deriveDefaultApi() {
@@ -92,7 +116,7 @@ function setApiBase(url) {
   return trimmed;
 }
 
-function fetchWithTimeout(url, ms) {
+function fetchWithTimeout(url, ms, init) {
   return new Promise(function (resolve, reject) {
     var done = false;
     var timer = setTimeout(function () {
@@ -101,7 +125,7 @@ function fetchWithTimeout(url, ms) {
       reject(new Error("Request timed out after " + ms + "ms"));
     }, ms);
 
-    fetch(url)
+    fetch(url, init)
       .then(function (res) {
         if (done) return;
         done = true;
@@ -252,6 +276,25 @@ function apiGet(path) {
   });
 }
 
+function apiPost(path, body) {
+  return fetchWithTimeout(
+    getApiBase() + path,
+    20000,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    }
+  ).then(function (res) {
+    if (!res.ok) {
+      return res.text().then(function (text) {
+        throw new Error("API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
+      });
+    }
+    return res.json();
+  });
+}
+
 module.exports = {
   STORAGE_KEY: STORAGE_KEY,
   QUALITY_MODE_KEY: QUALITY_MODE_KEY,
@@ -266,6 +309,8 @@ module.exports = {
   buildPlayQuery: buildPlayQuery,
   getPlayBackend: getPlayBackend,
   setPlayBackend: setPlayBackend,
+  getPreferredSourceId: getPreferredSourceId,
+  setPreferredSourceId: setPreferredSourceId,
   getApiBase: getApiBase,
   setApiBase: setApiBase,
   getQualityMode: getQualityMode,
@@ -280,5 +325,6 @@ module.exports = {
   detectStreamType: detectStreamType,
   logLine: logLine,
   apiGet: apiGet,
+  apiPost: apiPost,
   fetchWithTimeout: fetchWithTimeout,
 };
