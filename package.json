@@ -1,6 +1,6 @@
 {
   "name": "tizenflix",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TizenBrew module for Tizenflix (LAN dev — websiteURL points at your PC)",
   "packageType": "mods",
   "appName": "Tizenflix",

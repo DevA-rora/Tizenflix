@@ -1,6 +1,6 @@
 {
   "name": "@dev-arora/tizenflix",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TizenBrew streaming client for Tizenflix (educational purposes only)",
   "packageType": "app",
   "appName": "Tizenflix",
@@ -17,7 +17,11 @@
     "README.md"
   ],
   "scripts": {
-    "start": "node scripts/dev.mjs",
-    "prepublishOnly": "node -e \"require('fs').accessSync('app/index.html')\""
+    "build": "esbuild app/js/main.js --bundle --outfile=app/dist/app.bundle.js --target=es2015 --format=iife --global-name=TizenflixApp",
+    "start": "npm run build && node scripts/dev.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }

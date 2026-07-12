@@ -152,6 +152,25 @@ On TV: TizenBrew → GREEN → type `@dev-arora/tizenflix` → launch.
 | TizenBrew won’t load LAN URL | Some firmware blocks non-HTTPS; try GitHub Pages or npm jsDelivr |
 | Back key doesn’t exit | Expected — TizenBrew handles exit; checklist item confirms key is received |
 
+### Tizen CSS/JS compatibility (black screen, invisible text)
+
+If you see a **mostly black screen** with only native input/buttons visible:
+
+| Cause | Fix (v0.1.1+) |
+|-------|----------------|
+| CSS `var(--*)` custom properties fail | App now uses literal hex colors — see [`tizenflix-app/TIZEN_COMPAT.md`](../tizenflix-app/TIZEN_COMPAT.md) |
+| `<script type="module">` never runs | App uses bundled `app/dist/app.bundle.js` (run `npm run build`) |
+| Empty video bar at bottom | Video is hidden until Play starts |
+| No focus ring on D-pad | Look for **"Focused: …"** hint top-right + white/red border on focused control |
+
+After pulling v0.1.1, on your PC:
+
+```bash
+cd tizenflix-app && npm install && npm run build && npm start
+```
+
+On TV: remove and re-add the `DevA-rora/Tizenflix` GitHub module so TizenBrew picks up release **v0.1.1**.
+
 ---
 
 ## What comes after the gate test?

@@ -1,64 +1,101 @@
-const STORAGE_KEY = "tizenflix.apiBase";
-const DEFAULT_API = "http://localhost:8790";
+var STORAGE_KEY = "tizenflix.apiBase";
+var DEFAULT_API = "http://192.168.86.11:8790";
 
-export function getApiBase() {
+function getApiBase() {
   try {
     return localStorage.getItem(STORAGE_KEY) || DEFAULT_API;
-  } catch {
+  } catch (err) {
     return DEFAULT_API;
   }
 }
 
-export function setApiBase(url) {
-  const trimmed = url.replace(/\/$/, "");
+function setApiBase(url) {
+  var trimmed = (url || "").replace(/\/$/, "");
   try {
     localStorage.setItem(STORAGE_KEY, trimmed);
-  } catch {
-    /* TV may block storage in some modes */
+  } catch (err) {
+    /* TV may block storage */
   }
   return trimmed;
 }
 
-export async function checkHealth(apiBase) {
-  const res = await fetch(apiBase + "/health", {
-    signal: AbortSignal.timeout(8000),
+function fetchWithTimeout(url, ms) {
+  return new Promise(function (resolve, reject) {
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      reject(new Error("Request timed out after " + ms + "ms"));
+    }, ms);
+
+    fetch(url)
+      .then(function (res) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch(function (err) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(err);
+      });
   });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
 }
 
-export async function resolveMovie(apiBase, tmdbId) {
-  const res = await fetch(apiBase + "/play/movie/" + tmdbId, {
-    signal: AbortSignal.timeout(30000),
+function checkHealth(apiBase) {
+  return fetchWithTimeout(apiBase + "/health", 8000).then(function (res) {
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error("Play API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
-  }
-  return res.json();
 }
 
-export function pickPlayableSource(play) {
-  if (!play?.sources?.length) return null;
+function resolveMovie(apiBase, tmdbId) {
+  return fetchWithTimeout(apiBase + "/play/movie/" + tmdbId, 30000).then(function (res) {
+    if (!res.ok) {
+      return res.text().then(function (text) {
+        throw new Error("Play API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
+      });
+    }
+    return res.json();
+  });
+}
+
+function pickPlayableSource(play) {
+  if (!play || !play.sources || !play.sources.length) return null;
   if (play.recommended) {
-    const rec = play.sources.find((s) => s.id === play.recommended);
-    if (rec) return rec;
+    for (var i = 0; i < play.sources.length; i++) {
+      if (play.sources[i].id === play.recommended) return play.sources[i];
+    }
   }
   return play.sources[0];
 }
 
-export function detectStreamType(url) {
+function detectStreamType(url) {
   if (!url) return "unknown";
-  const lower = url.toLowerCase();
-  if (lower.includes(".m3u8") || lower.includes("m3u8")) return "m3u8";
-  if (lower.includes(".mp4") || lower.includes(".webm")) return "mp4";
+  var lower = url.toLowerCase();
+  if (lower.indexOf(".m3u8") !== -1 || lower.indexOf("m3u8") !== -1) return "m3u8";
+  if (lower.indexOf(".mp4") !== -1 || lower.indexOf(".webm") !== -1) return "mp4";
   return "unknown";
 }
 
-export function logLine(container, message) {
-  const el = document.createElement("div");
-  const time = new Date().toLocaleTimeString();
+function logLine(container, message) {
+  var el = document.createElement("div");
+  var time = new Date().toLocaleTimeString();
   el.textContent = "[" + time + "] " + message;
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
 }
+
+module.exports = {
+  STORAGE_KEY: STORAGE_KEY,
+  DEFAULT_API: DEFAULT_API,
+  getApiBase: getApiBase,
+  setApiBase: setApiBase,
+  checkHealth: checkHealth,
+  resolveMovie: resolveMovie,
+  pickPlayableSource: pickPlayableSource,
+  detectStreamType: detectStreamType,
+  logLine: logLine,
+};

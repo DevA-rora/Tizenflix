@@ -19,15 +19,15 @@ Once the gate checklist passes on real hardware, we build rows, hero banners, an
 ```bash
 # Terminal 1 — API (set LAN IP, not localhost)
 cd ../tizenflix-api
-cp .env.example .env   # add TMDB_API_KEY
-PUBLIC_BASE=http://192.168.1.XX:8790 npm run api
+PUBLIC_BASE=http://192.168.86.11:8790 npm run api
 
-# Terminal 2 — App static server (binds 0.0.0.0:3010)
+# Terminal 2 — App (builds bundle, then serves on :3010)
 cd ../tizenflix-app
+npm install
 npm start
 ```
 
-Open `http://localhost:3010/app/index.html` in a browser first. Then use the LAN URL printed in the terminal on your TV.
+`npm start` runs `npm run build` first (esbuild → `app/dist/app.bundle.js`). See [TIZEN_COMPAT.md](TIZEN_COMPAT.md) for TV CSS/JS rules.
 
 ## TizenBrew package
 
