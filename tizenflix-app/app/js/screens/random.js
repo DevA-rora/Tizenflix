@@ -4,6 +4,7 @@
 
 var api = require("../services/api.js");
 var router = require("../core/router.js");
+var choreography = require("../core/choreography.js");
 
 function pickRandom(items) {
   if (!items || !items.length) return null;
@@ -32,11 +33,7 @@ function render(container) {
       if (window.TizenflixApp && window.TizenflixApp.setSidebarActive) {
         window.TizenflixApp.setSidebarActive("home");
       }
-      if (item.type === "tv") {
-        router.navigate("detail-tv", { tmdbId: item.id, title: item.title });
-      } else {
-        router.navigate("detail-movie", { tmdbId: item.id, title: item.title });
-      }
+      choreography.openDetail(item);
     })
     .catch(function (err) {
       el.innerHTML =

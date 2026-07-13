@@ -7,6 +7,7 @@ var router = require("../core/router.js");
 var focus = require("../core/focus.js");
 var playback = require("../services/playback.js");
 var detailHero = require("../components/detail-hero.js");
+var choreography = require("../core/choreography.js");
 
 var params = {};
 
@@ -55,6 +56,7 @@ function render(container) {
       });
 
       el.appendChild(hero);
+      choreography.animateDetailContentIn(el);
 
       playback.prefetchMovie(params.tmdbId);
 

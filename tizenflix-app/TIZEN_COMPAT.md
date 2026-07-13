@@ -8,7 +8,7 @@ Every UI change in `tizenflix-app` must pass this list before testing on hardwar
 - `gap` in flexbox — use margins on children instead
 - `aspect-ratio` — use `padding-top: 56.25%` box for 16:9 video
 - `grid` — partial support on older models
-- Animating `width`, `height`, `margin`, `box-shadow`
+- Animating `width`, `height`, `margin`, `box-shadow` on main layout elements
 
 ## CSS — prefer
 
@@ -24,18 +24,41 @@ The app uses [`app/js/core/motion.js`](app/js/core/motion.js) for timing profile
 
 | Profile | When | Transforms / opacity | Layout (width, margin, scroll) |
 |---------|------|----------------------|--------------------------------|
-| **Browser** | Laptop preview (`body.browser-dev`) | ~200–250ms | Instant snap |
+| **Browser** | Laptop preview (`body.browser-dev`) | ~200–280ms | Instant snap |
 | **TV** | Tizen UA or `?tvPerf=1` (`body.tv-perf`) | ~150ms | Instant snap |
 
-**Horizontal row scroll:** use `translate3d` on `.row-track` inside `.row-track-outer` (`overflow: hidden`). Do **not** animate `scrollLeft` in rAF loops.
+**Horizontal row scroll:** set target `translate3d` once on `.row-track`; let CSS `transition: transform` run on the compositor. Do **not** combine rAF transform loops with CSS transition on the same property. Use `.row-track.is-animating` only when rAF fallback is needed.
 
-**Spotlight cards:** width/height change instantly on focus; poster crossfade uses `opacity` only (`.card-poster.is-swapping`).
+**Spotlight cards:** width/height change instantly on focus; poster crossfade uses dual layers (`.card-poster-portrait` / `.card-poster-backdrop`) with `opacity` only.
 
-**Hero collapse:** `transform: translateY(-24px) scaleY(0)` + `opacity`, not animated `min-height`.
+**Hero collapse:** `transform: translateY(-24px) scaleY(0)` + `opacity`, not animated `min-height`. Applied via `body.home-spotlight-focus` (spotlight rows) and `body.home-browse-focus` (standard row cards).
 
-**Vertical row focus:** on row change, animate `#main.scrollTop` so the focused `.content-row` lands at the row above's viewport position (spotlight mode: `48px` anchor). Use `forceAnimate` so TV does not snap large jumps.
+**Browse lane anchor:** First content row docks at `computeBrowseLaneAnchorY(#main)` — ~38% of main viewport height, clamped between 120px and 48% of height. Row 2+ dock at the previous row's title Y. Re-anchors when a card row is misaligned by more than 32px (covers hero→row1, detail back, browse-only screens).
+
+**Vertical row focus:** on row change or misalignment, animate `#main.scrollTop` so the focused `.content-row` title lands at the browse lane (spotlight mode: `48px` anchor). Use `forceAnimate` so TV does not snap large jumps. Window resize invalidates anchor cache and re-anchors the focused row.
+
+**Screen transitions:** `#screen` uses `opacity` + `translateY` enter/exit via [`app/js/core/choreography.js`](app/js/core/choreography.js). Initial load skips exit animation.
+
+**Detail handoff:** `#transition-shell` overlay morphs focused card poster to full-bleed before detail screen renders. Falls back to screen fade when no card is focused.
 
 Preview TV motion in browser: `http://localhost:3010/app/index.html?tvPerf=1`
+
+## Animation test checklist
+
+| Step | Browser | `?tvPerf=1` |
+|------|---------|-------------|
+| Down from hero to row 1 | Hero collapses; row 1 docks in browse lane | Shorter scroll, instant hero collapse |
+| Left/Right on row 1 (aligned) | Horizontal scroll only; no vertical jitter | Same |
+| Down to row 2, Up to row 1 | Row docks at previous row title Y | Same |
+| Back from detail | Focus restored; row re-anchors after scroll reset | Same |
+| Trending/TV/Movies (no hero) | First row docks to browse lane on focus | Same |
+| Left/Right in standard row | Lane scrolls smoothly; neighbors dim | Shorter timing, no jank |
+| Left/Right in spotlight row | Backdrop crossfade on focused card | Instant width snap, opacity crossfade |
+| Up/Down between rows | Hero updates; vertical scroll animates | Hero debounce 80ms |
+| Enter on card → detail | Handoff morph + detail content slide-up | 150ms handoff + fade |
+| Back from detail | Screen fade; focus restored | Same, shorter |
+| Sidebar ↔ main | Zone pulse on `#main` | 50ms pulse |
+| `prefers-reduced-motion` | All motion snaps instantly | All motion snaps instantly |
 
 ## JavaScript — do not use
 

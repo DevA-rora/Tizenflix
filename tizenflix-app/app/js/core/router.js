@@ -4,12 +4,14 @@
 
 var focus = require("../core/focus.js");
 var playback = require("../services/playback.js");
+var choreography = require("../core/choreography.js");
 
 var stack = [];
 var screens = {};
 var rootEl = null;
 var onFocusHint = null;
 var focusSidebarOnRender = false;
+var isInitialRender = true;
 
 var BROWSE_SCREENS = {
   home: true,
@@ -46,7 +48,7 @@ function current() {
 }
 
 function render() {
-  if (!rootEl) return;
+  if (!rootEl) return Promise.resolve();
   var name = current();
   var screen = name ? screens[name] : null;
   rootEl.innerHTML = "";
@@ -60,6 +62,34 @@ function render() {
   } else {
     focus.afterScreenRender(name || "");
   }
+  return Promise.resolve();
+}
+
+function renderWithTransition(options) {
+  options = options || {};
+  if (!rootEl) return Promise.resolve();
+
+  if (isInitialRender) {
+    isInitialRender = false;
+    return render();
+  }
+
+  return choreography.runScreenTransition(function () {
+    var name = current();
+    var screen = name ? screens[name] : null;
+    rootEl.innerHTML = "";
+    if (screen && typeof screen.render === "function") {
+      screen.render(rootEl);
+    }
+    updateImmersiveMode();
+  }, options).then(function () {
+    if (focusSidebarOnRender) {
+      focusSidebarOnRender = false;
+      focus.focusSidebar(current() || "");
+    } else {
+      focus.afterScreenRender(current() || "");
+    }
+  });
 }
 
 function leaveCurrentScreen() {
@@ -73,44 +103,49 @@ function leaveCurrentScreen() {
 
 function navigate(name, params) {
   var screen = screens[name];
-  if (!screen) return;
+  if (!screen) return Promise.resolve();
   playback.stop({ skipRerender: true });
   stack.push(name);
   if (typeof screen.onEnter === "function") {
     screen.onEnter(params || {});
   }
-  render();
+  return renderWithTransition({ targetScreen: name });
 }
 
 function replace(name, params) {
   leaveCurrentScreen();
   stack = [];
-  navigate(name, params);
+  return navigate(name, params);
+}
+
+function canBack() {
+  return stack.length > 1;
 }
 
 function back() {
-  if (stack.length <= 1) return false;
+  if (stack.length <= 1) return Promise.resolve(false);
   playback.stop({ skipRerender: true });
   var leaving = stack.pop();
   var screen = screens[leaving];
   if (screen && typeof screen.onLeave === "function") {
     screen.onLeave();
   }
-  render();
-  var now = current();
-  if (BROWSE_SCREENS[now]) {
-    focus.restoreMainFocus();
-  }
-  return true;
+  return renderWithTransition({ targetScreen: current() }).then(function () {
+    var now = current();
+    if (BROWSE_SCREENS[now]) {
+      focus.restoreMainFocus();
+    }
+    return true;
+  });
 }
 
 function rerender() {
-  render();
+  return renderWithTransition({ skipTransition: true });
 }
 
 function rerenderWithSidebarFocus() {
   focusSidebarOnRender = true;
-  render();
+  return renderWithTransition({ skipTransition: true });
 }
 
 function init(options) {
@@ -126,6 +161,7 @@ module.exports = {
   navigate: navigate,
   replace: replace,
   back: back,
+  canBack: canBack,
   current: current,
   rerender: rerender,
   rerenderWithSidebarFocus: rerenderWithSidebarFocus,

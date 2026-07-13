@@ -112,8 +112,11 @@ function crossfadeBackdrop(heroEl, backdropUrl) {
 
   next.style.backgroundImage = backdropUrl ? "url('" + backdropUrl + "')" : "none";
   next.classList.add("is-active");
-  prev.classList.remove("is-active");
+  prev.classList.remove("is-active", "ken-burns-active");
   activeBackdrop = activeBackdrop === "a" ? "b" : "a";
+  if (backdropUrl && motion.getMotionProfile().kenBurnsMs > 0) {
+    next.classList.add("ken-burns-active");
+  }
 }
 
 function wireHandlers(heroEl, item, handlers) {
@@ -188,6 +191,9 @@ function renderHero(item, handlers) {
   var layerA = el.querySelector(".hero-backdrop-a");
   if (layerA && backdrop) {
     layerA.style.backgroundImage = "url('" + backdrop + "')";
+    if (motion.getMotionProfile().kenBurnsMs > 0) {
+      layerA.classList.add("ken-burns-active");
+    }
   }
 
   wireHandlers(el, item, handlers);

@@ -7,3 +7,7 @@ tizenflix-api/data/
 
 # OS
 .DS_Store
+
+# Local reference docs
+macondo_docs/
+macondo_docs copy/

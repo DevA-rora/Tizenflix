@@ -7,6 +7,7 @@ var router = require("../core/router.js");
 var focus = require("../core/focus.js");
 var playback = require("../services/playback.js");
 var detailHero = require("../components/detail-hero.js");
+var choreography = require("../core/choreography.js");
 
 var params = {};
 var selectedSeason = 1;
@@ -128,6 +129,7 @@ function render(container) {
           },
         });
         el.appendChild(hero);
+        choreography.animateDetailContentIn(el);
 
         playback.prefetchTvEpisode(title.id, 1, 1);
 
@@ -150,6 +152,7 @@ function render(container) {
           },
         });
         el.appendChild(hero);
+        choreography.animateDetailContentIn(el);
         playback.prefetchTvEpisode(title.id, 1, 1);
         var episodeList = document.createElement("div");
         episodeList.className = "episode-list";

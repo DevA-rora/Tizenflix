@@ -7,6 +7,7 @@ var router = require("../core/router.js");
 var focus = require("../core/focus.js");
 var card = require("../components/card.js");
 var osk = require("../components/osk-keyboard.js");
+var choreography = require("../core/choreography.js");
 
 var DEBOUNCE_MS = 350;
 var RESULTS_PER_ROW = 3;
@@ -24,12 +25,7 @@ var suggestionsEl = null;
 var resultsGrid = null;
 
 function openItem(item) {
-  focus.rememberMainFocus();
-  if (item.type === "tv") {
-    router.navigate("detail-tv", { tmdbId: item.id, title: item.title });
-  } else {
-    router.navigate("detail-movie", { tmdbId: item.id, title: item.title });
-  }
+  choreography.openDetail(item);
 }
 
 function escapeHtml(text) {

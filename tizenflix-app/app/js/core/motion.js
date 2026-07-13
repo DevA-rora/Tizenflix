@@ -12,6 +12,13 @@ var BROWSER = {
   heroDebounceMs: 150,
   fadeMs: 120,
   heroBackdropMs: 400,
+  screenEnterMs: 280,
+  screenExitMs: 220,
+  zonePulseMs: 50,
+  handoffMs: 280,
+  kenBurnsMs: 6000,
+  cardNeighborScale: 0.94,
+  cardNeighborOpacity: 0.55,
 };
 
 var TV = {
@@ -22,10 +29,20 @@ var TV = {
   heroDebounceMs: 80,
   fadeMs: 80,
   heroBackdropMs: 250,
+  screenEnterMs: 150,
+  screenExitMs: 120,
+  zonePulseMs: 50,
+  handoffMs: 150,
+  kenBurnsMs: 0,
+  cardNeighborScale: 0.94,
+  cardNeighborOpacity: 0.55,
 };
 
 var ROW_ANCHOR_SPOTLIGHT_PX = 48;
 var ROW_ANCHOR_FALLBACK_PX = 140;
+var BROWSE_LANE_MIN_PX = 120;
+var BROWSE_LANE_RATIO = 0.38;
+var BROWSE_LANE_MAX_RATIO = 0.48;
 
 var tvPerfForced = null;
 
@@ -63,9 +80,33 @@ function shouldSnapScroll(distance) {
   return false;
 }
 
+function useCssRowScroll() {
+  return true;
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
 function applyBodyClass() {
   if (typeof document === "undefined" || !document.body) return;
   document.body.classList.toggle("tv-perf", isTvPerfMode());
+}
+
+function computeBrowseLaneAnchorY(main) {
+  var height = 0;
+  if (main && main.clientHeight > 0) {
+    height = main.clientHeight;
+  } else if (typeof window !== "undefined" && window.innerHeight) {
+    height = window.innerHeight;
+  }
+  if (height < 1) height = 720;
+
+  var scaled = Math.round(height * BROWSE_LANE_RATIO);
+  var maxAnchor = Math.round(height * BROWSE_LANE_MAX_RATIO);
+  if (scaled < BROWSE_LANE_MIN_PX) scaled = BROWSE_LANE_MIN_PX;
+  if (scaled > maxAnchor) scaled = maxAnchor;
+  return scaled;
 }
 
 module.exports = {
@@ -73,10 +114,14 @@ module.exports = {
   TV: TV,
   ROW_ANCHOR_SPOTLIGHT_PX: ROW_ANCHOR_SPOTLIGHT_PX,
   ROW_ANCHOR_FALLBACK_PX: ROW_ANCHOR_FALLBACK_PX,
+  BROWSE_LANE_MIN_PX: BROWSE_LANE_MIN_PX,
   isTvPerfMode: isTvPerfMode,
   setTvPerfMode: setTvPerfMode,
   getMotionProfile: getMotionProfile,
   prefersReducedMotion: prefersReducedMotion,
   shouldSnapScroll: shouldSnapScroll,
+  useCssRowScroll: useCssRowScroll,
+  easeOutCubic: easeOutCubic,
   applyBodyClass: applyBodyClass,
+  computeBrowseLaneAnchorY: computeBrowseLaneAnchorY,
 };

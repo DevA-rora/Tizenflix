@@ -6,14 +6,10 @@ var mylist = require("../services/mylist.js");
 var card = require("../components/card.js");
 var router = require("../core/router.js");
 var focus = require("../core/focus.js");
+var choreography = require("../core/choreography.js");
 
 function openItem(item) {
-  focus.rememberMainFocus();
-  if (item.type === "tv") {
-    router.navigate("detail-tv", { tmdbId: item.id, title: item.title });
-  } else {
-    router.navigate("detail-movie", { tmdbId: item.id, title: item.title });
-  }
+  choreography.openDetail(item);
 }
 
 function render(container) {

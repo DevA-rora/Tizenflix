@@ -16,9 +16,31 @@ var lastFocusRowId = null;
 var lastSearchLeftEl = null;
 var scrollAnimGen = 0;
 var cachedRowAnchorY = null;
+var verticalAnchorTimer = null;
+var resizeHandler = null;
+var resizeTimer = null;
+
+var MISALIGN_THRESHOLD_PX = 32;
 
 function invalidateRowAnchorCache() {
   cachedRowAnchorY = null;
+}
+
+function cancelVerticalAnchorTimer() {
+  if (verticalAnchorTimer) {
+    clearTimeout(verticalAnchorTimer);
+    verticalAnchorTimer = null;
+  }
+}
+
+function getLayoutSettleMs(options) {
+  if (motion.prefersReducedMotion()) return 0;
+  var profile = motion.getMotionProfile();
+  options = options || {};
+  if (options.spotlightToggled || options.browseFocusToggled) {
+    return Math.max(profile.opacityMs, profile.transformMs);
+  }
+  return profile.opacityMs;
 }
 
 function getFocusables(root) {
@@ -154,8 +176,10 @@ function buildFocusMeta(el) {
 
 function setSidebarExpanded(expanded) {
   if (document.body) {
+    var wasExpanded = document.body.classList.contains("sidebar-expanded");
     if (expanded) document.body.classList.add("sidebar-expanded");
     else document.body.classList.remove("sidebar-expanded");
+    if (wasExpanded !== expanded) invalidateRowAnchorCache();
   }
 }
 
@@ -172,11 +196,15 @@ function updateSpotlightMode(el) {
     var cards = rows[i].querySelectorAll(".card-spotlight");
     for (var c = 0; c < cards.length; c++) {
       if (cards[c] === el) continue;
-      var posterEl = cards[c].querySelector(".card-poster");
+      var otherPoster = cards[c].querySelector(".card-poster");
+      var portraitEl = cards[c].querySelector(".card-poster-portrait");
       var posterUrl = cards[c].getAttribute("data-poster");
-      if (posterEl && posterUrl) {
-        posterEl.style.backgroundImage = "url('" + posterUrl.replace(/'/g, "%27") + "')";
+      if (portraitEl && posterUrl) {
+        portraitEl.style.backgroundImage = "url('" + posterUrl.replace(/'/g, "%27") + "')";
+      } else if (otherPoster && posterUrl) {
+        otherPoster.style.backgroundImage = "url('" + posterUrl.replace(/'/g, "%27") + "')";
       }
+      if (otherPoster) otherPoster.classList.remove("is-backdrop-active");
     }
   }
   if (isInSpotlightRow(el)) {
@@ -184,19 +212,87 @@ function updateSpotlightMode(el) {
     var row = el.closest(".row-spotlight");
     if (row) row.classList.add("is-active");
     var posterEl = el.querySelector(".card-poster");
+    var backdropLayer = el.querySelector(".card-poster-backdrop");
     var backdropUrl = el.getAttribute("data-backdrop") || el.getAttribute("data-poster");
     if (posterEl && backdropUrl) {
-      posterEl.classList.add("is-swapping");
-      posterEl.style.backgroundImage = "url('" + backdropUrl.replace(/'/g, "%27") + "')";
-      requestAnimationFrame(function () {
-        posterEl.classList.remove("is-swapping");
-      });
+      if (backdropLayer) {
+        backdropLayer.style.backgroundImage = "url('" + backdropUrl.replace(/'/g, "%27") + "')";
+        posterEl.classList.add("is-backdrop-active");
+      } else {
+        posterEl.classList.add("is-swapping");
+        posterEl.style.backgroundImage = "url('" + backdropUrl.replace(/'/g, "%27") + "')";
+        requestAnimationFrame(function () {
+          posterEl.classList.remove("is-swapping");
+        });
+      }
+    }
+    var spotlightCards = row ? row.querySelectorAll(".card-spotlight") : [];
+    for (var s = 0; s < spotlightCards.length; s++) {
+      if (spotlightCards[s] === el) continue;
+      var otherPoster = spotlightCards[s].querySelector(".card-poster");
+      if (otherPoster) otherPoster.classList.remove("is-backdrop-active");
     }
   } else {
     document.body.classList.remove("home-spotlight-focus");
   }
   var isSpotlight = document.body && document.body.classList.contains("home-spotlight-focus");
   if (wasSpotlight !== isSpotlight) invalidateRowAnchorCache();
+  return wasSpotlight !== isSpotlight;
+}
+
+function isStandardBrowseCard(el) {
+  if (!el || !el.classList || !el.classList.contains("card")) return false;
+  if (isInSidebar(el)) return false;
+  if (isInSpotlightRow(el)) return false;
+  return !!el.closest(".content-row");
+}
+
+function updateBrowseFocusMode(el) {
+  var wasBrowse = document.body && document.body.classList.contains("home-browse-focus");
+  var isBrowse = isStandardBrowseCard(el);
+  if (document.body) {
+    if (isBrowse) document.body.classList.add("home-browse-focus");
+    else document.body.classList.remove("home-browse-focus");
+  }
+  if (wasBrowse !== isBrowse) invalidateRowAnchorCache();
+  return wasBrowse !== isBrowse;
+}
+
+function isFirstContentRow(el) {
+  var main = getMainRoot();
+  if (!main || !el) return false;
+  var rowEl = el.closest(".content-row");
+  if (!rowEl) return false;
+  var rows = main.querySelectorAll(".content-row");
+  return rows.length > 0 && rows[0] === rowEl;
+}
+
+function clearNeighborDepth() {
+  var cards = document.querySelectorAll(".card-is-before, .card-is-after");
+  for (var i = 0; i < cards.length; i++) {
+    cards[i].classList.remove("card-is-before", "card-is-after");
+  }
+}
+
+function updateNeighborDepth(el) {
+  clearNeighborDepth();
+  if (!el || !el.classList || !el.classList.contains("card")) return;
+  if (isInSpotlightRow(el)) return;
+
+  var track = el.closest(".row-track");
+  if (!track) return;
+
+  var cards = track.querySelectorAll(".card");
+  var idx = -1;
+  for (var i = 0; i < cards.length; i++) {
+    if (cards[i] === el) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx < 0) return;
+  if (idx > 0) cards[idx - 1].classList.add("card-is-before");
+  if (idx < cards.length - 1) cards[idx + 1].classList.add("card-is-after");
 }
 
 function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
@@ -221,6 +317,32 @@ function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
   var gen = scrollAnimGen;
   var profile = motion.getMotionProfile();
   duration = duration || profile.scrollMs;
+
+  if (motion.useCssRowScroll()) {
+    var settled = false;
+
+    function finish() {
+      if (settled || gen !== scrollAnimGen) return;
+      settled = true;
+      track.removeEventListener("transitionend", onTransitionEnd);
+      track.classList.remove("is-css-scrolling");
+      if (onComplete) onComplete();
+    }
+
+    function onTransitionEnd(e) {
+      if (e.target !== track) return;
+      if (e.propertyName !== "transform" && e.propertyName !== "-webkit-transform") return;
+      finish();
+    }
+
+    track.classList.add("is-css-scrolling");
+    track.addEventListener("transitionend", onTransitionEnd);
+    setTrackOffset(track, targetOffset);
+    setTimeout(finish, duration + 60);
+    return;
+  }
+
+  track.classList.add("is-animating");
   var startTime = null;
 
   function step(timestamp) {
@@ -228,12 +350,13 @@ function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
     if (!startTime) startTime = timestamp;
     var elapsed = timestamp - startTime;
     var progress = Math.min(elapsed / duration, 1);
-    var eased = 1 - Math.pow(1 - progress, 3);
+    var eased = motion.easeOutCubic(progress);
     setTrackOffset(track, start + distance * eased);
     if (progress < 1) {
       requestAnimationFrame(step);
-    } else if (onComplete) {
-      onComplete();
+    } else {
+      track.classList.remove("is-animating");
+      if (onComplete) onComplete();
     }
   }
 
@@ -301,8 +424,35 @@ function getHorizontalScrollTarget(track, outer, card, padding) {
   return scrollLeft;
 }
 
+function captureRowAnchorY(el) {
+  var main = getMainRoot();
+  if (!main || !el) return null;
+  var mainRect = main.getBoundingClientRect();
+  var rowEl = el.closest(".content-row");
+  if (rowEl) {
+    var y = getContentRowAnchorTop(rowEl, mainRect);
+    return y >= 0 ? y : null;
+  }
+  if (isHeroFocus(el)) {
+    var hero = el.closest(".hero");
+    if (hero) {
+      var heroRect = hero.getBoundingClientRect();
+      return heroRect.bottom - mainRect.top;
+    }
+  }
+  return null;
+}
+
+function getContentRowAnchorTop(rowEl, mainRect) {
+  if (!rowEl) return motion.ROW_ANCHOR_FALLBACK_PX;
+  var title = rowEl.querySelector(".row-title");
+  var refRect = title ? title.getBoundingClientRect() : rowEl.getBoundingClientRect();
+  return refRect.top - mainRect.top;
+}
+
 function getRowAnchorViewportY(main, rowEl) {
-  if (!main) return motion.ROW_ANCHOR_FALLBACK_PX;
+  if (!main) return motion.computeBrowseLaneAnchorY(main);
+
   if (document.body && document.body.classList.contains("home-spotlight-focus")) {
     return motion.ROW_ANCHOR_SPOTLIGHT_PX;
   }
@@ -310,34 +460,42 @@ function getRowAnchorViewportY(main, rowEl) {
   if (rowEl) {
     var contentRows = main.querySelectorAll(".content-row");
     for (var i = 0; i < contentRows.length; i++) {
-      if (contentRows[i] === rowEl && i > 0) {
+      if (contentRows[i] === rowEl) {
+        if (i === 0) {
+          return motion.computeBrowseLaneAnchorY(main);
+        }
         var mainRect = main.getBoundingClientRect();
-        var refRect = contentRows[i - 1].getBoundingClientRect();
-        return refRect.top - mainRect.top;
+        var anchorY = getContentRowAnchorTop(contentRows[i - 1], mainRect);
+        if (anchorY >= 0) return anchorY;
       }
     }
   }
 
-  if (cachedRowAnchorY !== null) return cachedRowAnchorY;
-
-  var rows = main.querySelectorAll(".content-row");
-  if (rows.length >= 2 && main.scrollTop < 8) {
-    var mainRect0 = main.getBoundingClientRect();
-    var rowRect0 = rows[1].getBoundingClientRect();
-    cachedRowAnchorY = rowRect0.top - mainRect0.top;
-    if (cachedRowAnchorY < 0) cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
-    return cachedRowAnchorY;
-  }
-
-  cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
-  return cachedRowAnchorY;
+  return motion.computeBrowseLaneAnchorY(main);
 }
 
 function isHeroFocus(el) {
   return !!(el && el.closest(".hero"));
 }
 
-function scrollFocusRowToAnchor(el) {
+function isContentRowMisaligned(el) {
+  if (!el || !el.classList || !el.classList.contains("card")) return false;
+  if (!el.closest(".content-row")) return false;
+  if (isInSpotlightRow(el)) return false;
+
+  var main = getMainRoot();
+  if (!main) return false;
+
+  var rowEl = el.closest(".content-row");
+  var mainRect = main.getBoundingClientRect();
+  var laneY = isFirstContentRow(el)
+    ? motion.computeBrowseLaneAnchorY(main)
+    : getRowAnchorViewportY(main, rowEl);
+  var titleTop = getContentRowAnchorTop(rowEl, mainRect);
+  return titleTop > laneY + MISALIGN_THRESHOLD_PX;
+}
+
+function scrollFocusRowToAnchor(el, anchorYOverride) {
   var main = getMainRoot();
   if (!main || !el) return;
 
@@ -353,16 +511,57 @@ function scrollFocusRowToAnchor(el) {
   }
 
   var mainRect = main.getBoundingClientRect();
-  var rowRect = rowEl.getBoundingClientRect();
+  var title = rowEl.querySelector(".row-title");
+  var rowRect = title ? title.getBoundingClientRect() : rowEl.getBoundingClientRect();
   var rowContentTop = rowRect.top - mainRect.top + main.scrollTop;
-  var anchorY = getRowAnchorViewportY(main, rowEl);
+  var anchorY;
+  if (isFirstContentRow(el)) {
+    anchorY = motion.computeBrowseLaneAnchorY(main);
+  } else if (anchorYOverride != null && anchorYOverride >= 0) {
+    anchorY = anchorYOverride;
+  } else {
+    anchorY = getRowAnchorViewportY(main, rowEl);
+  }
   var targetScrollTop = Math.max(0, rowContentTop - anchorY);
   var profile = motion.getMotionProfile();
   animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
 }
 
+function scheduleVerticalAnchor(el, options) {
+  options = options || {};
+  cancelVerticalAnchorTimer();
+  scrollAnimGen += 1;
+  var gen = scrollAnimGen;
+  var delay = getLayoutSettleMs(options);
+  var capturedAnchorY = options.capturedAnchorY;
+
+  function measureAndScroll() {
+    verticalAnchorTimer = null;
+    if (gen !== scrollAnimGen || currentEl !== el) return;
+    requestAnimationFrame(function () {
+      if (gen !== scrollAnimGen || currentEl !== el) return;
+      requestAnimationFrame(function () {
+        if (gen !== scrollAnimGen || currentEl !== el) return;
+        scrollFocusRowToAnchor(el, capturedAnchorY);
+      });
+    });
+  }
+
+  if (delay > 0) {
+    verticalAnchorTimer = setTimeout(measureAndScroll, delay);
+  } else {
+    measureAndScroll();
+  }
+}
+
 function getSpotlightScrollPadding(el) {
-  return indexInRow(el) === 0 ? 0 : 40;
+  if (indexInRow(el) === 0) return 0;
+  var scrollEls = getScrollElements(el);
+  var outer = scrollEls.outer;
+  if (!outer) return 40;
+  var viewWidth = outer.clientWidth;
+  var cardWidth = el.offsetWidth || 130;
+  return Math.max(40, Math.round((viewWidth - cardWidth) * 0.18));
 }
 
 function scrollRowIntoView(el, onComplete) {
@@ -400,7 +599,8 @@ function syncSpotlightLayout(el) {
   }
 }
 
-function scheduleScrollAfterLayout(el, rowId, rowChanged) {
+function scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, scrollOptions) {
+  scrollOptions = scrollOptions || {};
   scrollAnimGen += 1;
   var gen = scrollAnimGen;
   var isSpotlight = isInSpotlightRow(el);
@@ -417,9 +617,9 @@ function scheduleScrollAfterLayout(el, rowId, rowChanged) {
     } else if (afterHorizontalScroll) {
       afterHorizontalScroll();
     }
-    if (rowChanged) {
+    if (needsVerticalAnchor) {
       if (el.closest(".content-row") || isHeroFocus(el)) {
-        scrollFocusRowToAnchor(el);
+        scheduleVerticalAnchor(el, scrollOptions);
       } else {
         scrollIntoView(el);
       }
@@ -431,17 +631,30 @@ function scheduleScrollAfterLayout(el, rowId, rowChanged) {
 
 function focusElement(el) {
   if (!el) return false;
+
+  var previousEl = currentEl;
+  var previousRowId = lastFocusRowId;
+  var rowId = getFocusRowId(el);
+  var rowChanged = rowId !== previousRowId;
+  var capturedAnchorY = rowChanged && previousEl ? captureRowAnchorY(previousEl) : null;
+
   clearAllFocus();
   currentEl = el;
   el.classList.add("tv-focus");
 
-  var rowId = getFocusRowId(el);
-  var rowChanged = rowId !== lastFocusRowId;
   lastFocusRowId = rowId;
 
   setSidebarExpanded(isInSidebar(el));
-  updateSpotlightMode(el);
-  scheduleScrollAfterLayout(el, rowId, rowChanged);
+  var spotlightToggled = updateSpotlightMode(el);
+  var browseFocusToggled = updateBrowseFocusMode(el);
+  updateNeighborDepth(el);
+  var needsVerticalAnchor =
+    rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el);
+  scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, {
+    capturedAnchorY: capturedAnchorY,
+    spotlightToggled: spotlightToggled,
+    browseFocusToggled: browseFocusToggled,
+  });
 
   if (isInSidebar(el)) lastSidebarEl = el;
   if (onFocusChange) onFocusChange(buildFocusMeta(el));
@@ -474,6 +687,17 @@ function getRowFocusables(rowId) {
   return track ? getFocusables(track) : getFocusables(row);
 }
 
+function isHeroNavigable() {
+  if (document.body && document.body.classList.contains("home-spotlight-focus")) {
+    return false;
+  }
+  var hero = document.querySelector(".hero");
+  if (!hero || hero.offsetHeight === 0) return false;
+  var actions = hero.querySelector('[data-focus-row="hero"]');
+  if (!actions) return false;
+  return getFocusables(actions).length > 0;
+}
+
 function getOrderedRowIds() {
   var main = getMainRoot();
   if (!main) return [];
@@ -481,7 +705,9 @@ function getOrderedRowIds() {
   var ids = [];
   for (var i = 0; i < nodes.length; i++) {
     var id = nodes[i].getAttribute("data-focus-row");
-    if (id && ids.indexOf(id) === -1) ids.push(id);
+    if (!id || ids.indexOf(id) !== -1) continue;
+    if (id === "hero" && !isHeroNavigable()) continue;
+    ids.push(id);
   }
   return ids;
 }
@@ -575,12 +801,19 @@ function handleMainVertical(el, dir) {
   var rows = getOrderedRowIds();
   var rowIdx = rows.indexOf(rowId);
   if (rowIdx === -1) return el;
-  var targetIdx = dir === "up" ? rowIdx - 1 : rowIdx + 1;
-  if (targetIdx < 0 || targetIdx >= rows.length) return el;
-  var targetItems = getRowFocusables(rows[targetIdx]);
-  if (!targetItems.length) return el;
+
   var col = indexInRow(el);
-  return targetItems[Math.min(col, targetItems.length - 1)];
+  var step = dir === "up" ? -1 : 1;
+  var targetIdx = rowIdx + step;
+
+  while (targetIdx >= 0 && targetIdx < rows.length) {
+    var targetItems = getRowFocusables(rows[targetIdx]);
+    if (targetItems.length) {
+      return targetItems[Math.min(col, targetItems.length - 1)];
+    }
+    targetIdx += step;
+  }
+  return el;
 }
 
 function focusDefaultMain(selector) {
@@ -712,6 +945,11 @@ function onKeyDown(e) {
     else if (isDown) next = handleSidebarNav(currentEl, "down");
     else if (isRight) {
       setSidebarExpanded(false);
+      try {
+        require("./choreography.js").pulseZoneCross();
+      } catch (err) {
+        /* ignore */
+      }
       focusDefaultMain();
       e.preventDefault();
       return;
@@ -724,30 +962,74 @@ function onKeyDown(e) {
   }
 
   if (next && next !== currentEl) {
+    var wasSidebar = inSidebar;
+    var willSidebar = isInSidebar(next);
+    if (wasSidebar !== willSidebar && !wasSidebar && willSidebar) {
+      try {
+        require("./choreography.js").pulseZoneCross();
+      } catch (err) {
+        /* ignore */
+      }
+    }
     focusElement(next);
   }
   if (isLeft || isRight || isUp || isDown) e.preventDefault();
+}
+
+function handleWindowResize() {
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function () {
+    resizeTimer = null;
+    invalidateRowAnchorCache();
+    var el = currentEl;
+    if (!el || isInSidebar(el)) return;
+    if (!el.classList.contains("card")) return;
+    if (!el.closest(".content-row")) return;
+    scrollFocusRowToAnchor(el, null);
+  }, 150);
 }
 
 function init(cb) {
   if (keyHandler) {
     document.removeEventListener("keydown", keyHandler);
   }
+  if (resizeHandler) {
+    window.removeEventListener("resize", resizeHandler);
+  }
   onFocusChange = cb || null;
   keyHandler = onKeyDown;
   document.addEventListener("keydown", keyHandler);
+  resizeHandler = handleWindowResize;
+  if (typeof window !== "undefined") {
+    window.addEventListener("resize", resizeHandler);
+  }
 }
 
 function destroy() {
+  cancelVerticalAnchorTimer();
+  if (resizeTimer) {
+    clearTimeout(resizeTimer);
+    resizeTimer = null;
+  }
+  if (resizeHandler && typeof window !== "undefined") {
+    window.removeEventListener("resize", resizeHandler);
+    resizeHandler = null;
+  }
   if (keyHandler) {
     document.removeEventListener("keydown", keyHandler);
     keyHandler = null;
   }
   clearAllFocus();
+  clearNeighborDepth();
   currentEl = null;
   lastFocusRowId = null;
   setSidebarExpanded(false);
   document.body.classList.remove("home-spotlight-focus");
+  document.body.classList.remove("home-browse-focus");
+}
+
+function getCurrentElement() {
+  return currentEl;
 }
 
 /** @deprecated Gate test only — linear focus on a root element */
@@ -770,5 +1052,6 @@ module.exports = {
   resetMainScroll: resetMainScroll,
   afterScreenRender: afterScreenRender,
   getFocusables: getFocusables,
+  getCurrentElement: getCurrentElement,
   setupFocus: setupFocus,
 };

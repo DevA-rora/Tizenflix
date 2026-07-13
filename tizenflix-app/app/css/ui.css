@@ -95,6 +95,13 @@ body.sidebar-expanded .sidebar {
   fill: currentColor;
   display: block;
   margin-right: 0;
+  -webkit-transition: -webkit-transform 200ms ease-out, transform 200ms ease-out;
+  transition: transform 200ms ease-out;
+}
+
+.nav-item.active svg {
+  -webkit-transform: scale(1.05);
+  transform: scale(1.05);
 }
 
 body.sidebar-expanded .nav-item svg {
@@ -213,6 +220,16 @@ body.home-spotlight-focus .hero {
   transform: translateY(-24px) scaleY(0);
 }
 
+body.home-browse-focus .hero {
+  min-height: 0;
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  pointer-events: none;
+  -webkit-transform: translateY(-24px) scaleY(0);
+  transform: translateY(-24px) scaleY(0);
+}
+
 .hero-backdrops {
   position: absolute;
   top: 0;
@@ -240,6 +257,33 @@ body.home-spotlight-focus .hero {
   opacity: 1;
 }
 
+.hero-backdrop.ken-burns-active {
+  -webkit-animation: heroKenBurns 6s ease-out forwards;
+  animation: heroKenBurns 6s ease-out forwards;
+}
+
+@-webkit-keyframes heroKenBurns {
+  from {
+    -webkit-transform: scale(1);
+    transform: scale(1);
+  }
+  to {
+    -webkit-transform: scale(1.04);
+    transform: scale(1.04);
+  }
+}
+
+@keyframes heroKenBurns {
+  from {
+    -webkit-transform: scale(1);
+    transform: scale(1);
+  }
+  to {
+    -webkit-transform: scale(1.04);
+    transform: scale(1.04);
+  }
+}
+
 .hero-gradient {
   position: absolute;
   top: 0;
@@ -261,12 +305,14 @@ body.home-spotlight-focus .hero {
   z-index: 2;
   max-width: 640px;
   padding: 120px 48px 48px;
-  -webkit-transition: opacity 250ms ease-out;
-  transition: opacity 250ms ease-out;
+  -webkit-transition: opacity 250ms ease-out, -webkit-transform 250ms ease-out, transform 250ms ease-out;
+  transition: opacity 250ms ease-out, transform 250ms ease-out;
 }
 
 .hero-content.is-fading {
   opacity: 0;
+  -webkit-transform: translateY(10px);
+  transform: translateY(10px);
 }
 
 .hero-logo {
@@ -425,6 +471,11 @@ body.home-spotlight-focus .hero {
   transition: transform 250ms ease-out;
 }
 
+.row-track.is-animating {
+  -webkit-transition: none;
+  transition: none;
+}
+
 /* --- Cards --- */
 .card {
   position: relative;
@@ -510,8 +561,22 @@ body.home-spotlight-focus .hero {
 .card.tv-focus .card-poster {
   border-color: #ffffff;
   box-shadow: 0 0 0 2px #e50914;
-  -webkit-transform: translateY(-4px);
-  transform: translateY(-4px);
+  -webkit-transform: translateY(-6px);
+  transform: translateY(-6px);
+}
+
+.card.card-is-before .card-poster,
+.card.card-is-after .card-poster {
+  opacity: 0.55;
+  -webkit-transform: scale(0.94);
+  transform: scale(0.94);
+}
+
+.card.card-is-before.tv-focus .card-poster,
+.card.card-is-after.tv-focus .card-poster {
+  opacity: 1;
+  -webkit-transform: translateY(-6px);
+  transform: translateY(-6px);
 }
 
 .card.focusable:focus-visible .card-poster {
@@ -592,8 +657,36 @@ body.home-spotlight-focus .main {
   border: 3px solid transparent;
   background-size: cover;
   background-position: center top;
+  position: relative;
+  overflow: hidden;
   -webkit-transition: opacity 150ms ease-out, -webkit-transform 150ms ease-out, transform 150ms ease-out, border-color 150ms ease-out;
   transition: opacity 150ms ease-out, transform 150ms ease-out, border-color 150ms ease-out;
+}
+
+.card-poster-portrait,
+.card-poster-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-size: cover;
+  background-position: center top;
+  background-color: #2a2a2a;
+}
+
+.card-poster-backdrop {
+  opacity: 0;
+  -webkit-transition: opacity 200ms ease-out;
+  transition: opacity 200ms ease-out;
+}
+
+.card-poster.is-backdrop-active .card-poster-backdrop {
+  opacity: 1;
+}
+
+.card-poster.is-backdrop-active .card-poster-portrait {
+  opacity: 0;
 }
 
 .row-spotlight .card .card-title {
@@ -606,8 +699,8 @@ body.home-spotlight-focus .main {
   overflow: visible;
   padding-right: 48px;
   max-width: 920px;
-  -webkit-transition: opacity 200ms ease-out;
-  transition: opacity 200ms ease-out;
+  -webkit-transition: opacity 200ms ease-out, -webkit-transform 200ms ease-out, transform 200ms ease-out;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
 
 .content-row.row-spotlight.is-active .row-spotlight-detail {
@@ -617,6 +710,8 @@ body.home-spotlight-focus .main {
 
 .row-spotlight-detail.is-fading {
   opacity: 0;
+  -webkit-transform: translateY(8px);
+  transform: translateY(8px);
 }
 
 /* Focused spotlight card — landscape hero */
@@ -1467,4 +1562,110 @@ body.tv-perf .card-spotlight-brand,
 body.tv-perf .nav-item .nav-label {
   -webkit-transition-duration: 150ms;
   transition-duration: 150ms;
+}
+
+/* --- Screen transitions --- */
+
+#screen {
+  -webkit-transition: opacity 220ms ease-out, -webkit-transform 220ms ease-out, transform 220ms ease-out;
+  transition: opacity 220ms ease-out, transform 220ms ease-out;
+}
+
+#screen.screen-exit {
+  opacity: 0;
+  -webkit-transform: translateY(-8px);
+  transform: translateY(-8px);
+}
+
+#screen.screen-enter {
+  opacity: 0;
+  -webkit-transform: translateY(12px);
+  transform: translateY(12px);
+}
+
+#screen.screen-enter.screen-enter-active {
+  opacity: 1;
+  -webkit-transform: translateY(0);
+  transform: translateY(0);
+}
+
+.main.zone-cross-pulse {
+  opacity: 0.92;
+  -webkit-transition: opacity 50ms ease-out;
+  transition: opacity 50ms ease-out;
+}
+
+/* --- Card to detail handoff --- */
+
+.transition-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500;
+  pointer-events: none;
+  background-color: #141414;
+}
+
+.transition-shell-poster {
+  position: fixed;
+  background-size: cover;
+  background-position: center top;
+  background-color: #1a1a1a;
+  -webkit-transform-origin: center center;
+  transform-origin: center center;
+  opacity: 1;
+  -webkit-transition: opacity 150ms ease-out, -webkit-transform 150ms ease-out, transform 150ms ease-out;
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+
+.transition-shell.is-expanding .transition-shell-poster {
+  opacity: 0.35;
+}
+
+/* --- Detail content enter --- */
+
+.detail-content {
+  -webkit-transition: opacity 280ms ease-out, -webkit-transform 280ms ease-out, transform 280ms ease-out;
+  transition: opacity 280ms ease-out, transform 280ms ease-out;
+}
+
+.detail-content.detail-content-enter {
+  opacity: 0;
+  -webkit-transform: translateY(16px);
+  transform: translateY(16px);
+}
+
+.detail-content.detail-content-enter.detail-content-enter-active {
+  opacity: 1;
+  -webkit-transform: translateY(0);
+  transform: translateY(0);
+}
+
+body.tv-perf #screen {
+  -webkit-transition-duration: 150ms;
+  transition-duration: 150ms;
+}
+
+body.tv-perf .transition-shell-poster {
+  -webkit-transition-duration: 150ms;
+  transition-duration: 150ms;
+}
+
+body.tv-perf .detail-content {
+  -webkit-transition-duration: 150ms;
+  transition-duration: 150ms;
+}
+
+body.tv-perf .hero-backdrop.ken-burns-active {
+  -webkit-animation: none;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-backdrop.ken-burns-active {
+    -webkit-animation: none !important;
+    animation: none !important;
+  }
 }

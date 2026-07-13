@@ -201,11 +201,27 @@ function updateSpotlightCard(cardEl, item, extras, options) {
 
   var poster = cardEl.querySelector(".card-poster");
   if (poster) {
-    var image =
-      cardEl.classList.contains("tv-focus")
-        ? item.backdrop || item.poster || ""
-        : item.poster || "";
-    if (image) poster.style.backgroundImage = "url('" + image.replace(/'/g, "%27") + "')";
+    var portraitUrl = item.poster || "";
+    var backdropUrl = item.backdrop || item.poster || "";
+    var portraitLayer = poster.querySelector(".card-poster-portrait");
+    var backdropLayer = poster.querySelector(".card-poster-backdrop");
+    if (portraitLayer && backdropLayer) {
+      if (portraitUrl) {
+        portraitLayer.style.backgroundImage = "url('" + portraitUrl.replace(/'/g, "%27") + "')";
+      }
+      if (cardEl.classList.contains("tv-focus") && backdropUrl) {
+        backdropLayer.style.backgroundImage = "url('" + backdropUrl.replace(/'/g, "%27") + "')";
+        poster.classList.add("is-backdrop-active");
+      } else {
+        poster.classList.remove("is-backdrop-active");
+      }
+    } else {
+      var image =
+        cardEl.classList.contains("tv-focus")
+          ? backdropUrl
+          : portraitUrl;
+      if (image) poster.style.backgroundImage = "url('" + image.replace(/'/g, "%27") + "')";
+    }
   }
 
   var isCw = options.variant === "continue-watching";
@@ -270,9 +286,11 @@ function createCard(item, onSelect, options) {
   if (layout === "spotlight") {
     el.innerHTML =
       '<div class="card-spotlight-stack">' +
-      '<div class="card-poster" style="background-image:url(\'' +
+      '<div class="card-poster">' +
+      '<div class="card-poster-portrait" style="background-image:url(\'' +
       escapeHtml(poster) +
-      "')\">" +
+      "')\"></div>" +
+      '<div class="card-poster-backdrop"></div>' +
       buildBrandHtml(item, null, isCw) +
       (isCw ? "" : buildPillsHtml(item)) +
       (isCw ? buildProgressHtml(item) : "") +

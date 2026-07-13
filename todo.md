@@ -1,12 +1,14 @@
 # Todo
 - [ ] Add animations when moving between shows/movies (like Netflix)
-- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see how much code we can "steal".
 - [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see if we can use OR reverse engineer the servers present so that we should have literally no issues with streaming / API.
+- [ ] Add to settings the ability for the user to change the size of the grids.
+
 
 # Doing
-- [ ] Copy Netflix sidebar.
+- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see how much code we can "steal".
 
 # Done
+- [x] Copy Netflix sidebar.
 - [x] Revamp the UI using /frontend-design skill.
 - [x] Be able to preview the application on laptop so I can make changes without having to be at the TV.
 - [x] Netflix-style UI (sidebar, hero, browse rows) — browser testable at `:3010/app/index.html`

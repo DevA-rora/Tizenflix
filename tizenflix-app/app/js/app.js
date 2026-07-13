@@ -94,7 +94,8 @@ function wireGlobalKeys() {
         e.preventDefault();
         return;
       }
-      if (router.back()) {
+      if (router.canBack()) {
+        router.back();
         e.preventDefault();
         return;
       }
