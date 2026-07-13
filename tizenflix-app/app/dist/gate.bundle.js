@@ -17,7 +17,7 @@ var TizenflixGate = (() => {
       var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
       var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
       var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
-      var CATALOG_LANG_KEY = "tizenflix.catalogLang";
+      var ANIMATIONS_KEY = "tizenflix.uiAnimations";
       var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -271,6 +271,22 @@ var TizenflixGate = (() => {
         }
         return code;
       }
+      function getUiAnimations() {
+        try {
+          var stored = localStorage.getItem(ANIMATIONS_KEY);
+          if (stored === "0" || stored === "false") return false;
+          if (stored === "1" || stored === "true") return true;
+        } catch (err) {
+        }
+        return true;
+      }
+      function setUiAnimations(enabled) {
+        try {
+          localStorage.setItem(ANIMATIONS_KEY, enabled ? "1" : "0");
+        } catch (err) {
+        }
+        return !!enabled;
+      }
       function resolvePlay(apiBase, path, query, timeoutMs) {
         var url = apiBase + path;
         if (query) {
@@ -426,7 +442,9 @@ var TizenflixGate = (() => {
         setPlaybackSpeed,
         cyclePlaybackSpeed,
         getCatalogLang,
-        setCatalogLang
+        setCatalogLang,
+        getUiAnimations,
+        setUiAnimations
       };
     }
   });
@@ -1359,37 +1377,38 @@ var TizenflixGate = (() => {
   var require_motion = __commonJS({
     "app/js/core/motion.js"(exports, module) {
       var config2 = require_config();
+      var EASE_CURVE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
       var BROWSER = {
-        transformMs: 250,
-        opacityMs: 250,
-        scrollMs: 280,
+        transformMs: 300,
+        opacityMs: 400,
+        scrollMs: 300,
         mainScrollMs: 300,
-        heroDebounceMs: 150,
-        fadeMs: 120,
+        heroDebounceMs: 400,
+        fadeMs: 400,
         heroBackdropMs: 400,
+        heroTrailerDelayMs: 1500,
         screenEnterMs: 280,
         screenExitMs: 220,
         zonePulseMs: 50,
         handoffMs: 280,
         kenBurnsMs: 6e3,
-        cardNeighborScale: 0.94,
-        cardNeighborOpacity: 0.55
+        cardFocusScale: 1.12
       };
       var TV = {
-        transformMs: 150,
-        opacityMs: 150,
-        scrollMs: 150,
-        mainScrollMs: 140,
-        heroDebounceMs: 80,
-        fadeMs: 80,
-        heroBackdropMs: 250,
+        transformMs: 200,
+        opacityMs: 250,
+        scrollMs: 200,
+        mainScrollMs: 180,
+        heroDebounceMs: 300,
+        fadeMs: 300,
+        heroBackdropMs: 300,
+        heroTrailerDelayMs: 1200,
         screenEnterMs: 150,
         screenExitMs: 120,
         zonePulseMs: 50,
         handoffMs: 150,
         kenBurnsMs: 0,
-        cardNeighborScale: 0.94,
-        cardNeighborOpacity: 0.55
+        cardFocusScale: 1.1
       };
       var ROW_ANCHOR_SPOTLIGHT_PX = 48;
       var ROW_ANCHOR_FALLBACK_PX = 140;
@@ -1416,13 +1435,17 @@ var TizenflixGate = (() => {
       function prefersReducedMotion() {
         return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       }
+      function animationsEnabled() {
+        if (prefersReducedMotion()) return false;
+        return config2.getUiAnimations();
+      }
       function shouldSnapScroll(distance) {
-        if (prefersReducedMotion()) return true;
+        if (!animationsEnabled()) return true;
         if (isTvPerfMode() && Math.abs(distance) > 400) return true;
         return false;
       }
       function useCssRowScroll() {
-        return true;
+        return animationsEnabled();
       }
       function easeOutCubic(t) {
         return 1 - Math.pow(1 - t, 3);
@@ -1430,6 +1453,7 @@ var TizenflixGate = (() => {
       function applyBodyClass() {
         if (typeof document === "undefined" || !document.body) return;
         document.body.classList.toggle("tv-perf", isTvPerfMode());
+        document.body.classList.toggle("animations-off", !animationsEnabled());
       }
       function computeBrowseLaneAnchorY(main) {
         var height = 0;
@@ -1446,6 +1470,7 @@ var TizenflixGate = (() => {
         return scaled;
       }
       module.exports = {
+        EASE_CURVE,
         BROWSER,
         TV,
         ROW_ANCHOR_SPOTLIGHT_PX,
@@ -1455,6 +1480,7 @@ var TizenflixGate = (() => {
         setTvPerfMode,
         getMotionProfile,
         prefersReducedMotion,
+        animationsEnabled,
         shouldSnapScroll,
         useCssRowScroll,
         easeOutCubic,
@@ -3531,21 +3557,6 @@ var TizenflixGate = (() => {
       }
       function updateNeighborDepth(el) {
         clearNeighborDepth();
-        if (!el || !el.classList || !el.classList.contains("card")) return;
-        if (isInSpotlightRow(el)) return;
-        var track = el.closest(".row-track");
-        if (!track) return;
-        var cards = track.querySelectorAll(".card");
-        var idx = -1;
-        for (var i = 0; i < cards.length; i++) {
-          if (cards[i] === el) {
-            idx = i;
-            break;
-          }
-        }
-        if (idx < 0) return;
-        if (idx > 0) cards[idx - 1].classList.add("card-is-before");
-        if (idx < cards.length - 1) cards[idx + 1].classList.add("card-is-after");
       }
       function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
         if (!track) return;
@@ -3558,7 +3569,7 @@ var TizenflixGate = (() => {
           if (onComplete) onComplete();
           return;
         }
-        if (motion.prefersReducedMotion()) {
+        if (!motion.animationsEnabled()) {
           setTrackOffset(track, targetOffset);
           if (onComplete) onComplete();
           return;
@@ -3646,15 +3657,24 @@ var TizenflixGate = (() => {
         var cardWidth = card.offsetWidth;
         var viewWidth = outer.clientWidth;
         var scrollLeft = getTrackOffset(track);
-        var visibleLeft = cardLeft - scrollLeft;
-        var visibleRight = visibleLeft + cardWidth;
-        if (visibleLeft < padding) {
-          return cardLeft - padding;
+        var maxOffset = getMaxTrackOffset(track, outer);
+        if (!motion.animationsEnabled()) {
+          var visibleLeft = cardLeft - scrollLeft;
+          var visibleRight = visibleLeft + cardWidth;
+          if (visibleLeft < padding) {
+            return Math.max(0, cardLeft - padding);
+          }
+          if (visibleRight > viewWidth - padding) {
+            return Math.min(maxOffset, cardLeft + cardWidth - viewWidth + padding);
+          }
+          return scrollLeft;
         }
-        if (visibleRight > viewWidth - padding) {
-          return cardLeft + cardWidth - viewWidth + padding;
+        var centerOffset = cardLeft - (viewWidth - cardWidth) / 2;
+        centerOffset = Math.max(0, Math.min(centerOffset, maxOffset));
+        if (cardLeft <= (viewWidth - cardWidth) / 2) {
+          return Math.max(0, Math.min(cardLeft - padding, maxOffset));
         }
-        return scrollLeft;
+        return centerOffset;
       }
       function captureRowAnchorY(el) {
         var main = getMainRoot();
@@ -3734,12 +3754,19 @@ var TizenflixGate = (() => {
         var anchorY;
         if (isFirstContentRow(el)) {
           anchorY = motion.computeBrowseLaneAnchorY(main);
+        } else if (isInSpotlightRow(el)) {
+          anchorY = motion.ROW_ANCHOR_SPOTLIGHT_PX;
         } else if (anchorYOverride != null && anchorYOverride >= 0) {
           anchorY = anchorYOverride;
         } else {
           anchorY = getRowAnchorViewportY(main, rowEl);
         }
         var targetScrollTop = Math.max(0, rowContentTop - anchorY);
+        var scrollDistance = Math.abs(targetScrollTop - main.scrollTop);
+        if (scrollDistance < 2 && isContentRowMisaligned(el)) {
+          main.scrollTop = targetScrollTop;
+          return;
+        }
         var profile = motion.getMotionProfile();
         animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
       }
@@ -3750,6 +3777,9 @@ var TizenflixGate = (() => {
         var gen = scrollAnimGen;
         var delay = getLayoutSettleMs(options);
         var capturedAnchorY = options.capturedAnchorY;
+        if (options.spotlightToggled || options.browseFocusToggled) {
+          capturedAnchorY = null;
+        }
         function measureAndScroll() {
           verticalAnchorTimer = null;
           if (gen !== scrollAnimGen || currentEl !== el) return;
@@ -3793,11 +3823,7 @@ var TizenflixGate = (() => {
         var padding = isInSpotlightRow(el) ? getSpotlightScrollPadding(el) : 56;
         var target;
         var duration = isInSpotlightRow(el) ? profile.scrollMs + 40 : profile.scrollMs;
-        if (isInSpotlightRow(el) && el.classList.contains("tv-focus")) {
-          target = Math.max(0, getCardOffsetInScroller(track, el) - padding);
-        } else {
-          target = getHorizontalScrollTarget(track, outer, el, padding);
-        }
+        target = getHorizontalScrollTarget(track, outer, el, padding);
         animateTrackOffset(track, outer, target, duration, onComplete);
       }
       function syncSpotlightLayout(el) {
@@ -3931,6 +3957,9 @@ var TizenflixGate = (() => {
         if (dir === "down") return nav[(idx + 1) % nav.length];
         return el;
       }
+      function isSearchResultsRow(rowId) {
+        return !!(rowId && rowId.indexOf("search-results-") === 0);
+      }
       function getCrossTargetRow(rowId, col) {
         var main = getMainRoot();
         if (!main || !rowId) return null;
@@ -3968,7 +3997,8 @@ var TizenflixGate = (() => {
           if (el.classList.contains("osk-key") || el.classList.contains("search-suggestion")) {
             lastSearchLeftEl = el;
           }
-          var target = getCrossTargetRow(crossRight, idx);
+          var targetCol = isSearchResultsRow(crossRight) ? 0 : idx;
+          var target = getCrossTargetRow(crossRight, targetCol);
           if (target) return target;
         }
         return el;

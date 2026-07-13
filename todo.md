@@ -1,5 +1,4 @@
 # Todo
-- [ ] When leaving search, make sure that you focus on the first movie, not the last movie in the row.
 - [ ] Fix the episode picker (clicking on an episode doesn't )
 - [ ] Fix the back button in the player.
 - [ ] When the user clicks the search button, 
@@ -7,8 +6,7 @@
 - [ ] Integrate subDL + opensubtitles so that we can get subtitles with movies! (replace current picker)
 opensubtitles is best for western movies, and subDL for non-western showings.
 - [ ] Add to settings the ability for the user to change the size of the grids. (small medium large)
-- [ ] Add animation when the lefthandside toolbar/drawer is opened up.
-- [ ] Change the weird colour gradient in the main view to match Netflix's.
+- [ ] Add ease in animation when the lefthandside toolbar/drawer is opened up.
 
 
 # Doing
@@ -16,6 +14,8 @@ opensubtitles is best for western movies, and subDL for non-western showings.
 - [ ] Fix weird row UI scrolling bug (skipping rows!?!)
 
 # Done
+- [x] When leaving search, make sure that you focus on the first movie, not the last movie in the row.
+- [x] Change the weird colour gradient in the main view to match Netflix's.
 - [x] port other tmdbprovider hot-path extractors to typescript
 - [x] Add animations when moving between shows/movies (like Netflix)
 - [x] Using this repository: https://github.com/streamflix-reborn/streamflix , see if we can use OR reverse engineer the servers present so that we should have literally no issues with streaming / API.

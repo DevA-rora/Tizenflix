@@ -278,23 +278,6 @@ function clearNeighborDepth() {
 
 function updateNeighborDepth(el) {
   clearNeighborDepth();
-  if (!el || !el.classList || !el.classList.contains("card")) return;
-  if (isInSpotlightRow(el)) return;
-
-  var track = el.closest(".row-track");
-  if (!track) return;
-
-  var cards = track.querySelectorAll(".card");
-  var idx = -1;
-  for (var i = 0; i < cards.length; i++) {
-    if (cards[i] === el) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx < 0) return;
-  if (idx > 0) cards[idx - 1].classList.add("card-is-before");
-  if (idx < cards.length - 1) cards[idx + 1].classList.add("card-is-after");
 }
 
 function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
@@ -309,7 +292,7 @@ function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
     return;
   }
 
-  if (motion.prefersReducedMotion()) {
+  if (!motion.animationsEnabled()) {
     setTrackOffset(track, targetOffset);
     if (onComplete) onComplete();
     return;
@@ -414,16 +397,27 @@ function getHorizontalScrollTarget(track, outer, card, padding) {
   var cardWidth = card.offsetWidth;
   var viewWidth = outer.clientWidth;
   var scrollLeft = getTrackOffset(track);
-  var visibleLeft = cardLeft - scrollLeft;
-  var visibleRight = visibleLeft + cardWidth;
+  var maxOffset = getMaxTrackOffset(track, outer);
 
-  if (visibleLeft < padding) {
-    return cardLeft - padding;
+  if (!motion.animationsEnabled()) {
+    var visibleLeft = cardLeft - scrollLeft;
+    var visibleRight = visibleLeft + cardWidth;
+    if (visibleLeft < padding) {
+      return Math.max(0, cardLeft - padding);
+    }
+    if (visibleRight > viewWidth - padding) {
+      return Math.min(maxOffset, cardLeft + cardWidth - viewWidth + padding);
+    }
+    return scrollLeft;
   }
-  if (visibleRight > viewWidth - padding) {
-    return cardLeft + cardWidth - viewWidth + padding;
+
+  var centerOffset = cardLeft - (viewWidth - cardWidth) / 2;
+  centerOffset = Math.max(0, Math.min(centerOffset, maxOffset));
+
+  if (cardLeft <= (viewWidth - cardWidth) / 2) {
+    return Math.max(0, Math.min(cardLeft - padding, maxOffset));
   }
-  return scrollLeft;
+  return centerOffset;
 }
 
 function captureRowAnchorY(el) {
@@ -519,12 +513,19 @@ function scrollFocusRowToAnchor(el, anchorYOverride) {
   var anchorY;
   if (isFirstContentRow(el)) {
     anchorY = motion.computeBrowseLaneAnchorY(main);
+  } else if (isInSpotlightRow(el)) {
+    anchorY = motion.ROW_ANCHOR_SPOTLIGHT_PX;
   } else if (anchorYOverride != null && anchorYOverride >= 0) {
     anchorY = anchorYOverride;
   } else {
     anchorY = getRowAnchorViewportY(main, rowEl);
   }
   var targetScrollTop = Math.max(0, rowContentTop - anchorY);
+  var scrollDistance = Math.abs(targetScrollTop - main.scrollTop);
+  if (scrollDistance < 2 && isContentRowMisaligned(el)) {
+    main.scrollTop = targetScrollTop;
+    return;
+  }
   var profile = motion.getMotionProfile();
   animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
 }
@@ -536,6 +537,9 @@ function scheduleVerticalAnchor(el, options) {
   var gen = scrollAnimGen;
   var delay = getLayoutSettleMs(options);
   var capturedAnchorY = options.capturedAnchorY;
+  if (options.spotlightToggled || options.browseFocusToggled) {
+    capturedAnchorY = null;
+  }
 
   function measureAndScroll() {
     verticalAnchorTimer = null;
@@ -585,11 +589,7 @@ function scrollRowIntoView(el, onComplete) {
   var target;
   var duration = isInSpotlightRow(el) ? profile.scrollMs + 40 : profile.scrollMs;
 
-  if (isInSpotlightRow(el) && el.classList.contains("tv-focus")) {
-    target = Math.max(0, getCardOffsetInScroller(track, el) - padding);
-  } else {
-    target = getHorizontalScrollTarget(track, outer, el, padding);
-  }
+  target = getHorizontalScrollTarget(track, outer, el, padding);
 
   animateTrackOffset(track, outer, target, duration, onComplete);
 }

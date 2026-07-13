@@ -8,7 +8,7 @@ var AUTOPLAY_KEY = "tizenflix.autoplay";
 var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
 var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
 var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
-var CATALOG_LANG_KEY = "tizenflix.catalogLang";
+var ANIMATIONS_KEY = "tizenflix.uiAnimations";
 var API_PORT = "8790";
 var PLAY_RESOLVE_TIMEOUT_MS = 20000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -316,6 +316,26 @@ function setCatalogLang(lang) {
   return code;
 }
 
+function getUiAnimations() {
+  try {
+    var stored = localStorage.getItem(ANIMATIONS_KEY);
+    if (stored === "0" || stored === "false") return false;
+    if (stored === "1" || stored === "true") return true;
+  } catch (err) {
+    /* */
+  }
+  return true;
+}
+
+function setUiAnimations(enabled) {
+  try {
+    localStorage.setItem(ANIMATIONS_KEY, enabled ? "1" : "0");
+  } catch (err) {
+    /* */
+  }
+  return !!enabled;
+}
+
 function resolvePlay(apiBase, path, query, timeoutMs) {
   var url = apiBase + path;
   if (query) {
@@ -490,4 +510,6 @@ module.exports = {
   cyclePlaybackSpeed: cyclePlaybackSpeed,
   getCatalogLang: getCatalogLang,
   setCatalogLang: setCatalogLang,
+  getUiAnimations: getUiAnimations,
+  setUiAnimations: setUiAnimations,
 };

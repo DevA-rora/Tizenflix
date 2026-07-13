@@ -88,6 +88,7 @@ function render(container) {
   var bufferSec = config.getAutoplayBufferSec();
   var extraBuf = config.getExtraBuffering();
   var catalogLang = config.getCatalogLang();
+  var uiAnimations = config.getUiAnimations();
 
   var el = document.createElement("div");
   el.className = "screen screen-settings";
@@ -106,6 +107,11 @@ function render(container) {
     '<div class="settings-field settings-toggle" data-focus-row="settings-dev">' +
     '<button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' +
     (devOn ? "ON" : "OFF") +
+    "</button>" +
+    "</div>" +
+    '<div class="settings-field settings-toggle" data-focus-row="settings-anim">' +
+    '<button type="button" id="uiAnimBtn" class="btn btn-info focusable">TV animation effects: ' +
+    (uiAnimations ? "ON" : "OFF") +
     "</button>" +
     "</div>" +
     '<div class="settings-field" data-focus-row="settings-grid">' +
@@ -160,6 +166,7 @@ function render(container) {
   var input = el.querySelector("#apiBaseInput");
   var saveBtn = el.querySelector("#saveApiBtn");
   var devBtn = el.querySelector("#devModeBtn");
+  var uiAnimBtn = el.querySelector("#uiAnimBtn");
   var backendBtn = el.querySelector("#backendCycleBtn");
   var gridInput = el.querySelector("#gridScaleInput");
   var langInput = el.querySelector("#catalogLangInput");
@@ -233,6 +240,16 @@ function render(container) {
     applyDevModeFromSettings(next);
     devBtn.textContent = "Dev mode: " + (next ? "ON" : "OFF");
   });
+
+  if (uiAnimBtn) {
+    uiAnimBtn.addEventListener("click", function () {
+      var next = !config.getUiAnimations();
+      config.setUiAnimations(next);
+      var motion = require("../core/motion.js");
+      motion.applyBodyClass();
+      uiAnimBtn.textContent = "TV animation effects: " + (next ? "ON" : "OFF");
+    });
+  }
 
   saveBtn.addEventListener("click", function () {
     var url = (input.value || "").trim().replace(/\/$/, "");

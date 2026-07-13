@@ -31,7 +31,9 @@ The app uses [`app/js/core/motion.js`](app/js/core/motion.js) for timing profile
 
 **Spotlight cards:** width/height change instantly on focus; poster crossfade uses dual layers (`.card-poster-portrait` / `.card-poster-backdrop`) with `opacity` only.
 
-**Hero collapse:** `transform: translateY(-24px) scaleY(0)` + `opacity`, not animated `min-height`. Applied via `body.home-spotlight-focus` (spotlight rows) and `body.home-browse-focus` (standard row cards).
+**Hero takeover:** When a browse card is focused on home, the hero banner stays visible and cross-fades title/backdrop after ~400ms dwell; trailer preview starts after ~1.5s if available. Spotlight rows collapse the hero and use the inline spotlight panel instead.
+
+**Hero collapse:** `transform: translateY(-24px) scaleY(0)` + `opacity`, not animated `min-height`. Applied via `body.home-spotlight-focus` only.
 
 **Browse lane anchor:** First content row docks at `computeBrowseLaneAnchorY(#main)` — ~38% of main viewport height, clamped between 120px and 48% of height. Row 2+ dock at the previous row's title Y. Re-anchors when a card row is misaligned by more than 32px (covers hero→row1, detail back, browse-only screens).
 

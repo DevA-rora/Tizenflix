@@ -17,7 +17,7 @@ var TizenflixApp = (() => {
       var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
       var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
       var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
-      var CATALOG_LANG_KEY = "tizenflix.catalogLang";
+      var ANIMATIONS_KEY = "tizenflix.uiAnimations";
       var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -271,6 +271,22 @@ var TizenflixApp = (() => {
         }
         return code;
       }
+      function getUiAnimations() {
+        try {
+          var stored = localStorage.getItem(ANIMATIONS_KEY);
+          if (stored === "0" || stored === "false") return false;
+          if (stored === "1" || stored === "true") return true;
+        } catch (err) {
+        }
+        return true;
+      }
+      function setUiAnimations(enabled) {
+        try {
+          localStorage.setItem(ANIMATIONS_KEY, enabled ? "1" : "0");
+        } catch (err) {
+        }
+        return !!enabled;
+      }
       function resolvePlay(apiBase, path, query, timeoutMs) {
         var url = apiBase + path;
         if (query) {
@@ -426,7 +442,9 @@ var TizenflixApp = (() => {
         setPlaybackSpeed,
         cyclePlaybackSpeed,
         getCatalogLang,
-        setCatalogLang
+        setCatalogLang,
+        getUiAnimations,
+        setUiAnimations
       };
     }
   });
@@ -435,37 +453,38 @@ var TizenflixApp = (() => {
   var require_motion = __commonJS({
     "app/js/core/motion.js"(exports, module) {
       var config = require_config();
+      var EASE_CURVE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
       var BROWSER = {
-        transformMs: 250,
-        opacityMs: 250,
-        scrollMs: 280,
+        transformMs: 300,
+        opacityMs: 400,
+        scrollMs: 300,
         mainScrollMs: 300,
-        heroDebounceMs: 150,
-        fadeMs: 120,
+        heroDebounceMs: 400,
+        fadeMs: 400,
         heroBackdropMs: 400,
+        heroTrailerDelayMs: 1500,
         screenEnterMs: 280,
         screenExitMs: 220,
         zonePulseMs: 50,
         handoffMs: 280,
         kenBurnsMs: 6e3,
-        cardNeighborScale: 0.94,
-        cardNeighborOpacity: 0.55
+        cardFocusScale: 1.12
       };
       var TV = {
-        transformMs: 150,
-        opacityMs: 150,
-        scrollMs: 150,
-        mainScrollMs: 140,
-        heroDebounceMs: 80,
-        fadeMs: 80,
-        heroBackdropMs: 250,
+        transformMs: 200,
+        opacityMs: 250,
+        scrollMs: 200,
+        mainScrollMs: 180,
+        heroDebounceMs: 300,
+        fadeMs: 300,
+        heroBackdropMs: 300,
+        heroTrailerDelayMs: 1200,
         screenEnterMs: 150,
         screenExitMs: 120,
         zonePulseMs: 50,
         handoffMs: 150,
         kenBurnsMs: 0,
-        cardNeighborScale: 0.94,
-        cardNeighborOpacity: 0.55
+        cardFocusScale: 1.1
       };
       var ROW_ANCHOR_SPOTLIGHT_PX = 48;
       var ROW_ANCHOR_FALLBACK_PX = 140;
@@ -492,13 +511,17 @@ var TizenflixApp = (() => {
       function prefersReducedMotion() {
         return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       }
+      function animationsEnabled() {
+        if (prefersReducedMotion()) return false;
+        return config.getUiAnimations();
+      }
       function shouldSnapScroll(distance) {
-        if (prefersReducedMotion()) return true;
+        if (!animationsEnabled()) return true;
         if (isTvPerfMode() && Math.abs(distance) > 400) return true;
         return false;
       }
       function useCssRowScroll() {
-        return true;
+        return animationsEnabled();
       }
       function easeOutCubic(t) {
         return 1 - Math.pow(1 - t, 3);
@@ -506,6 +529,7 @@ var TizenflixApp = (() => {
       function applyBodyClass() {
         if (typeof document === "undefined" || !document.body) return;
         document.body.classList.toggle("tv-perf", isTvPerfMode());
+        document.body.classList.toggle("animations-off", !animationsEnabled());
       }
       function computeBrowseLaneAnchorY(main) {
         var height = 0;
@@ -522,6 +546,7 @@ var TizenflixApp = (() => {
         return scaled;
       }
       module.exports = {
+        EASE_CURVE,
         BROWSER,
         TV,
         ROW_ANCHOR_SPOTLIGHT_PX,
@@ -531,6 +556,7 @@ var TizenflixApp = (() => {
         setTvPerfMode,
         getMotionProfile,
         prefersReducedMotion,
+        animationsEnabled,
         shouldSnapScroll,
         useCssRowScroll,
         easeOutCubic,
@@ -949,21 +975,6 @@ var TizenflixApp = (() => {
       }
       function updateNeighborDepth(el) {
         clearNeighborDepth();
-        if (!el || !el.classList || !el.classList.contains("card")) return;
-        if (isInSpotlightRow(el)) return;
-        var track = el.closest(".row-track");
-        if (!track) return;
-        var cards = track.querySelectorAll(".card");
-        var idx = -1;
-        for (var i = 0; i < cards.length; i++) {
-          if (cards[i] === el) {
-            idx = i;
-            break;
-          }
-        }
-        if (idx < 0) return;
-        if (idx > 0) cards[idx - 1].classList.add("card-is-before");
-        if (idx < cards.length - 1) cards[idx + 1].classList.add("card-is-after");
       }
       function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
         if (!track) return;
@@ -976,7 +987,7 @@ var TizenflixApp = (() => {
           if (onComplete) onComplete();
           return;
         }
-        if (motion.prefersReducedMotion()) {
+        if (!motion.animationsEnabled()) {
           setTrackOffset(track, targetOffset);
           if (onComplete) onComplete();
           return;
@@ -1064,15 +1075,24 @@ var TizenflixApp = (() => {
         var cardWidth = card.offsetWidth;
         var viewWidth = outer.clientWidth;
         var scrollLeft = getTrackOffset(track);
-        var visibleLeft = cardLeft - scrollLeft;
-        var visibleRight = visibleLeft + cardWidth;
-        if (visibleLeft < padding) {
-          return cardLeft - padding;
+        var maxOffset = getMaxTrackOffset(track, outer);
+        if (!motion.animationsEnabled()) {
+          var visibleLeft = cardLeft - scrollLeft;
+          var visibleRight = visibleLeft + cardWidth;
+          if (visibleLeft < padding) {
+            return Math.max(0, cardLeft - padding);
+          }
+          if (visibleRight > viewWidth - padding) {
+            return Math.min(maxOffset, cardLeft + cardWidth - viewWidth + padding);
+          }
+          return scrollLeft;
         }
-        if (visibleRight > viewWidth - padding) {
-          return cardLeft + cardWidth - viewWidth + padding;
+        var centerOffset = cardLeft - (viewWidth - cardWidth) / 2;
+        centerOffset = Math.max(0, Math.min(centerOffset, maxOffset));
+        if (cardLeft <= (viewWidth - cardWidth) / 2) {
+          return Math.max(0, Math.min(cardLeft - padding, maxOffset));
         }
-        return scrollLeft;
+        return centerOffset;
       }
       function captureRowAnchorY(el) {
         var main = getMainRoot();
@@ -1152,12 +1172,19 @@ var TizenflixApp = (() => {
         var anchorY;
         if (isFirstContentRow(el)) {
           anchorY = motion.computeBrowseLaneAnchorY(main);
+        } else if (isInSpotlightRow(el)) {
+          anchorY = motion.ROW_ANCHOR_SPOTLIGHT_PX;
         } else if (anchorYOverride != null && anchorYOverride >= 0) {
           anchorY = anchorYOverride;
         } else {
           anchorY = getRowAnchorViewportY(main, rowEl);
         }
         var targetScrollTop = Math.max(0, rowContentTop - anchorY);
+        var scrollDistance = Math.abs(targetScrollTop - main.scrollTop);
+        if (scrollDistance < 2 && isContentRowMisaligned(el)) {
+          main.scrollTop = targetScrollTop;
+          return;
+        }
         var profile = motion.getMotionProfile();
         animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
       }
@@ -1168,6 +1195,9 @@ var TizenflixApp = (() => {
         var gen = scrollAnimGen;
         var delay = getLayoutSettleMs(options);
         var capturedAnchorY = options.capturedAnchorY;
+        if (options.spotlightToggled || options.browseFocusToggled) {
+          capturedAnchorY = null;
+        }
         function measureAndScroll() {
           verticalAnchorTimer = null;
           if (gen !== scrollAnimGen || currentEl !== el) return;
@@ -1211,11 +1241,7 @@ var TizenflixApp = (() => {
         var padding = isInSpotlightRow(el) ? getSpotlightScrollPadding(el) : 56;
         var target;
         var duration = isInSpotlightRow(el) ? profile.scrollMs + 40 : profile.scrollMs;
-        if (isInSpotlightRow(el) && el.classList.contains("tv-focus")) {
-          target = Math.max(0, getCardOffsetInScroller(track, el) - padding);
-        } else {
-          target = getHorizontalScrollTarget(track, outer, el, padding);
-        }
+        target = getHorizontalScrollTarget(track, outer, el, padding);
         animateTrackOffset(track, outer, target, duration, onComplete);
       }
       function syncSpotlightLayout(el) {
@@ -4234,6 +4260,15 @@ var TizenflixApp = (() => {
       var detailCache = {};
       var pendingLogoFetch = null;
       var activeBackdrop = "a";
+      var updateTimer = null;
+      var trailerTimer = null;
+      var activePlayer = null;
+      var activeVideoMount = null;
+      var videoTimeout = null;
+      var ytApiLoading = false;
+      var ytApiQueue = [];
+      var BACKGROUND_VOLUME = 20;
+      var pendingTrailerId = null;
       function escapeHtml(text) {
         if (!text) return "";
         return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -4273,7 +4308,155 @@ var TizenflixApp = (() => {
           titleWrap.innerHTML = '<h1 class="hero-title">' + escapeHtml(title) + "</h1>";
         }
       }
-      function fetchDetailExtras(item, heroEl) {
+      function stopHeroTrailer(heroEl) {
+        if (trailerTimer) {
+          clearTimeout(trailerTimer);
+          trailerTimer = null;
+        }
+        pendingTrailerId = null;
+        if (videoTimeout) {
+          clearTimeout(videoTimeout);
+          videoTimeout = null;
+        }
+        if (activePlayer) {
+          try {
+            if (activePlayer.destroy) activePlayer.destroy();
+          } catch (err) {
+          }
+          activePlayer = null;
+        }
+        if (activeVideoMount && activeVideoMount.parentNode) {
+          activeVideoMount.parentNode.removeChild(activeVideoMount);
+          activeVideoMount = null;
+        }
+        if (heroEl) {
+          var layer = heroEl.querySelector(".hero-video-bg");
+          if (layer) {
+            layer.classList.add("hidden");
+            layer.innerHTML = "";
+          }
+          var backdrops = heroEl.querySelectorAll(".hero-backdrop");
+          for (var i = 0; i < backdrops.length; i++) {
+            backdrops[i].style.opacity = "";
+          }
+        }
+      }
+      function loadYouTubeApi(callback) {
+        if (window.YT && window.YT.Player) {
+          callback();
+          return;
+        }
+        ytApiQueue.push(callback);
+        if (ytApiLoading) return;
+        ytApiLoading = true;
+        var prevReady = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = function() {
+          if (prevReady) prevReady();
+          ytApiLoading = false;
+          for (var i = 0; i < ytApiQueue.length; i++) {
+            ytApiQueue[i]();
+          }
+          ytApiQueue = [];
+        };
+        var tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        var scripts = document.getElementsByTagName("script");
+        var anchor = scripts.length ? scripts[0] : null;
+        if (anchor && anchor.parentNode) {
+          anchor.parentNode.insertBefore(tag, anchor);
+        } else {
+          document.head.appendChild(tag);
+        }
+      }
+      function startLowVolumePlayback(player) {
+        if (!player || !player.setVolume) return;
+        player.setVolume(BACKGROUND_VOLUME);
+        if (player.unMute) player.unMute();
+        if (player.playVideo) player.playVideo();
+      }
+      function onPlayerStateChange(event) {
+        if (!event || !event.data || !event.target) return;
+        if (event.data === 1) {
+          event.target.setVolume(BACKGROUND_VOLUME);
+          if (event.target.unMute) event.target.unMute();
+        }
+      }
+      function crossfadeToTrailer(heroEl, trailerKey) {
+        if (!heroEl || !trailerKey) return;
+        if (heroEl.getAttribute("data-tmdb-id") !== pendingTrailerId) return;
+        if (!motion.animationsEnabled()) return;
+        var layer = heroEl.querySelector(".hero-video-bg");
+        if (!layer) return;
+        stopHeroTrailer(heroEl);
+        pendingTrailerId = heroEl.getAttribute("data-tmdb-id");
+        var playerId = "hero-yt-" + String(Date.now());
+        var mount = document.createElement("div");
+        mount.id = playerId;
+        mount.className = "hero-video-iframe";
+        layer.appendChild(mount);
+        activeVideoMount = mount;
+        layer.classList.remove("hidden");
+        var backdrops = heroEl.querySelectorAll(".hero-backdrop.is-active");
+        for (var b = 0; b < backdrops.length; b++) {
+          backdrops[b].style.opacity = "0";
+          backdrops[b].style.transition = "opacity 800ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+        }
+        videoTimeout = setTimeout(function() {
+          stopHeroTrailer(heroEl);
+        }, 3e4);
+        loadYouTubeApi(function() {
+          if (!document.getElementById(playerId)) return;
+          if (heroEl.getAttribute("data-tmdb-id") !== pendingTrailerId) return;
+          try {
+            activePlayer = new window.YT.Player(playerId, {
+              videoId: trailerKey,
+              width: "100%",
+              height: "100%",
+              playerVars: {
+                autoplay: 1,
+                controls: 0,
+                modestbranding: 1,
+                playsinline: 1,
+                rel: 0,
+                loop: 1,
+                playlist: trailerKey,
+                fs: 0,
+                iv_load_policy: 3,
+                enablejsapi: 1
+              },
+              events: {
+                onReady: function(e) {
+                  startLowVolumePlayback(e.target);
+                },
+                onStateChange: onPlayerStateChange,
+                onError: function() {
+                  stopHeroTrailer(heroEl);
+                }
+              }
+            });
+          } catch (err) {
+            stopHeroTrailer(heroEl);
+          }
+        });
+      }
+      function scheduleHeroTrailer(heroEl, item) {
+        if (trailerTimer) clearTimeout(trailerTimer);
+        trailerTimer = null;
+        stopHeroTrailer(heroEl);
+        if (!motion.animationsEnabled()) return;
+        var id = String(item.id);
+        var profile = motion.getMotionProfile();
+        pendingTrailerId = id;
+        trailerTimer = setTimeout(function() {
+          trailerTimer = null;
+          if (heroEl.getAttribute("data-tmdb-id") !== id) return;
+          var detail = detailCache[id];
+          var trailerKey = detail && detail.trailerKey ? detail.trailerKey : null;
+          if (!trailerKey) return;
+          crossfadeToTrailer(heroEl, trailerKey);
+        }, profile.heroTrailerDelayMs);
+      }
+      function fetchDetailExtras(item, heroEl, onReady) {
         var id = String(item.id);
         if (detailCache[id]) {
           if (detailCache[id].logo && !logoCache[id]) {
@@ -4288,6 +4471,7 @@ var TizenflixApp = (() => {
               metaEl.innerHTML = buildMetaHtml(item, detailCache[id].certification);
             }
           }
+          if (onReady) onReady(detailCache[id]);
           return;
         }
         if (pendingLogoFetch === id) return;
@@ -4304,6 +4488,7 @@ var TizenflixApp = (() => {
             var metaEl2 = heroEl.querySelector(".hero-meta-row");
             if (metaEl2) metaEl2.innerHTML = buildMetaHtml(item, detail.certification);
           }
+          if (onReady) onReady(detail);
         }).catch(function() {
           pendingLogoFetch = null;
         });
@@ -4312,13 +4497,18 @@ var TizenflixApp = (() => {
         var layerA = heroEl.querySelector(".hero-backdrop-a");
         var layerB = heroEl.querySelector(".hero-backdrop-b");
         if (!layerA || !layerB) return;
+        stopHeroTrailer(heroEl);
         var next = activeBackdrop === "a" ? layerB : layerA;
         var prev = activeBackdrop === "a" ? layerA : layerB;
+        next.style.opacity = "";
+        next.style.transition = "";
+        prev.style.opacity = "";
+        prev.style.transition = "";
         next.style.backgroundImage = backdropUrl ? "url('" + backdropUrl + "')" : "none";
         next.classList.add("is-active");
         prev.classList.remove("is-active", "ken-burns-active");
         activeBackdrop = activeBackdrop === "a" ? "b" : "a";
-        if (backdropUrl && motion.getMotionProfile().kenBurnsMs > 0) {
+        if (backdropUrl && motion.getMotionProfile().kenBurnsMs > 0 && motion.animationsEnabled()) {
           next.classList.add("ken-burns-active");
         }
       }
@@ -4346,7 +4536,7 @@ var TizenflixApp = (() => {
         } else {
           titleHtml = '<h1 class="hero-title">' + escapeHtml(item.title || item.name || "Untitled") + "</h1>";
         }
-        return '<div class="hero-backdrops"><div class="hero-backdrop hero-backdrop-a is-active"></div><div class="hero-backdrop hero-backdrop-b"></div></div><div class="hero-gradient"></div><div class="hero-content"><div class="hero-badge"><span class="hero-n">N</span> ' + (type === "tv" ? "SERIES" : "FILM") + '</div><div class="hero-title-wrap">' + titleHtml + '</div><div class="hero-meta-row">' + buildMetaHtml(item, detailCache[String(item.id)] && detailCache[String(item.id)].certification) + '</div><p class="hero-overview">' + escapeHtml(overview) + '</p><div class="hero-actions" data-focus-row="hero"><button type="button" class="btn btn-play focusable" data-action="play">\u25B6 Play</button><button type="button" class="btn btn-info focusable" data-action="info">More info</button></div></div>';
+        return '<div class="hero-backdrops"><div class="hero-backdrop hero-backdrop-a is-active"></div><div class="hero-backdrop hero-backdrop-b"></div><div class="hero-video-bg hidden"></div></div><div class="hero-gradient"></div><div class="hero-content"><div class="hero-badge"><span class="hero-n">N</span> ' + (type === "tv" ? "SERIES" : "FILM") + '</div><div class="hero-title-wrap">' + titleHtml + '</div><div class="hero-meta-row">' + buildMetaHtml(item, detailCache[String(item.id)] && detailCache[String(item.id)].certification) + '</div><p class="hero-overview">' + escapeHtml(overview) + '</p><div class="hero-actions" data-focus-row="hero"><button type="button" class="btn btn-play focusable" data-action="play">\u25B6 Play</button><button type="button" class="btn btn-info focusable" data-action="info">More info</button></div></div>';
       }
       function renderHero(item, handlers) {
         activeBackdrop = "a";
@@ -4361,7 +4551,7 @@ var TizenflixApp = (() => {
         var layerA = el.querySelector(".hero-backdrop-a");
         if (layerA && backdrop) {
           layerA.style.backgroundImage = "url('" + backdrop + "')";
-          if (motion.getMotionProfile().kenBurnsMs > 0) {
+          if (motion.getMotionProfile().kenBurnsMs > 0 && motion.animationsEnabled()) {
             layerA.classList.add("ken-burns-active");
           }
         }
@@ -4375,47 +4565,62 @@ var TizenflixApp = (() => {
           if (callback) callback();
           return;
         }
+        var fadeMs = motion.animationsEnabled() ? motion.getMotionProfile().fadeMs : 0;
+        if (fadeMs <= 0) {
+          applyHeroText(heroEl, item);
+          if (callback) callback();
+          return;
+        }
         content.classList.add("is-fading");
-        var fadeMs = motion.getMotionProfile().fadeMs;
         setTimeout(function() {
-          var type = getItemType(item);
-          var badge = heroEl.querySelector(".hero-badge");
-          if (badge) {
-            badge.innerHTML = '<span class="hero-n">N</span> ' + (type === "tv" ? "SERIES" : "FILM");
-          }
-          setTitleDisplay(heroEl, item, logoCache[String(item.id)] || item.logo || null);
-          var metaEl = heroEl.querySelector(".hero-meta-row");
-          if (metaEl) {
-            metaEl.innerHTML = buildMetaHtml(
-              item,
-              detailCache[String(item.id)] && detailCache[String(item.id)].certification
-            );
-          }
-          var overviewEl = heroEl.querySelector(".hero-overview");
-          if (overviewEl) overviewEl.textContent = truncate(item.overview || "", 220);
-          heroEl.setAttribute("data-tmdb-id", String(item.id));
-          heroEl.setAttribute("data-media-type", type);
-          heroEl._heroItem = item;
-          if (heroEl._heroHandlers) {
-            wireHandlers(heroEl, item, heroEl._heroHandlers);
-          }
+          applyHeroText(heroEl, item);
           content.classList.remove("is-fading");
-          fetchDetailExtras(item, heroEl);
           if (callback) callback();
         }, fadeMs);
       }
-      var updateTimer = null;
+      function applyHeroText(heroEl, item) {
+        var type = getItemType(item);
+        var badge = heroEl.querySelector(".hero-badge");
+        if (badge) {
+          badge.innerHTML = '<span class="hero-n">N</span> ' + (type === "tv" ? "SERIES" : "FILM");
+        }
+        setTitleDisplay(heroEl, item, logoCache[String(item.id)] || item.logo || null);
+        var metaEl = heroEl.querySelector(".hero-meta-row");
+        if (metaEl) {
+          metaEl.innerHTML = buildMetaHtml(
+            item,
+            detailCache[String(item.id)] && detailCache[String(item.id)].certification
+          );
+        }
+        var overviewEl = heroEl.querySelector(".hero-overview");
+        if (overviewEl) overviewEl.textContent = truncate(item.overview || "", 220);
+        heroEl.setAttribute("data-tmdb-id", String(item.id));
+        heroEl.setAttribute("data-media-type", type);
+        heroEl._heroItem = item;
+        if (heroEl._heroHandlers) {
+          wireHandlers(heroEl, item, heroEl._heroHandlers);
+        }
+        fetchDetailExtras(item, heroEl, function() {
+          scheduleHeroTrailer(heroEl, item);
+        });
+      }
       function updateHero(heroEl, item) {
         if (!heroEl || !item) return;
         if (heroEl.getAttribute("data-tmdb-id") === String(item.id)) return;
         if (updateTimer) clearTimeout(updateTimer);
-        var debounceMs = motion.getMotionProfile().heroDebounceMs;
-        updateTimer = setTimeout(function() {
+        stopHeroTrailer(heroEl);
+        var debounceMs = motion.animationsEnabled() ? motion.getMotionProfile().heroDebounceMs : 0;
+        function runUpdate() {
           updateTimer = null;
           var backdrop = item.backdrop || item.poster || "";
           crossfadeBackdrop(heroEl, backdrop);
           updateHeroText(heroEl, item);
-        }, debounceMs);
+        }
+        if (debounceMs <= 0) {
+          runUpdate();
+        } else {
+          updateTimer = setTimeout(runUpdate, debounceMs);
+        }
       }
       function resetHeroState() {
         activeBackdrop = "a";
@@ -4423,11 +4628,13 @@ var TizenflixApp = (() => {
           clearTimeout(updateTimer);
           updateTimer = null;
         }
+        stopHeroTrailer(null);
       }
       module.exports = {
         renderHero,
         updateHero,
-        resetHeroState
+        resetHeroState,
+        stopHeroTrailer
       };
     }
   });
@@ -5608,13 +5815,15 @@ var TizenflixApp = (() => {
         var bufferSec = config.getAutoplayBufferSec();
         var extraBuf = config.getExtraBuffering();
         var catalogLang = config.getCatalogLang();
+        var uiAnimations = config.getUiAnimations();
         var el = document.createElement("div");
         el.className = "screen screen-settings";
-        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-grid"><label for="gridScaleInput">Grid size: ' + gridScale + '%</label><input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' + gridScale + '" /></div><div class="settings-field" data-focus-row="settings-lang"><label for="catalogLangInput">Catalog language</label><select id="catalogLangInput" class="focusable"><option value="en"' + (catalogLang === "en" ? " selected" : "") + '>English</option><option value="de"' + (catalogLang === "de" ? " selected" : "") + '>German</option><option value="fr"' + (catalogLang === "fr" ? " selected" : "") + '>French</option><option value="it"' + (catalogLang === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (catalogLang === "es" ? " selected" : "") + '>Spanish</option></select></div><div class="settings-field" data-focus-row="settings-autoplay"><button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ' + (autoplay ? "ON" : "OFF") + '</button><label for="autoplayBufferInput">Countdown (sec): ' + bufferSec + '</label><input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' + bufferSec + '" /></div><div class="settings-field" data-focus-row="settings-buffer"><button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' + (extraBuf ? "ON" : "OFF") + '</button></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p><button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
+        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button></div><div class="settings-field settings-toggle" data-focus-row="settings-anim"><button type="button" id="uiAnimBtn" class="btn btn-info focusable">TV animation effects: ' + (uiAnimations ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-grid"><label for="gridScaleInput">Grid size: ' + gridScale + '%</label><input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' + gridScale + '" /></div><div class="settings-field" data-focus-row="settings-lang"><label for="catalogLangInput">Catalog language</label><select id="catalogLangInput" class="focusable"><option value="en"' + (catalogLang === "en" ? " selected" : "") + '>English</option><option value="de"' + (catalogLang === "de" ? " selected" : "") + '>German</option><option value="fr"' + (catalogLang === "fr" ? " selected" : "") + '>French</option><option value="it"' + (catalogLang === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (catalogLang === "es" ? " selected" : "") + '>Spanish</option></select></div><div class="settings-field" data-focus-row="settings-autoplay"><button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ' + (autoplay ? "ON" : "OFF") + '</button><label for="autoplayBufferInput">Countdown (sec): ' + bufferSec + '</label><input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' + bufferSec + '" /></div><div class="settings-field" data-focus-row="settings-buffer"><button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' + (extraBuf ? "ON" : "OFF") + '</button></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p><button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
         container.appendChild(el);
         var input = el.querySelector("#apiBaseInput");
         var saveBtn = el.querySelector("#saveApiBtn");
         var devBtn = el.querySelector("#devModeBtn");
+        var uiAnimBtn = el.querySelector("#uiAnimBtn");
         var backendBtn = el.querySelector("#backendCycleBtn");
         var gridInput = el.querySelector("#gridScaleInput");
         var langInput = el.querySelector("#catalogLangInput");
@@ -5680,6 +5889,15 @@ var TizenflixApp = (() => {
           applyDevModeFromSettings(next);
           devBtn.textContent = "Dev mode: " + (next ? "ON" : "OFF");
         });
+        if (uiAnimBtn) {
+          uiAnimBtn.addEventListener("click", function() {
+            var next = !config.getUiAnimations();
+            config.setUiAnimations(next);
+            var motion = require_motion();
+            motion.applyBodyClass();
+            uiAnimBtn.textContent = "TV animation effects: " + (next ? "ON" : "OFF");
+          });
+        }
         saveBtn.addEventListener("click", function() {
           var url = (input.value || "").trim().replace(/\/$/, "");
           if (!url) {

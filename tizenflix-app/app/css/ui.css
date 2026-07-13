@@ -206,21 +206,11 @@ body.home-spotlight-focus .screen-home > * {
   overflow: hidden;
   -webkit-transform-origin: top center;
   transform-origin: top center;
-  -webkit-transition: opacity 250ms ease-out, -webkit-transform 250ms ease-out, transform 250ms ease-out;
-  transition: opacity 250ms ease-out, transform 250ms ease-out;
+  -webkit-transition: opacity 400ms cubic-bezier(0.2, 0.8, 0.2, 1), -webkit-transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 400ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 body.home-spotlight-focus .hero {
-  min-height: 0;
-  max-height: 0;
-  opacity: 0;
-  margin-bottom: 0;
-  pointer-events: none;
-  -webkit-transform: translateY(-24px) scaleY(0);
-  transform: translateY(-24px) scaleY(0);
-}
-
-body.home-browse-focus .hero {
   min-height: 0;
   max-height: 0;
   opacity: 0;
@@ -249,8 +239,42 @@ body.home-browse-focus .hero {
   background-position: center top;
   background-color: #141414;
   opacity: 0;
-  -webkit-transition: opacity 400ms ease-in-out;
-  transition: opacity 400ms ease-in-out;
+  -webkit-transition: opacity 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.hero-video-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hero-video-bg.hidden {
+  display: none;
+}
+
+.hero-video-iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120%;
+  height: 120%;
+  border: none;
+  -webkit-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.hero-video-iframe iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: none;
 }
 
 .hero-backdrop.is-active {
@@ -306,8 +330,8 @@ body.home-browse-focus .hero {
   z-index: 2;
   max-width: 640px;
   padding: 120px 48px 48px;
-  -webkit-transition: opacity 250ms ease-out, -webkit-transform 250ms ease-out, transform 250ms ease-out;
-  transition: opacity 250ms ease-out, transform 250ms ease-out;
+  -webkit-transition: opacity 400ms cubic-bezier(0.2, 0.8, 0.2, 1), -webkit-transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 400ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .hero-content.is-fading {
@@ -468,8 +492,8 @@ body.home-browse-focus .hero {
   -webkit-align-items: flex-end;
   align-items: flex-end;
   will-change: transform;
-  -webkit-transition: -webkit-transform 250ms ease-out, transform 250ms ease-out;
-  transition: transform 250ms ease-out;
+  -webkit-transition: -webkit-transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .row-track.is-animating {
@@ -505,8 +529,8 @@ body.home-browse-focus .hero {
   border: 4px solid transparent;
   -webkit-transform-origin: center bottom;
   transform-origin: center bottom;
-  -webkit-transition: opacity 200ms ease-out, -webkit-transform 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
-  transition: opacity 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
+  -webkit-transition: opacity 300ms cubic-bezier(0.2, 0.8, 0.2, 1), -webkit-transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 300ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 300ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 300ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .card-poster.is-swapping {
@@ -561,23 +585,9 @@ body.home-browse-focus .hero {
 
 .card.tv-focus .card-poster {
   border-color: #ffffff;
-  box-shadow: 0 0 0 2px #e50914;
-  -webkit-transform: translateY(-6px);
-  transform: translateY(-6px);
-}
-
-.card.card-is-before .card-poster,
-.card.card-is-after .card-poster {
-  opacity: 0.55;
-  -webkit-transform: scale(0.94);
-  transform: scale(0.94);
-}
-
-.card.card-is-before.tv-focus .card-poster,
-.card.card-is-after.tv-focus .card-poster {
-  opacity: 1;
-  -webkit-transform: translateY(-6px);
-  transform: translateY(-6px);
+  box-shadow: 0 0 0 1px #ffffff, 0 0 16px rgba(255, 255, 255, 0.4);
+  -webkit-transform: scale(1.12);
+  transform: scale(1.12);
 }
 
 .card.focusable:focus-visible .card-poster {
@@ -737,9 +747,9 @@ body.home-spotlight-focus .main {
   max-height: 520px;
   border: none;
   box-sizing: border-box;
-  box-shadow: inset 0 0 0 3px #ffffff;
-  -webkit-transform: scale(1.02);
-  transform: scale(1.02);
+  box-shadow: inset 0 0 0 3px #ffffff, 0 0 16px rgba(255, 255, 255, 0.35);
+  -webkit-transform: scale(1.05);
+  transform: scale(1.05);
   position: relative;
   z-index: 2;
 }
@@ -905,16 +915,6 @@ body.home-spotlight-focus .main {
 
 .row-spotlight .card.tv-focus .card-poster::after {
   opacity: 1;
-}
-
-/* Neighbor posters when spotlight row is active */
-body.home-spotlight-focus .row-spotlight.is-active .card:not(.tv-focus) .card-poster {
-  width: 130px;
-  height: 195px;
-}
-
-body.home-spotlight-focus .row-spotlight.is-active .card:not(.tv-focus) {
-  width: 130px;
 }
 
 /* Progress bar on cards */
@@ -1755,6 +1755,40 @@ body.tv-perf .transition-shell-poster {
 body.tv-perf .detail-content {
   -webkit-transition-duration: 150ms;
   transition-duration: 150ms;
+}
+
+body.tv-perf .row-track {
+  -webkit-transition-duration: 200ms;
+  transition-duration: 200ms;
+}
+
+body.tv-perf .card-poster {
+  -webkit-transition-duration: 200ms;
+  transition-duration: 200ms;
+}
+
+body.tv-perf .hero-content {
+  -webkit-transition-duration: 300ms;
+  transition-duration: 300ms;
+}
+
+body.tv-perf .hero-backdrop {
+  -webkit-transition-duration: 300ms;
+  transition-duration: 300ms;
+}
+
+body.animations-off .row-track,
+body.animations-off .card-poster,
+body.animations-off .hero-content,
+body.animations-off .hero-backdrop {
+  -webkit-transition: none !important;
+  transition: none !important;
+}
+
+body.animations-off .card.tv-focus .card-poster,
+body.animations-off .row-spotlight .card.tv-focus .card-poster {
+  -webkit-transform: scale(1.12);
+  transform: scale(1.12);
 }
 
 body.tv-perf .hero-backdrop.ken-burns-active {

@@ -4,38 +4,40 @@
 
 var config = require("./config.js");
 
+var EASE_CURVE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
+
 var BROWSER = {
-  transformMs: 250,
-  opacityMs: 250,
-  scrollMs: 280,
+  transformMs: 300,
+  opacityMs: 400,
+  scrollMs: 300,
   mainScrollMs: 300,
-  heroDebounceMs: 150,
-  fadeMs: 120,
+  heroDebounceMs: 400,
+  fadeMs: 400,
   heroBackdropMs: 400,
+  heroTrailerDelayMs: 1500,
   screenEnterMs: 280,
   screenExitMs: 220,
   zonePulseMs: 50,
   handoffMs: 280,
   kenBurnsMs: 6000,
-  cardNeighborScale: 0.94,
-  cardNeighborOpacity: 0.55,
+  cardFocusScale: 1.12,
 };
 
 var TV = {
-  transformMs: 150,
-  opacityMs: 150,
-  scrollMs: 150,
-  mainScrollMs: 140,
-  heroDebounceMs: 80,
-  fadeMs: 80,
-  heroBackdropMs: 250,
+  transformMs: 200,
+  opacityMs: 250,
+  scrollMs: 200,
+  mainScrollMs: 180,
+  heroDebounceMs: 300,
+  fadeMs: 300,
+  heroBackdropMs: 300,
+  heroTrailerDelayMs: 1200,
   screenEnterMs: 150,
   screenExitMs: 120,
   zonePulseMs: 50,
   handoffMs: 150,
   kenBurnsMs: 0,
-  cardNeighborScale: 0.94,
-  cardNeighborOpacity: 0.55,
+  cardFocusScale: 1.1,
 };
 
 var ROW_ANCHOR_SPOTLIGHT_PX = 48;
@@ -74,14 +76,19 @@ function prefersReducedMotion() {
   );
 }
 
+function animationsEnabled() {
+  if (prefersReducedMotion()) return false;
+  return config.getUiAnimations();
+}
+
 function shouldSnapScroll(distance) {
-  if (prefersReducedMotion()) return true;
+  if (!animationsEnabled()) return true;
   if (isTvPerfMode() && Math.abs(distance) > 400) return true;
   return false;
 }
 
 function useCssRowScroll() {
-  return true;
+  return animationsEnabled();
 }
 
 function easeOutCubic(t) {
@@ -91,6 +98,7 @@ function easeOutCubic(t) {
 function applyBodyClass() {
   if (typeof document === "undefined" || !document.body) return;
   document.body.classList.toggle("tv-perf", isTvPerfMode());
+  document.body.classList.toggle("animations-off", !animationsEnabled());
 }
 
 function computeBrowseLaneAnchorY(main) {
@@ -110,6 +118,7 @@ function computeBrowseLaneAnchorY(main) {
 }
 
 module.exports = {
+  EASE_CURVE: EASE_CURVE,
   BROWSER: BROWSER,
   TV: TV,
   ROW_ANCHOR_SPOTLIGHT_PX: ROW_ANCHOR_SPOTLIGHT_PX,
@@ -119,6 +128,7 @@ module.exports = {
   setTvPerfMode: setTvPerfMode,
   getMotionProfile: getMotionProfile,
   prefersReducedMotion: prefersReducedMotion,
+  animationsEnabled: animationsEnabled,
   shouldSnapScroll: shouldSnapScroll,
   useCssRowScroll: useCssRowScroll,
   easeOutCubic: easeOutCubic,
