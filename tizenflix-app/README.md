@@ -30,6 +30,8 @@ npm start
 
 `npm start` builds both bundles then serves on `:3010`. See [TIZEN_COMPAT.md](TIZEN_COMPAT.md) for TV CSS/JS rules.
 
+**After changing `app/js/**` source files, always run `npm run build` before testing on TV.** The TV loads `app/dist/app.bundle.js`, not the source tree. Confirm deployment by opening the debug overlay — you should see `Tizenflix build 0.2.1-speed-gap` and `Buffer primed 4s` (not 20s) during playback.
+
 ## TizenBrew package
 
 | Field | Value |

@@ -9,11 +9,13 @@ var debug = require("../core/debug.js");
 var playbackSession = require("./playback-session.js");
 var playerChrome = require("../components/player-chrome.js");
 
-/** Vidking-only fallbacks when VixSrc (backend=auto) returns nothing playable. */
+/** Vidking-only fallbacks when TMDB-native returns nothing playable. */
 var VIDKING_SERVER_FALLBACKS = [
-  { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 45000 },
-  { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 45000 },
+  { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15000 },
+  { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15000 },
 ];
+var FAST_RESOLVE_QUERY = "onlySourceId=vixsrc&backend=tmdb-native";
+var FAST_RESOLVE_TIMEOUT_MS = 8000;
 var playSession = 0;
 var progressSaveTimer = null;
 var lastProgressSaveAt = 0;
@@ -263,6 +265,7 @@ function playResolved(play, title, onStatus, session, playOptions) {
   wrap.classList.remove("hidden");
   player.showPlaybackChrome(wrap, title || play.title || "");
   player.applySubtitles(video, play.subtitles || []);
+  loadSubtitlesAsync(play, video);
   mountChrome(stored, onStatus);
   bindProgressSaver(video);
 
@@ -278,14 +281,43 @@ function playResolved(play, title, onStatus, session, playOptions) {
   if (playOptions.startSeconds > 0) {
     sourceOptions.startSeconds = playOptions.startSeconds;
   }
+  var warmed = playbackSession.getWarmedManifest();
+  if (warmed && sources[0] && sources[0].url === warmed) {
+    sourceOptions.warmedManifestUrl = warmed;
+  }
   player.playSources(video, sources, log, wrap, title || play.title || "Playback", sourceOptions);
   return Promise.resolve();
+}
+
+function loadSubtitlesAsync(play, video) {
+  if (!play || !play.tmdbId) return;
+  var promise;
+  if (play.type === "tv") {
+    promise = api.fetchPlaySubtitlesTv(play.tmdbId, play.season, play.episode);
+  } else {
+    promise = api.fetchPlaySubtitlesMovie(play.tmdbId);
+  }
+  promise
+    .then(function (data) {
+      if (!data || !data.subtitles || !data.subtitles.length) return;
+      player.applySubtitles(video, data.subtitles);
+      playbackSession.update({ subtitles: data.subtitles });
+    })
+    .catch(function () {
+      /* non-fatal */
+    });
 }
 
 function buildMovieResolveChain(tmdbId) {
   var attempts = [
     {
-      label: "VixSrc",
+      label: "VixSrc (fast)",
+      run: function () {
+        return api.resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
+      },
+    },
+    {
+      label: "Auto",
       run: function () {
         return api.resolveMovie(tmdbId, "backend=auto", config.PLAY_RESOLVE_TIMEOUT_MS);
       },
@@ -309,7 +341,19 @@ function buildMovieResolveChain(tmdbId) {
 function buildTvResolveChain(tmdbId, season, episode) {
   var attempts = [
     {
-      label: "VixSrc",
+      label: "VixSrc (fast)",
+      run: function () {
+        return api.resolveTvEpisode(
+          tmdbId,
+          season,
+          episode,
+          FAST_RESOLVE_QUERY,
+          FAST_RESOLVE_TIMEOUT_MS
+        );
+      },
+    },
+    {
+      label: "Auto",
       run: function () {
         return api.resolveTvEpisode(
           tmdbId,
@@ -366,6 +410,68 @@ function handlePlaybackFailure(session, err) {
   throw new Error(formatPlaybackError(err));
 }
 
+function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
+  var key =
+    type === "tv"
+      ? playbackSession.prefetchKey("tv", tmdbId, season, episode)
+      : playbackSession.prefetchKey("movie", tmdbId);
+  var prefetched = playbackSession.getPrefetch(key);
+  if (prefetched && api.hasPlayableSources(prefetched)) {
+    debug.debugLog("Using prefetched resolve");
+    if (onStatus) onStatus("Starting playback…");
+    return Promise.resolve(prefetched);
+  }
+
+  var chain =
+    type === "tv"
+      ? buildTvResolveChain(tmdbId, season, episode)
+      : buildMovieResolveChain(tmdbId);
+  return resolveWithTizenFallback(chain, onStatus, session);
+}
+
+function warmManifestFromPlay(play) {
+  var sources = api.sourcesForPlay(play);
+  if (!sources.length || !sources[0].url) return;
+  var manifestUrl = sources[0].url;
+  api.warmStreamUrl(manifestUrl).then(function () {
+    playbackSession.setWarmedManifest(manifestUrl);
+    debug.debugLog("Manifest warmed: " + manifestUrl.slice(0, 80));
+  }).catch(function () {
+    /* non-fatal */
+  });
+}
+
+function prefetchMovie(tmdbId) {
+  api
+    .resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS)
+    .then(function (play) {
+      if (play && api.hasPlayableSources(play)) {
+        playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
+        warmManifestFromPlay(play);
+      }
+    })
+    .catch(function () {
+      /* non-fatal */
+    });
+}
+
+function prefetchTvEpisode(tmdbId, season, episode) {
+  api
+    .resolveTvEpisode(tmdbId, season, episode, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS)
+    .then(function (play) {
+      if (play && api.hasPlayableSources(play)) {
+        playbackSession.setPrefetch(
+          playbackSession.prefetchKey("tv", tmdbId, season, episode),
+          play
+        );
+        warmManifestFromPlay(play);
+      }
+    })
+    .catch(function () {
+      /* non-fatal */
+    });
+}
+
 function playMovie(tmdbId, title, onStatus, meta) {
   meta = meta || {};
   var startSeconds = meta.startSeconds || 0;
@@ -380,7 +486,7 @@ function playMovie(tmdbId, title, onStatus, meta) {
     if (Object.prototype.hasOwnProperty.call(meta, k)) sessionMeta[k] = meta[k];
   }
   var session = beginPlaybackRequest(sessionMeta, onStatus);
-  return resolveWithTizenFallback(buildMovieResolveChain(tmdbId), onStatus, session)
+  return resolvePlayback(tmdbId, "movie", null, null, onStatus, session)
     .then(function (play) {
       if (!isActivePlaySession(session)) return;
       if (!play || !api.hasPlayableSources(play)) {
@@ -412,7 +518,7 @@ function playTvEpisode(tmdbId, season, episode, title, onStatus, meta) {
     if (Object.prototype.hasOwnProperty.call(meta, k)) sessionMeta[k] = meta[k];
   }
   var session = beginPlaybackRequest(sessionMeta, onStatus);
-  return resolveWithTizenFallback(buildTvResolveChain(tmdbId, season, episode), onStatus, session)
+  return resolvePlayback(tmdbId, "tv", season, episode, onStatus, session)
     .then(function (play) {
       if (!isActivePlaySession(session)) return;
       if (!play || !api.hasPlayableSources(play)) {
@@ -519,7 +625,7 @@ function stop(options) {
 
   if (wasFullscreen && !options.skipRerender) {
     var router = require("../core/router.js");
-    router.rerender();
+    router.rerenderWithSidebarFocus();
   }
 }
 
@@ -531,6 +637,8 @@ module.exports = {
   playResolved: playResolved,
   playMovie: playMovie,
   playTvEpisode: playTvEpisode,
+  prefetchMovie: prefetchMovie,
+  prefetchTvEpisode: prefetchTvEpisode,
   stop: stop,
   getSession: getSession,
   switchSource: switchSource,

@@ -129,6 +129,8 @@ function render(container) {
         });
         el.appendChild(hero);
 
+        playback.prefetchTvEpisode(title.id, 1, 1);
+
         var episodeList = document.createElement("div");
         episodeList.className = "episode-list";
         el.appendChild(episodeList);
@@ -148,6 +150,7 @@ function render(container) {
           },
         });
         el.appendChild(hero);
+        playback.prefetchTvEpisode(title.id, 1, 1);
         var episodeList = document.createElement("div");
         episodeList.className = "episode-list";
         el.appendChild(episodeList);

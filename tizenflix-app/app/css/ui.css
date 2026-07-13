@@ -187,23 +187,7 @@ body.sidebar-expanded .main {
 }
 
 body.home-spotlight-focus .screen-home::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 72px;
-  right: 0;
-  height: 55vh;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(0, 160, 150, 0.18) 0%, transparent 70%),
-    radial-gradient(ellipse 70% 50% at 85% 10%, rgba(210, 160, 60, 0.14) 0%, transparent 65%);
-  -webkit-transition: opacity 300ms ease-out;
-  transition: opacity 300ms ease-out;
-}
-
-body.home-spotlight-focus.sidebar-expanded .screen-home::before {
-  left: 220px;
+  display: none;
 }
 
 body.home-spotlight-focus .screen-home > * {
@@ -586,11 +570,11 @@ body.home-spotlight-focus .hero {
 }
 
 body.home-spotlight-focus .main {
-  padding-top: 8px;
+  padding-top: 16px;
 }
 
 .row-spotlight .card {
-  width: 140px;
+  width: 130px;
   margin-right: 10px;
   -webkit-flex: 0 0 auto;
   flex: 0 0 auto;
@@ -606,8 +590,8 @@ body.home-spotlight-focus .main {
 }
 
 .row-spotlight .card-poster {
-  width: 140px;
-  height: 210px;
+  width: 130px;
+  height: 195px;
   border-radius: 6px;
   border: 3px solid transparent;
   background-size: cover;
@@ -641,8 +625,8 @@ body.home-spotlight-focus .main {
 
 /* Focused spotlight card — landscape hero */
 .row-spotlight .card.tv-focus {
-  width: 62vw;
-  max-width: 920px;
+  width: 52vw;
+  max-width: 960px;
   z-index: 10;
   margin-right: 14px;
   border: none;
@@ -653,9 +637,9 @@ body.home-spotlight-focus .main {
 
 .row-spotlight .card.tv-focus .card-poster {
   width: 100%;
-  height: 33vh;
-  min-height: 280px;
-  max-height: 400px;
+  height: 44vh;
+  min-height: 320px;
+  max-height: 520px;
   border: none;
   box-sizing: border-box;
   box-shadow: inset 0 0 0 3px #ffffff;
@@ -822,12 +806,31 @@ body.home-spotlight-focus .main {
 
 /* Neighbor posters when spotlight row is active */
 body.home-spotlight-focus .row-spotlight.is-active .card:not(.tv-focus) .card-poster {
-  width: 140px;
-  height: 210px;
+  width: 130px;
+  height: 195px;
 }
 
 body.home-spotlight-focus .row-spotlight.is-active .card:not(.tv-focus) {
-  width: 140px;
+  width: 130px;
+}
+
+/* Progress bar on cards */
+.card-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  z-index: 4;
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.card-progress-fill {
+  height: 100%;
+  background-color: #e50914;
 }
 
 /* Remove legacy spotlight rules */

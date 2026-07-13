@@ -68,7 +68,8 @@ export function mergeServerResults(
   results: ServerResult[],
   season?: string,
   episode?: string,
-  title?: string
+  title?: string,
+  imdbId?: string
 ): PlayResponse {
   const allSources: PlayableSource[] = [];
   let subtitles: PlayResponse["subtitles"] = [];
@@ -86,6 +87,7 @@ export function mergeServerResults(
 
   return {
     title,
+    imdbId,
     type,
     tmdbId,
     season,
@@ -208,7 +210,8 @@ export async function resolvePlayableSources(
     results,
     type === "tv" ? season : undefined,
     type === "tv" ? episode : undefined,
-    meta.title
+    meta.title,
+    meta.imdbId
   );
 
   if (!play.sources.length) {

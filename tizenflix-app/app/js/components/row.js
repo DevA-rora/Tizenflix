@@ -8,6 +8,7 @@ var motion = require("../core/motion.js");
 
 var rowCounter = 0;
 var spotlightDetailCache = {};
+var episodeTitleCache = {};
 
 function truncate(text, max) {
   return card.truncate(text, max);
@@ -36,23 +37,70 @@ function syncSpotlightLayout(row) {
   syncSpotlightDetailPosition(row);
 }
 
+function getRowVariant(row) {
+  return row.getAttribute("data-row-variant") || "";
+}
+
+function fetchEpisodeTitle(item) {
+  if (!item || item.type !== "tv" || item.season == null || item.episode == null) {
+    return Promise.resolve(null);
+  }
+  var cacheKey = item.id + ":" + item.season + ":" + item.episode;
+  if (episodeTitleCache[cacheKey]) {
+    return Promise.resolve(episodeTitleCache[cacheKey]);
+  }
+  return api
+    .getEpisodes(item.id, item.season)
+    .then(function (data) {
+      var episodes = data.episodes || data.items || [];
+      for (var i = 0; i < episodes.length; i++) {
+        if (Number(episodes[i].episode) === Number(item.episode)) {
+          var name = episodes[i].title || episodes[i].name || "";
+          if (name) episodeTitleCache[cacheKey] = name;
+          return name || null;
+        }
+      }
+      return null;
+    })
+    .catch(function () {
+      return null;
+    });
+}
+
 function updateSpotlightMeta(row, item) {
   if (!row || !item) return;
   var focused = row.querySelector(".card.tv-focus");
   var panel = row.querySelector(".row-spotlight-detail");
   if (!focused || !panel) return;
 
+  var variant = getRowVariant(row);
   var id = String(item.id);
   var extras = spotlightDetailCache[id] || {};
+  var cardOptions = { variant: variant };
 
   panel.classList.add("is-fading");
   var fadeMs = motion.getMotionProfile().fadeMs;
   setTimeout(function () {
-    card.updateSpotlightCard(focused, item, extras);
-    card.updateSpotlightDetailPanel(panel, item, extras);
+    card.updateSpotlightCard(focused, item, extras, cardOptions);
+    card.updateSpotlightDetailPanel(panel, item, extras, cardOptions);
     panel.classList.remove("is-fading");
     syncSpotlightDescribedBy(row);
   }, fadeMs);
+
+  if (variant === "continue-watching") {
+    if (!item.episodeTitle && item.type === "tv") {
+      fetchEpisodeTitle(item).then(function (episodeTitle) {
+        if (!episodeTitle) return;
+        item.episodeTitle = episodeTitle;
+        var current = row.querySelector(".card.tv-focus");
+        if (current && current.getAttribute("data-tmdb-id") === id) {
+          card.updateSpotlightCard(current, item, extras, cardOptions);
+          card.updateSpotlightDetailPanel(panel, item, extras, cardOptions);
+        }
+      });
+    }
+    return;
+  }
 
   if (spotlightDetailCache[id]) return;
 
@@ -69,8 +117,8 @@ function updateSpotlightMeta(row, item) {
       spotlightDetailCache[id] = cached;
       var current = row.querySelector(".card.tv-focus");
       if (current && current.getAttribute("data-tmdb-id") === id) {
-        card.updateSpotlightCard(current, item, cached);
-        card.updateSpotlightDetailPanel(panel, item, cached);
+        card.updateSpotlightCard(current, item, cached, cardOptions);
+        card.updateSpotlightDetailPanel(panel, item, cached, cardOptions);
       }
     })
     .catch(function () {
@@ -78,9 +126,24 @@ function updateSpotlightMeta(row, item) {
     });
 }
 
+function buildSpotlightDetailHtml(first, variant) {
+  if (variant === "continue-watching") {
+    return card.buildContinueWatchingDetailHtml(first);
+  }
+  return (
+    '<p class="card-spotlight-meta-line">' +
+    card.buildMetaHtml(first, {}) +
+    "</p>" +
+    '<p class="card-spotlight-overview">' +
+    escapeHtml(truncate(first.overview || "", 200)) +
+    "</p>"
+  );
+}
+
 function createRow(title, items, onSelect, options) {
   options = options || {};
   var layout = options.layout || "standard";
+  var variant = options.variant || "";
 
   rowCounter += 1;
   var rowId = "row-" + rowCounter;
@@ -89,6 +152,10 @@ function createRow(title, items, onSelect, options) {
   row.classList.add("row-" + layout);
   row.setAttribute("data-focus-row", rowId);
   row.setAttribute("data-row-layout", layout);
+  if (variant) {
+    row.setAttribute("data-row-variant", variant);
+    if (variant === "continue-watching") row.classList.add("row-continue-watching");
+  }
 
   var heading = document.createElement("h2");
   heading.className = "row-title";
@@ -104,8 +171,11 @@ function createRow(title, items, onSelect, options) {
     var track = document.createElement("div");
     track.className = "row-track row-spotlight-track";
 
+    var cardOptions = { layout: layout };
+    if (variant) cardOptions.variant = variant;
+
     for (var i = 0; i < items.length; i++) {
-      track.appendChild(card.createCard(items[i], onSelect, { layout: layout }));
+      track.appendChild(card.createCard(items[i], onSelect, cardOptions));
     }
 
     trackOuter.appendChild(track);
@@ -117,13 +187,7 @@ function createRow(title, items, onSelect, options) {
     detailPanel.className = "row-spotlight-detail";
     detailPanel.id = detailId;
     var first = items[0];
-    detailPanel.innerHTML =
-      '<p class="card-spotlight-meta-line">' +
-      card.buildMetaHtml(first, {}) +
-      "</p>" +
-      '<p class="card-spotlight-overview">' +
-      escapeHtml(truncate(first.overview || "", 200)) +
-      "</p>";
+    detailPanel.innerHTML = buildSpotlightDetailHtml(first, variant);
     body.appendChild(detailPanel);
 
     row.appendChild(body);
@@ -141,7 +205,9 @@ function createRow(title, items, onSelect, options) {
     standardTrack.className = "row-track";
 
     for (var j = 0; j < items.length; j++) {
-      standardTrack.appendChild(card.createCard(items[j], onSelect, { layout: layout }));
+      var standardCardOptions = { layout: layout };
+      if (variant) standardCardOptions.variant = variant;
+      standardTrack.appendChild(card.createCard(items[j], onSelect, standardCardOptions));
     }
 
     standardOuter.appendChild(standardTrack);
@@ -177,6 +243,7 @@ function escapeHtml(text) {
 function resetRowCounter() {
   rowCounter = 0;
   spotlightDetailCache = {};
+  episodeTitleCache = {};
 }
 
 module.exports = {

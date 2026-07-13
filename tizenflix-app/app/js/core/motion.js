@@ -24,6 +24,9 @@ var TV = {
   heroBackdropMs: 250,
 };
 
+var ROW_ANCHOR_SPOTLIGHT_PX = 48;
+var ROW_ANCHOR_FALLBACK_PX = 140;
+
 var tvPerfForced = null;
 
 function queryTvPerfOverride() {
@@ -68,6 +71,8 @@ function applyBodyClass() {
 module.exports = {
   BROWSER: BROWSER,
   TV: TV,
+  ROW_ANCHOR_SPOTLIGHT_PX: ROW_ANCHOR_SPOTLIGHT_PX,
+  ROW_ANCHOR_FALLBACK_PX: ROW_ANCHOR_FALLBACK_PX,
   isTvPerfMode: isTvPerfMode,
   setTvPerfMode: setTvPerfMode,
   getMotionProfile: getMotionProfile,

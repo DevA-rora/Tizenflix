@@ -286,6 +286,7 @@ function createCard(item, onSelect, options) {
       '<div class="card-poster" style="background-image:url(\'' +
       escapeHtml(poster) +
       "')\">" +
+      (isCw ? buildProgressHtml(item) : "") +
       "</div>" +
       '<span class="card-title">' +
       escapeHtml(title) +

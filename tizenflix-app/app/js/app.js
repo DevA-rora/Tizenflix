@@ -2,6 +2,8 @@
  * Tizenflix app entry — bootstrap router and global handlers.
  */
 
+var APP_BUILD = "0.2.1-speed-gap";
+
 var router = require("./core/router.js");
 var focus = require("./core/focus.js");
 var debug = require("./core/debug.js");
@@ -94,6 +96,10 @@ function wireGlobalKeys() {
       }
       if (router.back()) {
         e.preventDefault();
+        return;
+      }
+      if (focus.handleBrowseBack()) {
+        e.preventDefault();
       }
       return;
     }
@@ -125,6 +131,7 @@ function init() {
   applyDevMode();
 
   debug.debugClear();
+  debug.debugLog("Tizenflix build " + APP_BUILD);
   debug.debugLog("Tizenflix — Tizen TV: " + (player.isTizenTv() ? "yes" : "no"));
 
   router.register("home", browseScreen("home"));

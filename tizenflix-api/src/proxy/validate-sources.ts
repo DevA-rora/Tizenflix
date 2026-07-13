@@ -12,6 +12,8 @@ export interface ValidatePlayOptions {
   reportProvider?: (provider: string, success: boolean) => void;
   providerScore?: (provider: string) => number | null;
   tizenProfile?: boolean;
+  /** Max m3u8 sources to probe before respond; rest are unverified fallbacks. */
+  probeLimit?: number;
 }
 
 function parseBandwidthFromLabel(label: string): number {
@@ -179,6 +181,9 @@ export async function validatePlaySources(
 
   const m3u8Sources = play.sources.filter((s) => s.type === "m3u8");
   const nonM3u8 = play.sources.filter((s) => s.type !== "m3u8");
+  const probeLimit = options.probeLimit ?? Number.POSITIVE_INFINITY;
+  const toProbe = m3u8Sources.slice(0, probeLimit);
+  const unprobedM3u8 = m3u8Sources.slice(probeLimit);
 
   if (!options.tizenProfile) {
     for (const source of nonM3u8) {
@@ -190,8 +195,16 @@ export async function validatePlaySources(
   }
 
   const probeResults = await Promise.all(
-    m3u8Sources.map((source) => probeSource(source, publicBase, fetchImpl, options))
+    toProbe.map((source) => probeSource(source, publicBase, fetchImpl, options))
   );
+
+  for (const source of unprobedM3u8) {
+    rankedPlayable.push({
+      source,
+      probe: { ok: true, status: 200 },
+      healthScore: options.providerScore?.(source.provider) ?? 0.5,
+    });
+  }
 
   for (const result of probeResults) {
     if (result.ranked) {

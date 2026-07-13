@@ -132,4 +132,38 @@ describe("validatePlaySources tizen profile", () => {
     expect(result.warnings?.some((w) => w.includes("mp4 is not supported"))).toBe(true);
     expect(result.warnings?.some((w) => w.includes("Hydrogen"))).toBe(true);
   });
+
+  it("probes only probeLimit sources and keeps the rest as fallbacks", async () => {
+    const fetchImpl = mockFetch();
+    const play: PlayResponse = {
+      ...samplePlay(),
+      sources: [
+        {
+          id: "vixsrc-720p-0",
+          provider: "VixSrc/Server1",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/vixsrc/720p.m3u8",
+          priority: 0,
+        },
+        {
+          id: "oxygen-720p-0",
+          provider: "Oxygen",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/oxygen/720p.m3u8",
+          priority: 2,
+        },
+      ],
+      recommended: "vixsrc-720p-0",
+    };
+
+    const result = await validatePlaySources(play, PUBLIC_BASE, fetchImpl, {
+      tizenProfile: true,
+      probeLimit: 1,
+    });
+
+    expect(result.sources).toHaveLength(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
 });

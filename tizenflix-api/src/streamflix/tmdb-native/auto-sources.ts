@@ -1,10 +1,7 @@
 /** TMDB-native sources included in `backend=auto` (priority order). */
 export const AUTO_TMDB_SOURCE_IDS = [
   "vixsrc",
-  "twoembed",
-  "vidsrcnet",
   "vidzee",
-  "vidsrcto",
   "vidrock",
 ] as const;
 

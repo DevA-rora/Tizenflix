@@ -2,8 +2,12 @@ import { resolvePlayableSources } from "../normalize/to-play-response.js";
 import {
   autoTmdbSourceIdsForType,
   resolveTmdbNativeFromOptions,
+  resolveTmdbNativeRaceFromOptions,
 } from "../streamflix/tmdb-native/resolve.js";
 import type { PlayResponse, ResolveOptions } from "../types.js";
+
+const TIER1_TIMEOUT_MS = 4_000;
+const TIER2_TIMEOUT_MS = 8_000;
 
 function tagBackend(play: PlayResponse, backend: PlayResponse["backend"], ms: number): PlayResponse {
   return { ...play, backend, resolveMs: ms };
@@ -15,72 +19,63 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ result: T; ms: number }
   return { result, ms: Date.now() - t0 };
 }
 
-function mergeAutoResults(
-  tmdbNative: PlayResponse | null,
-  vidking: PlayResponse | null,
-  tmdbNativeMs: number,
-  vidkingMs: number
-): PlayResponse {
-  if (!tmdbNative && !vidking) {
-    throw new Error("No playable sources from TMDB-native or Vidking backends");
+function hasPlayableSources(play: PlayResponse | null): play is PlayResponse {
+  return Boolean(play?.sources?.length);
+}
+
+async function resolveAutoTiered(
+  options: ResolveOptions,
+  fetchImpl: typeof fetch
+): Promise<PlayResponse> {
+  const autoIds = options.onlySourceIds ?? options.sources ?? autoTmdbSourceIdsForType(options.type);
+
+  // Tier 1: VixSrc only (fast path)
+  try {
+    const { result, ms } = await timed(() =>
+      resolveTmdbNativeFromOptions(
+        {
+          ...options,
+          onlySourceIds: ["vixsrc"],
+          onePerSource: true,
+          sourceTimeoutMs: TIER1_TIMEOUT_MS,
+        },
+        fetchImpl
+      )
+    );
+    if (hasPlayableSources(result)) {
+      return tagBackend({ ...result, backend: "auto" }, "auto", ms);
+    }
+  } catch {
+    /* Tier 2 */
   }
-  if (!vidking) {
-    return tagBackend({ ...tmdbNative!, backend: "auto" }, "auto", tmdbNativeMs);
-  }
-  if (!tmdbNative?.sources.length) {
-    const sources = vidking.sources.map((s) => ({
-      ...s,
-      priority: s.priority + 1000,
-    }));
-    return {
-      ...vidking,
-      sources,
-      recommended: sources[0]?.id ?? null,
-      warnings: [
-        ...(vidking.warnings ?? []),
-        `auto: tmdb-native unavailable, vidking ${vidkingMs}ms`,
-      ],
-      backend: "auto",
-      resolveMs: Math.max(tmdbNativeMs, vidkingMs),
-    };
+
+  // Tier 2: remaining TMDB-native sources (race)
+  const tier2Ids = autoIds.filter((id) => id !== "vixsrc");
+  if (tier2Ids.length) {
+    try {
+      const { result, ms } = await timed(() =>
+        resolveTmdbNativeRaceFromOptions(options, tier2Ids, TIER2_TIMEOUT_MS, fetchImpl)
+      );
+      if (hasPlayableSources(result)) {
+        return tagBackend({ ...result, backend: "auto" }, "auto", ms);
+      }
+    } catch {
+      /* Tier 3 */
+    }
   }
 
-  const sources = [
-    ...tmdbNative.sources,
-    ...vidking.sources.map((s) => ({
-      ...s,
-      priority: s.priority + 1000,
-    })),
-  ];
-
-  const subtitleKeys = new Set<string>();
-  const subtitles = [...tmdbNative.subtitles, ...vidking.subtitles].filter((sub) => {
-    const key = `${sub.language}::${sub.url}`;
-    if (subtitleKeys.has(key)) return false;
-    subtitleKeys.add(key);
-    return true;
-  });
-
-  const warnings = [
-    ...(tmdbNative.warnings ?? []),
-    ...(vidking.warnings ?? []),
-    `auto: tmdb-native ${tmdbNativeMs}ms, vidking ${vidkingMs}ms`,
-  ];
-
-  return {
-    title: vidking.title ?? tmdbNative.title,
-    type: vidking.type,
-    tmdbId: vidking.tmdbId,
-    season: vidking.season,
-    episode: vidking.episode,
-    sources,
-    recommended: sources[0]?.id ?? null,
-    subtitles,
-    nextEpisode: vidking.nextEpisode ?? tmdbNative.nextEpisode,
-    warnings,
-    backend: "auto",
-    resolveMs: Math.max(tmdbNativeMs, vidkingMs),
-  };
+  // Tier 3: Vidking first-success
+  const { result, ms } = await timed(() =>
+    resolvePlayableSources(
+      {
+        ...options,
+        allServers: false,
+        firstSuccessOnly: true,
+      },
+      fetchImpl
+    )
+  );
+  return tagBackend({ ...result, backend: "auto" }, "auto", ms);
 }
 
 export async function resolveWithBackend(
@@ -109,36 +104,21 @@ export async function resolveWithBackend(
     return tagBackend(result, "streamflix", ms);
   }
 
-  const autoIds =
-    options.onlySourceIds ??
-    options.sources ??
-    autoTmdbSourceIdsForType(options.type);
-
-  const [tmdbSettled, vidkingSettled] = await Promise.allSettled([
-    timed(() =>
+  if (options.onlySourceId || options.onlySourceIds?.length) {
+    const { result, ms } = await timed(() =>
       resolveTmdbNativeFromOptions(
         {
           ...options,
-          onlySourceIds: autoIds,
           onePerSource: true,
-          mergeOrder: autoIds,
+          mergeOrder: options.onlySourceIds ?? (options.onlySourceId ? [options.onlySourceId] : undefined),
         },
         fetchImpl
       )
-    ),
-    timed(() => resolvePlayableSources(options, fetchImpl)),
-  ]);
+    );
+    return tagBackend({ ...result, backend: "auto" }, "auto", ms);
+  }
 
-  const tmdbNative =
-    tmdbSettled.status === "fulfilled" ? tmdbSettled.value.result : null;
-  const vidking =
-    vidkingSettled.status === "fulfilled" ? vidkingSettled.value.result : null;
-  const tmdbNativeMs =
-    tmdbSettled.status === "fulfilled" ? tmdbSettled.value.ms : 0;
-  const vidkingMs =
-    vidkingSettled.status === "fulfilled" ? vidkingSettled.value.ms : 0;
-
-  return mergeAutoResults(tmdbNative, vidking, tmdbNativeMs, vidkingMs);
+  return resolveAutoTiered(options, fetchImpl);
 }
 
 export function parseBackendParam(raw: unknown): ResolveOptions["backend"] {

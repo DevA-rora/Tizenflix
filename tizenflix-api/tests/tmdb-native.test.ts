@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { getTmdbNativeSources, TMDB_NATIVE_SOURCES } from "../src/streamflix/tmdb-native/registry.js";
 import { preflightSource } from "../src/streamflix/tmdb-native/preflight.js";
+import { resolveTmdbNativeRace } from "../src/streamflix/tmdb-native/resolve.js";
 
 describe("tmdb-native registry", () => {
+  it("exports race resolve helper", () => {
+    expect(typeof resolveTmdbNativeRace).toBe("function");
+  });
+
   it("lists 12 English-global sources", () => {
     expect(TMDB_NATIVE_SOURCES.length).toBe(12);
   });

@@ -55,14 +55,7 @@ describe("vidsrc.to crypto", () => {
 });
 
 describe("auto sources", () => {
-  it("lists six TMDB-native backups in priority order", () => {
-    expect(AUTO_TMDB_SOURCE_IDS).toEqual([
-      "vixsrc",
-      "twoembed",
-      "vidsrcnet",
-      "vidzee",
-      "vidsrcto",
-      "vidrock",
-    ]);
+  it("lists proven TMDB-native backups in priority order", () => {
+    expect(AUTO_TMDB_SOURCE_IDS).toEqual(["vixsrc", "vidzee", "vidrock"]);
   });
 });

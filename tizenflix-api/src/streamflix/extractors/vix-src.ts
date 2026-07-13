@@ -1,6 +1,11 @@
+import {
+  INLINE_MANIFEST_PREFIX,
+  storeInlineManifest,
+} from "../../cache/inline-manifest-cache.js";
 import type { ExtractorDef } from "../types.js";
 import { fetchJson, fetchText } from "../http.js";
 import { BROWSER_UA } from "../http.js";
+import { patchVixSrcPlaylist } from "./vix-src-playlist.js";
 
 const MAIN_URL = "https://vixsrc.to";
 
@@ -65,12 +70,32 @@ async function extractVixSrc(link: string, lang = "en") {
   params.set("lang", lang);
 
   const playlistUrl = `${MAIN_URL}/playlist/${videoId}.m3u8?${params.toString()}`;
+  const referer = `${MAIN_URL}/${embedPath}`;
+
+  let source = playlistUrl;
+  try {
+    const playlistBody = await fetchText(playlistUrl, {
+      headers: {
+        ...headers,
+        Referer: referer,
+        Accept: "*/*",
+      },
+      referer,
+    });
+    if (playlistBody.trimStart().startsWith("#EXTM3U")) {
+      const patched = patchVixSrcPlaylist(playlistBody, playlistUrl, lang);
+      const manifestToken = storeInlineManifest(patched, playlistUrl, referer);
+      source = `${INLINE_MANIFEST_PREFIX}${manifestToken}`;
+    }
+  } catch {
+    /* fall back to remote playlist URL */
+  }
 
   return {
-    source: playlistUrl,
+    source,
     subtitles: [],
     headers: {
-      Referer: `${MAIN_URL}/${embedPath}`,
+      Referer: referer,
       "User-Agent": BROWSER_UA,
     },
     type: "m3u8" as const,

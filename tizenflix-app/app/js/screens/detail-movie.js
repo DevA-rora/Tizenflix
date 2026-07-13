@@ -56,6 +56,8 @@ function render(container) {
 
       el.appendChild(hero);
 
+      playback.prefetchMovie(params.tmdbId);
+
       var playBtn = el.querySelector("#detailPlayBtn");
       if (playBtn) focus.focusElement(playBtn);
     })

@@ -95,8 +95,9 @@ function bindSubtitleButton(video) {
 }
 
 var READY_TIMEOUT_MS = 12000;
-var HLS_PRIME_BUFFER_SEC = 20;
-var HLS_PRIME_TIMEOUT_MS = 25000;
+var HLS_PRIME_BUFFER_SEC = 4;
+var HLS_PRIME_TIMEOUT_MS = 8000;
+var HLS_EARLY_START_BUFFER_SEC = 2;
 var MAX_NON_FATAL_RECOVERIES = 8;
 
 function beginPlaySession() {
@@ -359,6 +360,7 @@ function isProxiedHls(url) {
 }
 
 function prefersHlsJsFirst(url) {
+  if (prefersNativeHls()) return false;
   return isProxiedHls(url);
 }
 
@@ -473,6 +475,11 @@ function startHlsPlaybackWhenBuffered(video, videoWrap, title, onLog, session, h
       started = true;
       debug.debugLog("HLS buffer primed " + Math.floor(ahead) + "s (" + (label || "ready") + ")");
       if (onLog) onLog("Buffer primed " + Math.floor(ahead) + "s — starting smooth playback");
+      attemptPlay(video, onLog);
+    } else if (ahead >= HLS_EARLY_START_BUFFER_SEC && label === "frag") {
+      started = true;
+      debug.debugLog("HLS early start " + Math.floor(ahead) + "s after first fragment");
+      if (onLog) onLog("Starting with " + Math.floor(ahead) + "s buffered");
       attemptPlay(video, onLog);
     }
   }
@@ -784,6 +791,11 @@ function playSources(video, sources, onLog, videoWrap, title, options) {
   currentProvider = sources[0] && sources[0].provider ? sources[0].provider : null;
   playbackReported = false;
   nonFatalRecoveries = 0;
+
+  if (options.warmedManifestUrl && sources[0] && sources[0].url === options.warmedManifestUrl) {
+    debug.debugLog("Using warmed manifest");
+    if (onLog) onLog("Using warmed manifest");
+  }
 
   function tryNext(reason) {
     if (reason) {

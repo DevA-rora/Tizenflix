@@ -87,6 +87,28 @@ function saveProgress(payload) {
   return config.apiPost("/progress", payload);
 }
 
+function warmStreamUrl(url) {
+  return config.fetchWithTimeout(url, 8000).then(function (res) {
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.text();
+  });
+}
+
+function fetchPlaySubtitlesMovie(tmdbId) {
+  return config.apiGet("/play/subtitles/movie/" + encodeURIComponent(tmdbId));
+}
+
+function fetchPlaySubtitlesTv(tmdbId, season, episode) {
+  return config.apiGet(
+    "/play/subtitles/tv/" +
+      encodeURIComponent(tmdbId) +
+      "/" +
+      encodeURIComponent(season) +
+      "/" +
+      encodeURIComponent(episode)
+  );
+}
+
 module.exports = {
   getBase: getBase,
   setBase: config.setApiBase,
@@ -106,4 +128,7 @@ module.exports = {
   getProviders: getProviders,
   continueWatching: continueWatching,
   saveProgress: saveProgress,
+  warmStreamUrl: warmStreamUrl,
+  fetchPlaySubtitlesMovie: fetchPlaySubtitlesMovie,
+  fetchPlaySubtitlesTv: fetchPlaySubtitlesTv,
 };

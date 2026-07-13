@@ -80,6 +80,7 @@ function toPlayResponse(
 
   return {
     title: opts.title,
+    imdbId: opts.imdbId,
     type: opts.type,
     tmdbId: opts.tmdbId,
     season: opts.type === "tv" ? opts.season : undefined,
@@ -286,6 +287,77 @@ export async function resolveTmdbNativePlay(
   return play;
 }
 
+/** Race TMDB-native sources — return as soon as the first HLS source succeeds. */
+export async function resolveTmdbNativeRace(
+  opts: TmdbNativeResolveOptions,
+  sourceIds: string[],
+  raceTimeoutMs: number
+): Promise<PlayResponse & { sourceResults?: TmdbNativeSourceResult[] }> {
+  const sources = sourceIds
+    .map((id) => getTmdbNativeSourceById(id))
+    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+  if (!sources.length) {
+    throw new Error("No TMDB-native sources to race");
+  }
+
+  const perSourceTimeout = opts.sourceTimeoutMs ?? raceTimeoutMs;
+  const inFlight = sources.map((s) => resolveOneSource(s, opts, perSourceTimeout));
+
+  const winner = await new Promise<TmdbNativeSourceResult | null>((resolve) => {
+    let settled = false;
+    let pending = inFlight.length;
+
+    const finish = (result: TmdbNativeSourceResult | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => finish(null), raceTimeoutMs);
+
+    for (const p of inFlight) {
+      p.then((result) => {
+        if (!settled && result.ok && result.hls > 0) {
+          finish(result);
+          return;
+        }
+        pending -= 1;
+        if (pending === 0) finish(null);
+      }).catch(() => {
+        pending -= 1;
+        if (pending === 0) finish(null);
+      });
+    }
+  });
+
+  if (winner?.resolved?.length) {
+    const merged = pickBestPerSource([winner]);
+    const play = toPlayResponse(opts, merged);
+    play.sourceResults = [winner];
+    return play;
+  }
+
+  const results = await Promise.all(inFlight);
+  const mergeOrder = sourceIds;
+  const merged = mergeByOrder(results, mergeOrder, opts.onePerSource ?? true);
+  const play = toPlayResponse(opts, merged);
+  play.sourceResults = results;
+  const warnings = results.filter((r) => !r.ok).map((r) => `${r.sourceName}: ${r.error}`);
+  if (warnings.length) play.warnings = warnings;
+
+  if (!merged.length) {
+    const err = new Error(
+      results.map((r) => `${r.sourceName}: ${r.error ?? "unknown"}`).join("; ")
+    ) as Error & { sourceResults?: typeof results };
+    err.sourceResults = results;
+    throw err;
+  }
+
+  return play;
+}
+
 export function autoTmdbSourceIdsForType(type: "movie" | "tv"): string[] {
   return AUTO_TMDB_SOURCE_IDS.filter((id) => {
     const src = getTmdbNativeSourceById(id);
@@ -316,4 +388,35 @@ export async function resolveTmdbNativeFromOptions(
     mergeOrder: options.mergeOrder,
     sourceTimeoutMs: options.sourceTimeoutMs,
   });
+}
+
+export async function resolveTmdbNativeRaceFromOptions(
+  options: import("../../types.js").ResolveOptions & {
+    title?: string;
+    imdbId?: string;
+    year?: string | number;
+  },
+  sourceIds: string[],
+  raceTimeoutMs: number,
+  fetchImpl: typeof fetch = fetch
+): Promise<PlayResponse> {
+  const { fetchMetadata } = await import("../../api/metadata.js");
+  const meta = await fetchMetadata(options.type, options.tmdbId, fetchImpl);
+
+  return resolveTmdbNativeRace(
+    {
+      type: options.type,
+      tmdbId: options.tmdbId,
+      season: options.season,
+      episode: options.episode,
+      title: meta.title,
+      year: meta.year,
+      imdbId: meta.imdbId,
+      lang: "en",
+      onePerSource: true,
+      sourceTimeoutMs: raceTimeoutMs,
+    },
+    sourceIds,
+    raceTimeoutMs
+  );
 }

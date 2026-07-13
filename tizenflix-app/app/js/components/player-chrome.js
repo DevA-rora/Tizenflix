@@ -143,6 +143,7 @@ function closePanel() {
     panel.innerHTML = "";
   }
   resetHideTimer();
+  playerFocus.focusDefault();
 }
 
 function closeRail() {
@@ -151,6 +152,7 @@ function closeRail() {
   var rail = chromeEl.querySelector(".player-rail");
   if (rail) rail.classList.add("hidden");
   resetHideTimer();
+  playerFocus.focusDefault();
 }
 
 function openPanel(name) {

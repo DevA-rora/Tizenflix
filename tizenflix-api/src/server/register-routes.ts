@@ -4,14 +4,22 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AppConfig } from "../config.js";
 import { requireTmdbKey } from "../config.js";
+import {
+  getCachedPlay,
+  playResolveCacheKey,
+  setCachedPlay,
+} from "../cache/play-resolve-cache.js";
+import { getInlineManifest, isInlineManifestSource } from "../cache/inline-manifest-cache.js";
 import { DownloadService, pickSource } from "../download/jobs.js";
 import { buildProxyUrl } from "../proxy/proxy-url.js";
 import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from "../proxy/upstream.js";
+import { rewriteM3u8 } from "../proxy/rewrite-m3u8.js";
 import { validatePlaySources } from "../proxy/validate-sources.js";
 import { resolvePlayableSources, listProviders } from "../normalize/to-play-response.js";
 import { parseBackendParam, parseSourcesParam, resolveWithBackend } from "../normalize/resolve-backend.js";
 import { fetchMetadata } from "../api/metadata.js";
 import { enrichWithOpenSubtitles } from "../subtitles/opensubtitles.js";
+import type { Metadata, PlayResponse } from "../types.js";
 import { ProgressService } from "../store/progress.js";
 import { ProviderHealthService } from "../store/provider-health.js";
 import { getAllProviders } from "../streamflix/providers/registry.js";
@@ -28,6 +36,10 @@ export interface RouteContext {
 }
 
 function proxyWrap(publicBase: string, url: string, referer?: string): string {
+  if (isInlineManifestSource(url)) {
+    const token = url.slice("tizenflix-inline-manifest:".length);
+    return `${publicBase.replace(/\/$/, "")}/proxy/inline-manifest/${token}`;
+  }
   return buildProxyUrl(publicBase, url, referer);
 }
 
@@ -370,24 +382,72 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   }
 
   async function validateAndRespond(
-    play: Awaited<ReturnType<typeof resolvePlayableSources>>,
+    play: PlayResponse,
     res: Response,
-    tizenProfile: boolean
+    tizenProfile: boolean,
+    options: {
+      meta?: Metadata;
+      includeSubtitles?: boolean;
+      probeLimit?: number;
+      skipValidation?: boolean;
+    } = {}
   ) {
-    const meta = await fetchMetadata(play.type, play.tmdbId);
-    const enriched = await enrichWithOpenSubtitles(play, {
-      imdbId: meta.imdbId,
-      title: meta.title,
-    }, publicBase);
+    const meta =
+      options.meta ??
+      (play.imdbId
+        ? { imdbId: play.imdbId, title: play.title ?? "", year: "" }
+        : await fetchMetadata(play.type, play.tmdbId));
+
+    let enriched = play;
+    if (options.includeSubtitles) {
+      enriched = await enrichWithOpenSubtitles(
+        play,
+        { imdbId: meta.imdbId, title: meta.title },
+        publicBase
+      );
+    }
+
+    if (options.skipValidation) {
+      const fast = {
+        ...enriched,
+        recommended: enriched.recommended ?? enriched.sources[0]?.id ?? null,
+      };
+      res.json(withProxiedUrls(publicBase, fast));
+      return;
+    }
 
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
     const validated = await validatePlaySources(enriched, publicBase, fetch, {
       tizenProfile,
+      probeLimit: options.probeLimit ?? 1,
       reportProvider: (provider, success) => providerHealth.report(provider, success),
       providerScore: providerScoreFromList(providerList),
     });
     res.json(withProxiedUrls(publicBase, validated));
+  }
+
+  async function respondWithPlaySubtitles(
+    play: Pick<PlayResponse, "type" | "tmdbId" | "season" | "episode" | "title" | "imdbId" | "subtitles">,
+    res: Response
+  ) {
+    const meta = play.imdbId
+      ? { imdbId: play.imdbId, title: play.title ?? "" }
+      : await fetchMetadata(play.type, play.tmdbId);
+    const enriched = await enrichWithOpenSubtitles(
+      {
+        ...play,
+        sources: [],
+        recommended: null,
+        nextEpisode: null,
+        subtitles: play.subtitles ?? [],
+      },
+      { imdbId: meta.imdbId, title: meta.title },
+      publicBase
+    );
+    res.json({
+      subtitles: withProxiedUrls(publicBase, enriched).subtitles,
+    });
   }
 
   async function resolvePlayRequest(
@@ -396,18 +456,42 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     res: Response,
     tizenProfile: boolean
   ) {
+    const includeSubtitles = req.query.subtitles === "1";
+    const onlySourceId =
+      typeof req.query.onlySourceId === "string" ? req.query.onlySourceId : undefined;
+    const cacheKey = playResolveCacheKey({
+      type: options.type,
+      tmdbId: options.tmdbId,
+      season: options.season,
+      episode: options.episode,
+      backend: options.backend,
+      onlySourceId,
+      server: options.server,
+    });
+    const cached = getCachedPlay(cacheKey);
+    const skipValidation = Boolean(cached) || onlySourceId === "vixsrc";
+    if (cached) {
+      return validateAndRespond(cached, res, tizenProfile, {
+        includeSubtitles,
+        skipValidation: true,
+      });
+    }
+
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
     const sources = parseSourcesParam(req.query.sources);
-    const onlySourceId =
-      typeof req.query.onlySourceId === "string" ? req.query.onlySourceId : undefined;
     const play = await resolveWithBackend({
       ...options,
       sources,
       onlySourceId,
       providerScore: providerScoreFromList(providerList),
     });
-    await validateAndRespond(play, res, tizenProfile);
+    setCachedPlay(cacheKey, play);
+    await validateAndRespond(play, res, tizenProfile, {
+      includeSubtitles,
+      skipValidation,
+      probeLimit: 1,
+    });
   }
 
   app.get("/play/movie/:tmdbId", async (req, res) => {
@@ -450,6 +534,38 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         req,
         res,
         tizenProfile
+      );
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/play/subtitles/movie/:tmdbId", async (req, res) => {
+    try {
+      const meta = await fetchMetadata("movie", req.params.tmdbId);
+      await respondWithPlaySubtitles(
+        { type: "movie", tmdbId: req.params.tmdbId, title: meta.title, imdbId: meta.imdbId, subtitles: [] },
+        res
+      );
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/play/subtitles/tv/:tmdbId/:season/:episode", async (req, res) => {
+    try {
+      const meta = await fetchMetadata("tv", req.params.tmdbId);
+      await respondWithPlaySubtitles(
+        {
+          type: "tv",
+          tmdbId: req.params.tmdbId,
+          season: req.params.season,
+          episode: req.params.episode,
+          title: meta.title,
+          imdbId: meta.imdbId,
+          subtitles: [],
+        },
+        res
       );
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
@@ -760,6 +876,24 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   });
 
   // --- Proxy ---
+  app.get("/proxy/inline-manifest/:token", (req, res) => {
+    const entry = getInlineManifest(req.params.token);
+    if (!entry) {
+      return res.status(404).json({ error: "Inline manifest expired or not found" });
+    }
+    const rewritten = rewriteM3u8(
+      entry.body,
+      entry.upstreamUrl,
+      publicBase,
+      entry.referer
+    );
+    res.status(200);
+    res.setHeader("content-type", "application/vnd.apple.mpegurl");
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("cache-control", "public, max-age=60");
+    res.send(rewritten);
+  });
+
   app.get("/proxy/stream", async (req, res) => {
     const target = req.query.url;
     if (typeof target !== "string" || !target.startsWith("http")) {

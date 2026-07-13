@@ -15,6 +15,11 @@ var keyHandler = null;
 var lastFocusRowId = null;
 var lastSearchLeftEl = null;
 var scrollAnimGen = 0;
+var cachedRowAnchorY = null;
+
+function invalidateRowAnchorCache() {
+  cachedRowAnchorY = null;
+}
 
 function getFocusables(root) {
   if (!root) return [];
@@ -69,6 +74,7 @@ function resetMainScroll() {
   var main = getMainRoot();
   if (main) main.scrollTop = 0;
   lastFocusRowId = null;
+  invalidateRowAnchorCache();
   resetAllTrackOffsets();
 }
 
@@ -159,6 +165,7 @@ function isInSpotlightRow(el) {
 }
 
 function updateSpotlightMode(el) {
+  var wasSpotlight = document.body && document.body.classList.contains("home-spotlight-focus");
   var rows = document.querySelectorAll(".row-spotlight");
   for (var i = 0; i < rows.length; i++) {
     rows[i].classList.remove("is-active");
@@ -188,6 +195,8 @@ function updateSpotlightMode(el) {
   } else {
     document.body.classList.remove("home-spotlight-focus");
   }
+  var isSpotlight = document.body && document.body.classList.contains("home-spotlight-focus");
+  if (wasSpotlight !== isSpotlight) invalidateRowAnchorCache();
 }
 
 function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
@@ -231,14 +240,20 @@ function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
   requestAnimationFrame(step);
 }
 
-function animateMainScroll(main, targetScroll, duration) {
+function animateMainScroll(main, targetScroll, duration, options) {
   if (!main) return;
+  options = options || {};
   targetScroll = Math.max(0, targetScroll);
   var start = main.scrollTop;
   var distance = targetScroll - start;
   if (Math.abs(distance) < 2) return;
 
-  if (motion.prefersReducedMotion() || motion.shouldSnapScroll(distance)) {
+  if (motion.prefersReducedMotion()) {
+    main.scrollTop = targetScroll;
+    return;
+  }
+
+  if (!options.forceAnimate && motion.shouldSnapScroll(distance)) {
     main.scrollTop = targetScroll;
     return;
   }
@@ -286,12 +301,64 @@ function getHorizontalScrollTarget(track, outer, card, padding) {
   return scrollLeft;
 }
 
-function scrollSpotlightRowToTop(el) {
-  var row = el.closest(".row-spotlight");
+function getRowAnchorViewportY(main, rowEl) {
+  if (!main) return motion.ROW_ANCHOR_FALLBACK_PX;
+  if (document.body && document.body.classList.contains("home-spotlight-focus")) {
+    return motion.ROW_ANCHOR_SPOTLIGHT_PX;
+  }
+
+  if (rowEl) {
+    var contentRows = main.querySelectorAll(".content-row");
+    for (var i = 0; i < contentRows.length; i++) {
+      if (contentRows[i] === rowEl && i > 0) {
+        var mainRect = main.getBoundingClientRect();
+        var refRect = contentRows[i - 1].getBoundingClientRect();
+        return refRect.top - mainRect.top;
+      }
+    }
+  }
+
+  if (cachedRowAnchorY !== null) return cachedRowAnchorY;
+
+  var rows = main.querySelectorAll(".content-row");
+  if (rows.length >= 2 && main.scrollTop < 8) {
+    var mainRect0 = main.getBoundingClientRect();
+    var rowRect0 = rows[1].getBoundingClientRect();
+    cachedRowAnchorY = rowRect0.top - mainRect0.top;
+    if (cachedRowAnchorY < 0) cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
+    return cachedRowAnchorY;
+  }
+
+  cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
+  return cachedRowAnchorY;
+}
+
+function isHeroFocus(el) {
+  return !!(el && el.closest(".hero"));
+}
+
+function scrollFocusRowToAnchor(el) {
   var main = getMainRoot();
-  if (!row || !main) return;
+  if (!main || !el) return;
+
+  if (isHeroFocus(el)) {
+    animateMainScroll(main, 0, null, { forceAnimate: true });
+    return;
+  }
+
+  var rowEl = el.closest(".content-row");
+  if (!rowEl) {
+    scrollIntoView(el);
+    return;
+  }
+
+  var mainRect = main.getBoundingClientRect();
+  var rowRect = rowEl.getBoundingClientRect();
+  var rowContentTop = rowRect.top - mainRect.top + main.scrollTop;
+  var anchorY = getRowAnchorViewportY(main, rowEl);
+  var targetScrollTop = Math.max(0, rowContentTop - anchorY);
   var profile = motion.getMotionProfile();
-  animateMainScroll(main, Math.max(0, row.offsetTop - 48), profile.mainScrollMs);
+  animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
 }
 
 function getSpotlightScrollPadding(el) {
@@ -347,11 +414,15 @@ function scheduleScrollAfterLayout(el, rowId, rowChanged) {
     if (gen !== scrollAnimGen || currentEl !== el) return;
     if (el.classList.contains("card")) {
       scrollRowIntoView(el, afterHorizontalScroll);
+    } else if (afterHorizontalScroll) {
+      afterHorizontalScroll();
     }
-    if (isSpotlight) {
-      if (rowChanged) scrollSpotlightRowToTop(el);
-    } else {
-      scrollIntoView(el);
+    if (rowChanged) {
+      if (el.closest(".content-row") || isHeroFocus(el)) {
+        scrollFocusRowToAnchor(el);
+      } else {
+        scrollIntoView(el);
+      }
     }
   }
 
@@ -530,6 +601,41 @@ function focusDefaultMain(selector) {
   return el ? focusElement(el) : false;
 }
 
+function isInMainArea(el) {
+  if (!el) el = currentEl;
+  if (!el) return true;
+  return !isInSidebar(el);
+}
+
+function focusSidebar(screenName) {
+  setSidebarExpanded(true);
+  var sidebar = document.getElementById("sidebar");
+  if (!sidebar) return false;
+
+  var el = null;
+  if (screenName) {
+    el = sidebar.querySelector('.nav-item[data-screen="' + screenName + '"]');
+  }
+  if (!el && lastSidebarEl && sidebar.contains(lastSidebarEl)) {
+    el = lastSidebarEl;
+  }
+  if (!el) {
+    var active = sidebar.querySelector(".nav-item.active");
+    if (active) el = active;
+  }
+  if (!el) {
+    var nav = getSidebarFocusables();
+    el = nav.length ? nav[0] : null;
+  }
+  return el ? focusElement(el) : false;
+}
+
+function handleBrowseBack() {
+  if (isInSidebar(currentEl)) return false;
+  var router = require("./router.js");
+  return focusSidebar(router.current());
+}
+
 function rememberMainFocus() {
   if (currentEl && !isInSidebar(currentEl)) {
     rememberedMainEl = currentEl;
@@ -658,6 +764,9 @@ module.exports = {
   focusDefaultMain: focusDefaultMain,
   rememberMainFocus: rememberMainFocus,
   restoreMainFocus: restoreMainFocus,
+  focusSidebar: focusSidebar,
+  handleBrowseBack: handleBrowseBack,
+  isInMainArea: isInMainArea,
   resetMainScroll: resetMainScroll,
   afterScreenRender: afterScreenRender,
   getFocusables: getFocusables,

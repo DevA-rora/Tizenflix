@@ -43,6 +43,7 @@ export interface PlayableSource {
 
 export interface PlayResponse {
   title?: string;
+  imdbId?: string;
   type: MediaType;
   tmdbId: string;
   season?: string;

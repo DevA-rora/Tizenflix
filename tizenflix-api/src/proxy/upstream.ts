@@ -15,6 +15,14 @@ export const UPSTREAM_HEADERS: HeadersInit = {
 };
 
 const UPSTREAM_TIMEOUT_MS = 12_000;
+const MANIFEST_CACHE_TTL_MS = 60_000;
+
+interface ManifestCacheEntry {
+  body: string;
+  expiresAt: number;
+}
+
+const manifestCache = new Map<string, ManifestCacheEntry>();
 
 export interface UpstreamHeaderOptions {
   referer?: string;
@@ -95,12 +103,27 @@ export async function fetchProxiedStream(
     looksLikeM3u8Url(targetUrl) || looksLikeM3u8ContentType(contentType);
 
   if (mightBeM3u8) {
+    const cached = manifestCache.get(targetUrl);
+    if (cached && cached.expiresAt > Date.now()) {
+      return {
+        status: 200,
+        contentType: "application/vnd.apple.mpegurl",
+        body: cached.body,
+        rewritten: true,
+      };
+    }
+
     const text = await upstream.text();
     if (upstream.ok && shouldRewriteAsM3u8(targetUrl, contentType, text)) {
+      const rewritten = rewriteM3u8(text, targetUrl, publicBase, headerOptions?.referer);
+      manifestCache.set(targetUrl, {
+        body: rewritten,
+        expiresAt: Date.now() + MANIFEST_CACHE_TTL_MS,
+      });
       return {
         status: upstream.status,
         contentType: "application/vnd.apple.mpegurl",
-        body: rewriteM3u8(text, targetUrl, publicBase, headerOptions?.referer),
+        body: rewritten,
         rewritten: true,
       };
     }

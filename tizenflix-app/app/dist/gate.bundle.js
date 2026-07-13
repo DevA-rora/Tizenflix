@@ -13,7 +13,7 @@ var TizenflixGate = (() => {
       var BACKEND_KEY = "tizenflix.playBackend";
       var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
       var API_PORT = "8790";
-      var PLAY_RESOLVE_TIMEOUT_MS = 9e4;
+      var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
       function isTizenClient() {
         if (typeof navigator === "undefined") return false;
@@ -104,7 +104,7 @@ var TizenflixGate = (() => {
         }
         return trimmed;
       }
-      function fetchWithTimeout(url, ms) {
+      function fetchWithTimeout(url, ms, init2) {
         return new Promise(function(resolve, reject) {
           var done = false;
           var timer = setTimeout(function() {
@@ -112,7 +112,7 @@ var TizenflixGate = (() => {
             done = true;
             reject(new Error("Request timed out after " + ms + "ms"));
           }, ms);
-          fetch(url).then(function(res) {
+          fetch(url, init2).then(function(res) {
             if (done) return;
             done = true;
             clearTimeout(timer);
@@ -238,6 +238,24 @@ var TizenflixGate = (() => {
           return res.json();
         });
       }
+      function apiPost(path, body) {
+        return fetchWithTimeout(
+          getApiBase() + path,
+          2e4,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {})
+          }
+        ).then(function(res) {
+          if (!res.ok) {
+            return res.text().then(function(text) {
+              throw new Error("API " + res.status + (text ? ": " + text.slice(0, 120) : ""));
+            });
+          }
+          return res.json();
+        });
+      }
       module.exports = {
         STORAGE_KEY,
         QUALITY_MODE_KEY,
@@ -268,6 +286,7 @@ var TizenflixGate = (() => {
         detectStreamType,
         logLine,
         apiGet,
+        apiPost,
         fetchWithTimeout
       };
     }
@@ -379,6 +398,7 @@ var TizenflixGate = (() => {
       var playbackEntered = false;
       var activeCleanups = [];
       var playGeneration = 0;
+      var resumeAtSeconds = null;
       var currentProvider = null;
       var playbackReported = false;
       var nonFatalRecoveries = 0;
@@ -458,8 +478,9 @@ var TizenflixGate = (() => {
         });
       }
       var READY_TIMEOUT_MS = 12e3;
-      var HLS_PRIME_BUFFER_SEC = 20;
-      var HLS_PRIME_TIMEOUT_MS = 25e3;
+      var HLS_PRIME_BUFFER_SEC = 4;
+      var HLS_PRIME_TIMEOUT_MS = 8e3;
+      var HLS_EARLY_START_BUFFER_SEC = 2;
       var MAX_NON_FATAL_RECOVERIES = 8;
       function beginPlaySession() {
         playGeneration += 1;
@@ -619,6 +640,22 @@ var TizenflixGate = (() => {
           }
         });
       }
+      function applyResumePosition(video) {
+        if (!video || resumeAtSeconds == null || resumeAtSeconds <= 0) return;
+        var duration = video.duration;
+        if (!duration || !isFinite(duration)) return;
+        var target = Math.min(resumeAtSeconds, Math.max(0, duration - 10));
+        try {
+          video.currentTime = target;
+          debug2.debugLog("Resumed at " + Math.floor(target) + "s");
+        } catch (err) {
+          debug2.debugLog("Resume seek failed: " + err.message);
+        }
+        resumeAtSeconds = null;
+      }
+      function setResumePosition(seconds) {
+        resumeAtSeconds = seconds > 0 ? seconds : null;
+      }
       function hintResumeIfPaused(video, onLog) {
         setTimeout(function() {
           if (video.paused && video.readyState >= 2) {
@@ -646,6 +683,7 @@ var TizenflixGate = (() => {
           function() {
             if (!isActiveSession(session)) return;
             logVideoState(video, "canplay ready");
+            applyResumePosition(video);
             attemptPlay(video, onLog);
           },
           options.timeoutMs || READY_TIMEOUT_MS,
@@ -672,6 +710,7 @@ var TizenflixGate = (() => {
         return url && url.indexOf("/proxy/stream") !== -1;
       }
       function prefersHlsJsFirst(url) {
+        if (prefersNativeHls()) return false;
         return isProxiedHls(url);
       }
       function createHlsInstance() {
@@ -776,6 +815,11 @@ var TizenflixGate = (() => {
             started = true;
             debug2.debugLog("HLS buffer primed " + Math.floor(ahead) + "s (" + (label || "ready") + ")");
             if (onLog) onLog("Buffer primed " + Math.floor(ahead) + "s \u2014 starting smooth playback");
+            attemptPlay(video, onLog);
+          } else if (ahead >= HLS_EARLY_START_BUFFER_SEC && label === "frag") {
+            started = true;
+            debug2.debugLog("HLS early start " + Math.floor(ahead) + "s after first fragment");
+            if (onLog) onLog("Starting with " + Math.floor(ahead) + "s buffered");
             attemptPlay(video, onLog);
           }
         }
@@ -1034,7 +1078,11 @@ var TizenflixGate = (() => {
         var session = playGeneration;
         playDirectVideo(video, url, onLog, videoWrap, title, session, needsCors);
       }
-      function playSources(video, sources, onLog, videoWrap, title) {
+      function playSources(video, sources, onLog, videoWrap, title, options) {
+        options = options || {};
+        if (options.startSeconds > 0) {
+          setResumePosition(options.startSeconds);
+        }
         if (!sources || !sources.length) {
           debug2.debugLog("No sources to play");
           if (onLog) onLog("No sources to play");
@@ -1045,6 +1093,10 @@ var TizenflixGate = (() => {
         currentProvider = sources[0] && sources[0].provider ? sources[0].provider : null;
         playbackReported = false;
         nonFatalRecoveries = 0;
+        if (options.warmedManifestUrl && sources[0] && sources[0].url === options.warmedManifestUrl) {
+          debug2.debugLog("Using warmed manifest");
+          if (onLog) onLog("Using warmed manifest");
+        }
         function tryNext(reason) {
           if (reason) {
             debug2.debugLog(reason);
@@ -1155,6 +1207,7 @@ var TizenflixGate = (() => {
         isMediaPlayPauseKey,
         getQualityOptions,
         applyQualityMode,
+        setResumePosition,
         getHlsInstance: function() {
           return hlsInstance;
         }
@@ -1184,6 +1237,8 @@ var TizenflixGate = (() => {
         fadeMs: 80,
         heroBackdropMs: 250
       };
+      var ROW_ANCHOR_SPOTLIGHT_PX = 48;
+      var ROW_ANCHOR_FALLBACK_PX = 140;
       var tvPerfForced = null;
       function queryTvPerfOverride() {
         if (typeof window === "undefined" || !window.location || !window.location.search) return false;
@@ -1216,12 +1271,1550 @@ var TizenflixGate = (() => {
       module.exports = {
         BROWSER,
         TV,
+        ROW_ANCHOR_SPOTLIGHT_PX,
+        ROW_ANCHOR_FALLBACK_PX,
         isTvPerfMode,
         setTvPerfMode,
         getMotionProfile,
         prefersReducedMotion,
         shouldSnapScroll,
         applyBodyClass
+      };
+    }
+  });
+
+  // app/js/services/api.js
+  var require_api = __commonJS({
+    "app/js/services/api.js"(exports, module) {
+      var config2 = require_config();
+      function getBase() {
+        return config2.getApiBase();
+      }
+      function health() {
+        return config2.checkHealth(getBase());
+      }
+      function browseRows() {
+        return config2.apiGet("/browse/rows");
+      }
+      function browseRow(rowId, page) {
+        var q = page ? "?page=" + encodeURIComponent(page) : "";
+        return config2.apiGet("/browse/row/" + encodeURIComponent(rowId) + q);
+      }
+      function search(query, page) {
+        var q = "?q=" + encodeURIComponent(query);
+        if (page) q += "&page=" + encodeURIComponent(page);
+        return config2.apiGet("/search" + q);
+      }
+      function searchSuggest(query) {
+        return config2.apiGet("/search/suggest?q=" + encodeURIComponent(query));
+      }
+      function getMovie(tmdbId) {
+        return config2.apiGet("/title/movie/" + encodeURIComponent(tmdbId));
+      }
+      function getTv(tmdbId) {
+        return config2.apiGet("/title/tv/" + encodeURIComponent(tmdbId));
+      }
+      function getSeasons(tmdbId) {
+        return config2.apiGet("/title/tv/" + encodeURIComponent(tmdbId) + "/seasons");
+      }
+      function getEpisodes(tmdbId, season) {
+        return config2.apiGet(
+          "/title/tv/" + encodeURIComponent(tmdbId) + "/" + encodeURIComponent(season) + "/episodes"
+        );
+      }
+      function resolveMovie(tmdbId, extraQuery, timeoutMs) {
+        return config2.resolveMovie(getBase(), tmdbId, config2.buildPlayQuery(extraQuery), timeoutMs);
+      }
+      function resolveTvEpisode(tmdbId, season, episode, extraQuery, timeoutMs) {
+        return config2.resolveTvEpisode(
+          getBase(),
+          tmdbId,
+          season,
+          episode,
+          config2.buildPlayQuery(extraQuery),
+          timeoutMs
+        );
+      }
+      function sourcesForPlay(play) {
+        return config2.listSourcesToTry(play);
+      }
+      function hasPlayableSources(play) {
+        return sourcesForPlay(play).length > 0;
+      }
+      function getProviders() {
+        return config2.apiGet("/providers/tmdb-native");
+      }
+      function continueWatching(limit) {
+        var q = limit ? "?limit=" + encodeURIComponent(limit) : "";
+        return config2.apiGet("/continue-watching" + q).then(function(data) {
+          return data.items || [];
+        });
+      }
+      function saveProgress(payload) {
+        return config2.apiPost("/progress", payload);
+      }
+      function warmStreamUrl(url) {
+        return config2.fetchWithTimeout(url, 8e3).then(function(res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.text();
+        });
+      }
+      function fetchPlaySubtitlesMovie(tmdbId) {
+        return config2.apiGet("/play/subtitles/movie/" + encodeURIComponent(tmdbId));
+      }
+      function fetchPlaySubtitlesTv(tmdbId, season, episode) {
+        return config2.apiGet(
+          "/play/subtitles/tv/" + encodeURIComponent(tmdbId) + "/" + encodeURIComponent(season) + "/" + encodeURIComponent(episode)
+        );
+      }
+      module.exports = {
+        getBase,
+        setBase: config2.setApiBase,
+        health,
+        browseRows,
+        browseRow,
+        search,
+        searchSuggest,
+        getMovie,
+        getTv,
+        getSeasons,
+        getEpisodes,
+        resolveMovie,
+        resolveTvEpisode,
+        sourcesForPlay,
+        hasPlayableSources,
+        getProviders,
+        continueWatching,
+        saveProgress,
+        warmStreamUrl,
+        fetchPlaySubtitlesMovie,
+        fetchPlaySubtitlesTv
+      };
+    }
+  });
+
+  // app/js/services/playback-session.js
+  var require_playback_session = __commonJS({
+    "app/js/services/playback-session.js"(exports, module) {
+      var current = null;
+      var prefetchCache = null;
+      var warmedManifestUrl = null;
+      var PREFETCH_TTL_MS = 5 * 60 * 1e3;
+      function prefetchKey(type, tmdbId, season, episode) {
+        return type + ":" + tmdbId + ":" + (season || "") + ":" + (episode || "");
+      }
+      function setPrefetch(key, play) {
+        prefetchCache = { key, play, fetchedAt: Date.now() };
+      }
+      function getPrefetch(key) {
+        if (!prefetchCache || prefetchCache.key !== key) return null;
+        if (Date.now() - prefetchCache.fetchedAt > PREFETCH_TTL_MS) {
+          prefetchCache = null;
+          return null;
+        }
+        return prefetchCache.play;
+      }
+      function clearPrefetch() {
+        prefetchCache = null;
+        warmedManifestUrl = null;
+      }
+      function setWarmedManifest(url) {
+        warmedManifestUrl = url || null;
+      }
+      function getWarmedManifest() {
+        return warmedManifestUrl;
+      }
+      function create(meta) {
+        meta = meta || {};
+        current = {
+          tmdbId: meta.tmdbId || null,
+          type: meta.type || "movie",
+          season: meta.season || null,
+          episode: meta.episode || null,
+          title: meta.title || "",
+          showTitle: meta.showTitle || meta.title || "",
+          episodeTitle: meta.episodeTitle || "",
+          overview: meta.overview || "",
+          metaLine: meta.metaLine || "",
+          play: null,
+          sources: [],
+          currentSourceIndex: 0,
+          subtitles: [],
+          activeSubtitleIndex: -1,
+          nextEpisode: null,
+          displayTitle: meta.displayTitle || meta.title || ""
+        };
+        return current;
+      }
+      function get() {
+        return current;
+      }
+      function update(patch) {
+        if (!current || !patch) return current;
+        for (var key in patch) {
+          if (Object.prototype.hasOwnProperty.call(patch, key)) {
+            current[key] = patch[key];
+          }
+        }
+        return current;
+      }
+      function setFromPlay(play, sources, extras) {
+        if (!current) return null;
+        extras = extras || {};
+        current.play = play;
+        current.sources = sources || [];
+        current.currentSourceIndex = 0;
+        current.subtitles = play && play.subtitles || [];
+        current.activeSubtitleIndex = -1;
+        current.nextEpisode = play && play.nextEpisode ? play.nextEpisode : null;
+        if (play && play.title && !current.showTitle) current.showTitle = play.title;
+        if (extras.displayTitle) current.displayTitle = extras.displayTitle;
+        return current;
+      }
+      function clear() {
+        current = null;
+      }
+      module.exports = {
+        create,
+        get,
+        update,
+        setFromPlay,
+        clear,
+        prefetchKey,
+        setPrefetch,
+        getPrefetch,
+        clearPrefetch,
+        setWarmedManifest,
+        getWarmedManifest
+      };
+    }
+  });
+
+  // app/js/core/player-focus.js
+  var require_player_focus = __commonJS({
+    "app/js/core/player-focus.js"(exports, module) {
+      var FOCUS_SELECTOR = "button:not(:disabled), [tabindex='0']";
+      var currentEl = null;
+      var keyHandler = null;
+      var onFocusChange = null;
+      var getZones = null;
+      function setZoneProvider(fn) {
+        getZones = fn;
+      }
+      function getFocusables(root) {
+        if (!root) return [];
+        var nodes = root.querySelectorAll(FOCUS_SELECTOR);
+        var list = [];
+        for (var i = 0; i < nodes.length; i++) {
+          var el = nodes[i];
+          if (el.disabled) continue;
+          if (el.offsetParent === null && el !== currentEl) continue;
+          list.push(el);
+        }
+        return list;
+      }
+      function clearFocus() {
+        var all = document.querySelectorAll(".player-chrome .tv-focus");
+        for (var i = 0; i < all.length; i++) {
+          all[i].classList.remove("tv-focus");
+        }
+      }
+      function focusElement(el) {
+        if (!el) return false;
+        clearFocus();
+        currentEl = el;
+        el.classList.add("tv-focus");
+        if (el.scrollIntoView) {
+          try {
+            el.scrollIntoView({ block: "nearest", inline: "nearest" });
+          } catch (err) {
+            el.scrollIntoView(false);
+          }
+        }
+        if (onFocusChange) {
+          var label = el.getAttribute("aria-label") || (el.textContent || "").trim().slice(0, 40);
+          onFocusChange(label);
+        }
+        return true;
+      }
+      function getZoneRow(el) {
+        if (!el) return null;
+        var row = el.closest("[data-player-zone]");
+        return row ? row.getAttribute("data-player-zone") : null;
+      }
+      function getRowFocusables(zoneId) {
+        if (!getZones) return [];
+        var zones = getZones();
+        var row = zones[zoneId];
+        return row ? getFocusables(row) : [];
+      }
+      function indexInRow(el) {
+        var zone = getZoneRow(el);
+        var list = getRowFocusables(zone);
+        for (var i = 0; i < list.length; i++) {
+          if (list[i] === el) return i;
+        }
+        return -1;
+      }
+      function zoneOrder() {
+        return ["top", "progress", "dock", "rail", "panel"];
+      }
+      function moveHorizontal(el, dir) {
+        var zone = getZoneRow(el);
+        var list = getRowFocusables(zone);
+        var idx = indexInRow(el);
+        if (idx < 0 || !list.length) return null;
+        var next = idx + dir;
+        if (next < 0 || next >= list.length) return null;
+        return list[next];
+      }
+      function moveVertical(el, dir) {
+        var order = zoneOrder();
+        var zone = getZoneRow(el);
+        var zIdx = -1;
+        for (var i = 0; i < order.length; i++) {
+          if (order[i] === zone) {
+            zIdx = i;
+            break;
+          }
+        }
+        if (zIdx < 0) return null;
+        var nextZ = zIdx + dir;
+        while (nextZ >= 0 && nextZ < order.length) {
+          var list = getRowFocusables(order[nextZ]);
+          if (list.length) {
+            var idx = indexInRow(el);
+            if (idx >= 0 && idx < list.length) return list[idx];
+            return list[0];
+          }
+          nextZ += dir;
+        }
+        return null;
+      }
+      function onKeyDown(e) {
+        if (!document.body.classList.contains("is-playing")) return false;
+        if (!currentEl) return false;
+        var key = e.key || "";
+        var code = e.keyCode;
+        var isLeft = key === "ArrowLeft" || code === 37;
+        var isRight = key === "ArrowRight" || code === 39;
+        var isUp = key === "ArrowUp" || code === 38;
+        var isDown = key === "ArrowDown" || code === 40;
+        var isEnter = code === 13 || key === "Enter";
+        if (isEnter) {
+          if (currentEl.click) currentEl.click();
+          e.preventDefault();
+          return true;
+        }
+        var next = null;
+        if (isLeft) next = moveHorizontal(currentEl, -1);
+        else if (isRight) next = moveHorizontal(currentEl, 1);
+        else if (isUp) next = moveVertical(currentEl, -1);
+        else if (isDown) next = moveVertical(currentEl, 1);
+        if (next && next !== currentEl) {
+          focusElement(next);
+        }
+        if (isLeft || isRight || isUp || isDown) {
+          e.preventDefault();
+          return true;
+        }
+        return false;
+      }
+      function focusDefault() {
+        var list = getRowFocusables("dock");
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].id === "playerPlayPause") return focusElement(list[i]);
+        }
+        if (list.length) return focusElement(list[0]);
+        list = getRowFocusables("top");
+        if (list.length) return focusElement(list[0]);
+        return false;
+      }
+      function init2(cb) {
+        onFocusChange = cb || null;
+        if (keyHandler) document.removeEventListener("keydown", keyHandler, true);
+        keyHandler = function(e) {
+          onKeyDown(e);
+        };
+        document.addEventListener("keydown", keyHandler, true);
+      }
+      function destroy() {
+        if (keyHandler) {
+          document.removeEventListener("keydown", keyHandler, true);
+          keyHandler = null;
+        }
+        clearFocus();
+        currentEl = null;
+        getZones = null;
+      }
+      module.exports = {
+        init: init2,
+        destroy,
+        focusElement,
+        focusDefault,
+        setZoneProvider,
+        getCurrent: function() {
+          return currentEl;
+        }
+      };
+    }
+  });
+
+  // app/js/components/player-chrome.js
+  var require_player_chrome = __commonJS({
+    "app/js/components/player-chrome.js"(exports, module) {
+      var player2 = require_player();
+      var playerFocus = require_player_focus();
+      var api = require_api();
+      var config2 = require_config();
+      var playbackSession = require_playback_session();
+      var chromeEl = null;
+      var handlers = {};
+      var hideTimer = null;
+      var timeThrottle = 0;
+      var railOpen = false;
+      var panelOpen = null;
+      var providersCache = null;
+      var HIDE_MS = 5e3;
+      var VIDKING_SERVERS = ["Oxygen", "Titanium", "Helium", "Hydrogen", "Lithium"];
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+      function formatTime(seconds) {
+        if (!seconds || seconds < 0 || !isFinite(seconds)) return "0:00";
+        var s = Math.floor(seconds);
+        var h = Math.floor(s / 3600);
+        var m = Math.floor(s % 3600 / 60);
+        var sec = s % 60;
+        var mm = m < 10 ? "0" + m : String(m);
+        var ss = sec < 10 ? "0" + sec : String(sec);
+        if (h > 0) return h + ":" + mm + ":" + ss;
+        return m + ":" + ss;
+      }
+      function iconBack() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>';
+      }
+      function iconRewind() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/><text x="12" y="15" text-anchor="middle" font-size="7" fill="currentColor">10</text></svg>';
+      }
+      function iconForward() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/><text x="12" y="15" text-anchor="middle" font-size="7" fill="currentColor">10</text></svg>';
+      }
+      function iconPlay() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+      }
+      function iconPause() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+      }
+      function iconEpisodes() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg>';
+      }
+      function iconSubtitles() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM6 13h2v2H6v-2zm10 0h4v2h-4v-2zm-6 4h8v2h-8v-2zm-4-8h12v2H6V9z"/></svg>';
+      }
+      function iconServer() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v4H4V7zm0 6h16v4H4v-4zm0 6h16v2H4v-2z"/></svg>';
+      }
+      function iconNext() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zm2.5-6l4.5 3.36V8.64L8.5 12zM16 6v12h2V6h-2z"/></svg>';
+      }
+      function iconVolume() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+      }
+      function iconVolumeMuted() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
+      }
+      function iconSettings() {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
+      }
+      function buildDockTitle(session) {
+        if (!session) return "";
+        if (session.type === "tv") {
+          var epTitle = session.episodeTitle || "";
+          return (session.showTitle || session.title || "") + " E" + (session.episode || "") + (epTitle ? " " + epTitle : "");
+        }
+        return session.displayTitle || session.title || "";
+      }
+      function resetHideTimer() {
+        if (hideTimer) clearTimeout(hideTimer);
+        if (panelOpen || railOpen) return;
+        hideTimer = setTimeout(function() {
+          hide();
+        }, HIDE_MS);
+      }
+      function show() {
+        if (!chromeEl) return;
+        chromeEl.classList.remove("player-chrome-hidden");
+        chromeEl.classList.add("player-chrome-visible");
+        resetHideTimer();
+      }
+      function hide() {
+        if (!chromeEl || panelOpen || railOpen) return;
+        chromeEl.classList.remove("player-chrome-visible");
+        chromeEl.classList.add("player-chrome-hidden");
+        if (hideTimer) {
+          clearTimeout(hideTimer);
+          hideTimer = null;
+        }
+      }
+      function isVisible() {
+        return chromeEl && chromeEl.classList.contains("player-chrome-visible");
+      }
+      function closePanel() {
+        if (!chromeEl) return;
+        panelOpen = null;
+        var panel = chromeEl.querySelector(".player-panel");
+        if (panel) {
+          panel.classList.add("hidden");
+          panel.innerHTML = "";
+        }
+        resetHideTimer();
+        playerFocus.focusDefault();
+      }
+      function closeRail() {
+        railOpen = false;
+        if (!chromeEl) return;
+        var rail = chromeEl.querySelector(".player-rail");
+        if (rail) rail.classList.add("hidden");
+        resetHideTimer();
+        playerFocus.focusDefault();
+      }
+      function openPanel(name) {
+        if (!chromeEl) return;
+        closeRail();
+        panelOpen = name;
+        show();
+        var panel = chromeEl.querySelector(".player-panel");
+        if (!panel) return;
+        panel.classList.remove("hidden");
+        if (name === "subs") renderSubsPanel(panel);
+        else if (name === "server") renderServerPanel(panel);
+        else if (name === "quality" || name === "settings") renderSettingsPanel(panel);
+        if (hideTimer) clearTimeout(hideTimer);
+        var first = panel.querySelector("button");
+        if (first) playerFocus.focusElement(first);
+      }
+      function toggleRail() {
+        if (!chromeEl) return;
+        closePanel();
+        railOpen = !railOpen;
+        var rail = chromeEl.querySelector(".player-rail");
+        if (!rail) return;
+        if (railOpen) {
+          rail.classList.remove("hidden");
+          show();
+          loadRailEpisodes(rail);
+          if (hideTimer) clearTimeout(hideTimer);
+        } else {
+          rail.classList.add("hidden");
+          resetHideTimer();
+        }
+      }
+      function renderSubsPanel(panel) {
+        var session = playbackSession.get();
+        var subs = session && session.subtitles || [];
+        var html = '<h3 class="player-panel-title">Audio &amp; Subtitles</h3><div data-player-zone="panel">';
+        html += '<button type="button" class="player-panel-item focusable" data-sub-index="-1" aria-label="Subtitles off">Off</button>';
+        for (var i = 0; i < subs.length; i++) {
+          var label = subs[i].label || subs[i].language || "Track " + (i + 1);
+          html += '<button type="button" class="player-panel-item focusable" data-sub-index="' + i + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
+        }
+        html += "</div>";
+        panel.innerHTML = html;
+        bindPanelItems(panel, function(btn) {
+          var idx = parseInt(btn.getAttribute("data-sub-index"), 10);
+          if (handlers.onSubtitleSelect) handlers.onSubtitleSelect(idx);
+          closePanel();
+        });
+      }
+      function renderSettingsPanel(panel) {
+        var modes = ["auto", "high", "medium", "low"];
+        var current = config2.getQualityMode();
+        var html = '<h3 class="player-panel-title">Settings</h3><div data-player-zone="panel">';
+        html += '<p class="player-panel-hint">Quality</p>';
+        for (var i = 0; i < modes.length; i++) {
+          var m = modes[i];
+          var active = m === current ? " is-active" : "";
+          html += '<button type="button" class="player-panel-item focusable' + active + '" data-quality="' + m + '" aria-label="Quality ' + m + '">' + m.charAt(0).toUpperCase() + m.slice(1) + "</button>";
+        }
+        html += "</div>";
+        panel.innerHTML = html;
+        bindPanelItems(panel, function(btn) {
+          var mode = btn.getAttribute("data-quality");
+          if (mode && handlers.onQualitySelect) handlers.onQualitySelect(mode);
+          closePanel();
+        });
+      }
+      function renderServerPanel(panel) {
+        var session = playbackSession.get();
+        panel.innerHTML = '<h3 class="player-panel-title">Server</h3><div class="player-panel-loading">Loading\u2026</div>';
+        var html = '<h3 class="player-panel-title">Server</h3><div data-player-zone="panel">';
+        html += '<p class="player-panel-hint">Stream sources</p>';
+        var sources = session && session.sources || [];
+        for (var i = 0; i < sources.length; i++) {
+          var src = sources[i];
+          var label = src.label || src.provider || src.sourceId || "Source " + (i + 1);
+          var active = session && session.currentSourceIndex === i ? " is-active" : "";
+          html += '<button type="button" class="player-panel-item focusable' + active + '" data-source-index="' + i + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
+        }
+        html += '<p class="player-panel-hint">Vidking servers</p>';
+        for (var v = 0; v < VIDKING_SERVERS.length; v++) {
+          var server = VIDKING_SERVERS[v];
+          html += '<button type="button" class="player-panel-item focusable" data-vidking="' + escapeHtml(server) + '" aria-label="Vidking ' + escapeHtml(server) + '">' + escapeHtml(server) + "</button>";
+        }
+        html += '<p class="player-panel-hint">TMDB-native sources</p>';
+        html += '<div class="player-panel-native" data-native-list>Loading providers\u2026</div>';
+        html += "</div>";
+        panel.innerHTML = html;
+        bindPanelItems(panel, function(btn) {
+          if (btn.hasAttribute("data-source-index")) {
+            var idx = parseInt(btn.getAttribute("data-source-index"), 10);
+            if (!isNaN(idx) && handlers.onSourceSwitch) {
+              handlers.onSourceSwitch(idx);
+            }
+            return;
+          }
+          var vk = btn.getAttribute("data-vidking");
+          if (vk && handlers.onReResolve) {
+            handlers.onReResolve({ server: vk, backend: "vidking" });
+            return;
+          }
+          var nativeId = btn.getAttribute("data-native-id");
+          if (nativeId && handlers.onReResolve) {
+            config2.setPreferredSourceId(nativeId);
+            handlers.onReResolve({ onlySourceId: nativeId, backend: "tmdb-native" });
+          }
+        });
+        loadNativeProviders(panel);
+      }
+      function loadNativeProviders(panel) {
+        var container = panel.querySelector("[data-native-list]");
+        if (!container) return;
+        if (providersCache) {
+          renderNativeList(container, providersCache);
+          return;
+        }
+        api.getProviders().then(function(data) {
+          providersCache = data.sources || data.providers || [];
+          renderNativeList(container, providersCache);
+        }).catch(function() {
+          container.textContent = "Providers unavailable";
+        });
+      }
+      function renderNativeList(container, providers) {
+        var html = "";
+        if (!providers || !providers.length) {
+          container.textContent = "No providers";
+          return;
+        }
+        for (var i = 0; i < providers.length; i++) {
+          var p = providers[i];
+          var id = p.id || p.sourceId || "";
+          var label = p.label || p.name || id;
+          if (!id) continue;
+          html += '<button type="button" class="player-panel-item focusable" data-native-id="' + escapeHtml(id) + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
+        }
+        container.innerHTML = html;
+      }
+      function bindPanelItems(panel, onClick) {
+        var buttons = panel.querySelectorAll(".player-panel-item");
+        for (var i = 0; i < buttons.length; i++) {
+          (function(btn) {
+            btn.addEventListener("click", function() {
+              onClick(btn);
+            });
+          })(buttons[i]);
+        }
+      }
+      function loadRailEpisodes(rail) {
+        var session = playbackSession.get();
+        if (!session || session.type !== "tv") return;
+        var list = rail.querySelector(".player-rail-list");
+        if (!list) return;
+        list.innerHTML = '<div class="loading-msg">Loading episodes\u2026</div>';
+        api.getEpisodes(session.tmdbId, session.season).then(function(data) {
+          var episodes = data.episodes || [];
+          list.innerHTML = "";
+          for (var i = 0; i < episodes.length; i++) {
+            (function(ep) {
+              var active = ep.episode === session.episode ? " player-rail-card-active" : "";
+              var still = ep.still ? ` style="background-image:url('` + escapeHtml(ep.still) + `')"` : "";
+              var card = document.createElement("button");
+              card.type = "button";
+              card.className = "player-rail-card focusable" + active;
+              card.setAttribute("data-player-zone", "rail");
+              card.setAttribute("aria-label", "Episode " + ep.episode);
+              card.innerHTML = '<div class="player-rail-thumb"' + still + '></div><div class="player-rail-meta"><strong>' + ep.episode + ". " + escapeHtml(ep.title) + "</strong></div>";
+              card.addEventListener("click", function() {
+                if (handlers.onEpisodeSelect) {
+                  handlers.onEpisodeSelect(session.tmdbId, session.season, ep.episode, ep.title, ep.overview);
+                }
+                closeRail();
+              });
+              list.appendChild(card);
+            })(episodes[i]);
+          }
+          var focusCard = list.querySelector(".player-rail-card-active") || list.querySelector(".player-rail-card");
+          if (focusCard) playerFocus.focusElement(focusCard);
+        }).catch(function(err) {
+          list.innerHTML = '<div class="error-banner">' + escapeHtml(err.message) + "</div>";
+        });
+      }
+      function updatePlayPauseIcon(video) {
+        if (!chromeEl || !video) return;
+        var btn = chromeEl.querySelector("#playerPlayPause");
+        if (!btn) return;
+        btn.innerHTML = video.paused ? iconPlay() : iconPause();
+        btn.setAttribute("aria-label", video.paused ? "Play" : "Pause");
+      }
+      function updateVolumeIcon(video) {
+        if (!chromeEl || !video) return;
+        var btn = chromeEl.querySelector("#playerVolume");
+        if (!btn) return;
+        btn.innerHTML = video.muted ? iconVolumeMuted() : iconVolume();
+        btn.setAttribute("aria-label", video.muted ? "Unmute" : "Mute");
+      }
+      function updateProgress(video) {
+        if (!chromeEl || !video) return;
+        var now = Date.now();
+        if (now - timeThrottle < 250 && video.paused === false) return;
+        timeThrottle = now;
+        var duration = video.duration;
+        var current = video.currentTime;
+        if (!duration || !isFinite(duration)) duration = 0;
+        var pct = duration > 0 ? current / duration * 100 : 0;
+        var fill = chromeEl.querySelector(".player-progress-fill");
+        var scrub = chromeEl.querySelector(".player-progress-scrub");
+        var timeEl = chromeEl.querySelector(".player-progress-time");
+        if (fill) fill.style.width = pct + "%";
+        if (scrub) scrub.style.left = pct + "%";
+        if (timeEl) timeEl.textContent = formatTime(Math.max(0, duration - current));
+      }
+      function bindVideoEvents(video) {
+        if (!video || video._playerChromeBound) return;
+        video._playerChromeBound = true;
+        video.addEventListener("timeupdate", function() {
+          updateProgress(video);
+        });
+        video.addEventListener("play", function() {
+          updatePlayPauseIcon(video);
+        });
+        video.addEventListener("pause", function() {
+          updatePlayPauseIcon(video);
+        });
+        video.addEventListener("loadedmetadata", function() {
+          updateProgress(video);
+        });
+        video.addEventListener("volumechange", function() {
+          updateVolumeIcon(video);
+        });
+      }
+      function getZones() {
+        if (!chromeEl) return {};
+        return {
+          top: chromeEl.querySelector('[data-player-zone="top"]'),
+          progress: chromeEl.querySelector('[data-player-zone="progress"]'),
+          dock: chromeEl.querySelector('[data-player-zone="dock"]'),
+          rail: chromeEl.querySelector(".player-rail"),
+          panel: chromeEl.querySelector(".player-panel")
+        };
+      }
+      function mount(session, h) {
+        handlers = h || {};
+        var wrap = document.getElementById("videoWrap");
+        if (!wrap) return;
+        destroy();
+        var isTv = session && session.type === "tv";
+        var hasNext = session && session.nextEpisode;
+        chromeEl = document.createElement("div");
+        chromeEl.className = "player-chrome player-chrome-visible";
+        chromeEl.innerHTML = '<div class="player-vignette-top"></div><div class="player-vignette-bottom"></div><div class="player-top" data-player-zone="top"><button type="button" class="player-icon-btn focusable" id="playerBack" aria-label="Back">' + iconBack() + '</button><button type="button" class="player-icon-btn focusable" id="playerServer" aria-label="Server">' + iconServer() + '</button></div><div class="player-progress-wrap" data-player-zone="progress"><span class="player-progress-time">0:00</span><div class="player-progress-track"><div class="player-progress-fill"></div><div class="player-progress-scrub"></div></div></div><div class="player-dock" data-player-zone="dock"><div class="player-dock-left"><button type="button" class="player-dock-btn focusable" id="playerPlayPause" aria-label="Pause">' + iconPause() + '</button><button type="button" class="player-dock-btn focusable" id="playerRewind" aria-label="Rewind 10 seconds">' + iconRewind() + '</button><button type="button" class="player-dock-btn focusable" id="playerForward" aria-label="Forward 10 seconds">' + iconForward() + '</button><button type="button" class="player-dock-btn focusable" id="playerVolume" aria-label="Mute">' + iconVolume() + '</button></div><div class="player-dock-title">' + escapeHtml(buildDockTitle(session)) + '</div><div class="player-dock-right">' + (isTv && hasNext ? '<button type="button" class="player-dock-btn focusable" id="playerNext" aria-label="Next episode">' + iconNext() + "</button>" : "") + (isTv ? '<button type="button" class="player-dock-btn focusable" id="playerEpisodes" aria-label="Episodes">' + iconEpisodes() + "</button>" : "") + '<button type="button" class="player-dock-btn focusable" id="playerSubs" aria-label="Audio and Subtitles">' + iconSubtitles() + '</button><button type="button" class="player-dock-btn focusable" id="playerSettings" aria-label="Settings">' + iconSettings() + '</button></div></div><div class="player-rail hidden"><div class="player-rail-header">Episodes</div><div class="player-rail-list"></div></div><div class="player-panel hidden"></div>';
+        wrap.appendChild(chromeEl);
+        var video = document.getElementById("video");
+        bindVideoEvents(video);
+        updateProgress(video);
+        updatePlayPauseIcon(video);
+        updateVolumeIcon(video);
+        playerFocus.setZoneProvider(getZones);
+        playerFocus.init(handlers.onFocusChange);
+        playerFocus.focusDefault();
+        chromeEl.querySelector("#playerBack").addEventListener("click", function() {
+          if (handlers.onBack) handlers.onBack();
+        });
+        chromeEl.querySelector("#playerServer").addEventListener("click", function() {
+          openPanel("server");
+        });
+        chromeEl.querySelector("#playerRewind").addEventListener("click", function() {
+          if (handlers.onSeek) handlers.onSeek(-10);
+          resetHideTimer();
+        });
+        chromeEl.querySelector("#playerForward").addEventListener("click", function() {
+          if (handlers.onSeek) handlers.onSeek(10);
+          resetHideTimer();
+        });
+        chromeEl.querySelector("#playerPlayPause").addEventListener("click", function() {
+          if (handlers.onPlayPause) handlers.onPlayPause();
+          resetHideTimer();
+        });
+        chromeEl.querySelector("#playerVolume").addEventListener("click", function() {
+          video.muted = !video.muted;
+          updateVolumeIcon(video);
+          resetHideTimer();
+        });
+        var epBtn = chromeEl.querySelector("#playerEpisodes");
+        if (epBtn) {
+          epBtn.addEventListener("click", function() {
+            toggleRail();
+          });
+        }
+        chromeEl.querySelector("#playerSubs").addEventListener("click", function() {
+          openPanel("subs");
+        });
+        chromeEl.querySelector("#playerSettings").addEventListener("click", function() {
+          openPanel("settings");
+        });
+        var nextBtn = chromeEl.querySelector("#playerNext");
+        if (nextBtn) {
+          nextBtn.addEventListener("click", function() {
+            if (handlers.onNextEpisode) handlers.onNextEpisode();
+          });
+        }
+        var progressBtn = chromeEl.querySelector(".player-progress-wrap");
+        if (progressBtn) {
+          progressBtn.setAttribute("tabindex", "0");
+          progressBtn.classList.add("focusable");
+          progressBtn.addEventListener("click", function() {
+            if (handlers.onPlayPause) handlers.onPlayPause();
+          });
+        }
+        document.addEventListener("keydown", onActivity, true);
+        document.addEventListener("mousedown", onActivity, true);
+        resetHideTimer();
+      }
+      function onActivity(e) {
+        if (!document.body.classList.contains("is-playing")) return;
+        if (e.type === "keydown") {
+          var code = e.keyCode;
+          if (code === 10009 || e.key === "Back") return;
+        }
+        show();
+        resetHideTimer();
+      }
+      function handleBack() {
+        if (panelOpen) {
+          closePanel();
+          return true;
+        }
+        if (railOpen) {
+          closeRail();
+          return true;
+        }
+        if (isVisible()) {
+          hide();
+          return true;
+        }
+        return false;
+      }
+      function destroy() {
+        document.removeEventListener("keydown", onActivity, true);
+        document.removeEventListener("mousedown", onActivity, true);
+        if (hideTimer) {
+          clearTimeout(hideTimer);
+          hideTimer = null;
+        }
+        playerFocus.destroy();
+        if (chromeEl && chromeEl.parentNode) {
+          chromeEl.parentNode.removeChild(chromeEl);
+        }
+        chromeEl = null;
+        railOpen = false;
+        panelOpen = null;
+        handlers = {};
+      }
+      module.exports = {
+        mount,
+        destroy,
+        show,
+        hide,
+        isVisible,
+        handleBack,
+        closePanel,
+        closeRail,
+        updateProgress,
+        updatePlayPauseIcon
+      };
+    }
+  });
+
+  // app/js/services/playback.js
+  var require_playback = __commonJS({
+    "app/js/services/playback.js"(exports, module) {
+      var api = require_api();
+      var config2 = require_config();
+      var player2 = require_player();
+      var debug2 = require_debug();
+      var playbackSession = require_playback_session();
+      var playerChrome = require_player_chrome();
+      var VIDKING_SERVER_FALLBACKS = [
+        { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15e3 },
+        { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15e3 }
+      ];
+      var FAST_RESOLVE_QUERY = "onlySourceId=vixsrc&backend=tmdb-native";
+      var FAST_RESOLVE_TIMEOUT_MS = 8e3;
+      var playSession = 0;
+      var progressSaveTimer = null;
+      var lastProgressSaveAt = 0;
+      var PROGRESS_SAVE_INTERVAL_MS = 3e4;
+      function buildProgressPayload(video) {
+        var session = playbackSession.get();
+        if (!session || !session.tmdbId) return null;
+        var duration = video && video.duration && isFinite(video.duration) ? video.duration : 0;
+        var position = video && video.currentTime ? video.currentTime : 0;
+        if (duration <= 0 || position <= 0) return null;
+        var poster = null;
+        if (session.play && session.play.poster) poster = session.play.poster;
+        return {
+          tmdbId: String(session.tmdbId),
+          type: session.type || "movie",
+          season: session.type === "tv" ? session.season : void 0,
+          episode: session.type === "tv" ? session.episode : void 0,
+          title: session.showTitle || session.title || "",
+          poster,
+          positionSeconds: Math.floor(position),
+          durationSeconds: Math.floor(duration)
+        };
+      }
+      function savePlaybackProgress(video, force) {
+        if (!video) return;
+        var payload = buildProgressPayload(video);
+        if (!payload) return;
+        var now = Date.now();
+        if (!force && now - lastProgressSaveAt < PROGRESS_SAVE_INTERVAL_MS) return;
+        lastProgressSaveAt = now;
+        api.saveProgress(payload).catch(function() {
+        });
+      }
+      function bindProgressSaver(video) {
+        unbindProgressSaver();
+        if (!video) return;
+        progressSaveTimer = function() {
+          savePlaybackProgress(video, false);
+        };
+        video.addEventListener("timeupdate", progressSaveTimer);
+      }
+      function unbindProgressSaver() {
+        var video = document.getElementById("video");
+        if (video && progressSaveTimer) {
+          video.removeEventListener("timeupdate", progressSaveTimer);
+        }
+        progressSaveTimer = null;
+        lastProgressSaveAt = 0;
+      }
+      function formatResolveError(play) {
+        if (play && play.warnings && play.warnings.length === 1) {
+          return play.warnings[0];
+        }
+        return "No playable stream for this title right now.";
+      }
+      function formatPlaybackError(err) {
+        var msg = err && err.message ? err.message : String(err);
+        if (msg.indexOf("timed out") !== -1) {
+          return "Stream lookup timed out. Could not find a playable source.";
+        }
+        return msg;
+      }
+      function isActivePlaySession(session) {
+        return session === playSession;
+      }
+      function enterFullscreenPlayback() {
+        var screen = document.getElementById("screen");
+        if (screen) screen.innerHTML = "";
+        if (document.body) {
+          document.body.classList.add("is-playing", "is-playback-fullscreen");
+        }
+      }
+      function exitFullscreenPlayback() {
+        if (document.body) {
+          document.body.classList.remove("is-playback-fullscreen");
+        }
+      }
+      function buildChromeHandlers(onStatus) {
+        var video = document.getElementById("video");
+        function log(msg) {
+          debug2.debugLog(msg);
+          if (onStatus) onStatus(msg);
+        }
+        return {
+          onFocusChange: function(label) {
+            if (window.TizenflixApp && window.TizenflixApp.updateFocusHint) {
+              window.TizenflixApp.updateFocusHint(label);
+            }
+          },
+          onBack: function() {
+            handleBackKey();
+          },
+          onStop: function() {
+            stop();
+          },
+          onSeek: function(delta) {
+            player2.seekBy(video, delta);
+            playerChrome.updateProgress(video);
+          },
+          onPlayPause: function() {
+            player2.togglePlayPause(video, log);
+            playerChrome.updatePlayPauseIcon(video);
+          },
+          onSubtitleSelect: function(index) {
+            player2.selectSubtitle(video, index);
+            playbackSession.update({ activeSubtitleIndex: index });
+          },
+          onSourceSwitch: function(index) {
+            switchSource(index, onStatus).catch(function(err) {
+              log(err.message);
+            });
+          },
+          onQualitySelect: function(mode) {
+            config2.setQualityMode(mode);
+            player2.applyQualityMode(player2.getHlsInstance(), mode);
+            log("Quality: " + mode);
+          },
+          onReResolve: function(overrides) {
+            reResolveWith(overrides, onStatus).catch(function(err) {
+              log(err.message);
+            });
+          },
+          onEpisodeSelect: function(tmdbId, season, episode, episodeTitle, overview) {
+            var session = playbackSession.get();
+            var showTitle = session ? session.showTitle : "";
+            var label = showTitle + " S" + season + "E" + episode;
+            playTvEpisode(
+              tmdbId,
+              season,
+              episode,
+              label,
+              onStatus,
+              {
+                showTitle,
+                episodeTitle,
+                overview,
+                metaLine: session ? session.metaLine : ""
+              }
+            ).catch(function(err) {
+              log(err.message);
+            });
+          },
+          onNextEpisode: function() {
+            var session = playbackSession.get();
+            if (!session || !session.nextEpisode) return;
+            var next = session.nextEpisode;
+            var season = parseInt(next.season, 10);
+            var episode = parseInt(next.episode, 10);
+            var showTitle = session.showTitle || session.title || "";
+            playTvEpisode(
+              session.tmdbId,
+              season,
+              episode,
+              showTitle + " S" + season + "E" + episode,
+              onStatus,
+              { showTitle, metaLine: session.metaLine }
+            ).catch(function(err) {
+              log(err.message);
+            });
+          }
+        };
+      }
+      function mountChrome(session, onStatus) {
+        playerChrome.mount(session, buildChromeHandlers(onStatus));
+      }
+      function beginPlaybackRequest(meta, onStatus) {
+        playSession += 1;
+        var session = playSession;
+        var video = document.getElementById("video");
+        var wrap = document.getElementById("videoWrap");
+        if (video) player2.destroyPlayer(video);
+        playbackSession.create(meta);
+        enterFullscreenPlayback();
+        if (wrap) {
+          wrap.classList.remove("hidden");
+          player2.showPlaybackChrome(wrap, meta.displayTitle || meta.title || "");
+        }
+        mountChrome(playbackSession.get(), onStatus);
+        debug2.debugClear();
+        debug2.debugLog("Resolving: " + (meta.displayTitle || meta.title || ""));
+        if (onStatus) onStatus("Resolving...");
+        return session;
+      }
+      function resolveWithTizenFallback(resolveAttempts, onStatus, session) {
+        var chain = Promise.resolve(null);
+        for (var i = 0; i < resolveAttempts.length; i++) {
+          (function(entry) {
+            chain = chain.then(function(prev) {
+              if (!isActivePlaySession(session)) return prev;
+              if (prev && api.hasPlayableSources(prev)) return prev;
+              var msg = "Trying " + entry.label + "\u2026";
+              debug2.debugLog(msg);
+              if (onStatus) onStatus(msg);
+              return entry.run().catch(function(err) {
+                debug2.debugLog("Resolve failed (" + entry.label + "): " + err.message);
+                return null;
+              });
+            });
+          })(resolveAttempts[i]);
+        }
+        return chain;
+      }
+      function playResolved(play, title, onStatus, session, playOptions) {
+        playOptions = playOptions || {};
+        if (!isActivePlaySession(session)) return Promise.resolve();
+        var video = document.getElementById("video");
+        var wrap = document.getElementById("videoWrap");
+        if (!video || !wrap) return Promise.reject(new Error("Video element missing"));
+        var sources = api.sourcesForPlay(play);
+        if (!sources.length) {
+          return Promise.reject(new Error(formatResolveError(play)));
+        }
+        playbackSession.setFromPlay(play, sources, { displayTitle: title });
+        var stored = playbackSession.get();
+        wrap.classList.remove("hidden");
+        player2.showPlaybackChrome(wrap, title || play.title || "");
+        player2.applySubtitles(video, play.subtitles || []);
+        loadSubtitlesAsync(play, video);
+        mountChrome(stored, onStatus);
+        bindProgressSaver(video);
+        debug2.debugClear();
+        debug2.debugLog("Playing: " + (title || play.title || ""));
+        function log(msg) {
+          debug2.debugLog(msg);
+          if (onStatus) onStatus(msg);
+        }
+        var sourceOptions = {};
+        if (playOptions.startSeconds > 0) {
+          sourceOptions.startSeconds = playOptions.startSeconds;
+        }
+        var warmed = playbackSession.getWarmedManifest();
+        if (warmed && sources[0] && sources[0].url === warmed) {
+          sourceOptions.warmedManifestUrl = warmed;
+        }
+        player2.playSources(video, sources, log, wrap, title || play.title || "Playback", sourceOptions);
+        return Promise.resolve();
+      }
+      function loadSubtitlesAsync(play, video) {
+        if (!play || !play.tmdbId) return;
+        var promise;
+        if (play.type === "tv") {
+          promise = api.fetchPlaySubtitlesTv(play.tmdbId, play.season, play.episode);
+        } else {
+          promise = api.fetchPlaySubtitlesMovie(play.tmdbId);
+        }
+        promise.then(function(data) {
+          if (!data || !data.subtitles || !data.subtitles.length) return;
+          player2.applySubtitles(video, data.subtitles);
+          playbackSession.update({ subtitles: data.subtitles });
+        }).catch(function() {
+        });
+      }
+      function buildMovieResolveChain(tmdbId) {
+        var attempts = [
+          {
+            label: "VixSrc (fast)",
+            run: function() {
+              return api.resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
+            }
+          },
+          {
+            label: "Auto",
+            run: function() {
+              return api.resolveMovie(tmdbId, "backend=auto", config2.PLAY_RESOLVE_TIMEOUT_MS);
+            }
+          }
+        ];
+        for (var i = 0; i < VIDKING_SERVER_FALLBACKS.length; i++) {
+          (function(fb) {
+            attempts.push({
+              label: fb.label,
+              run: function() {
+                return api.resolveMovie(tmdbId, fb.query, fb.timeoutMs);
+              }
+            });
+          })(VIDKING_SERVER_FALLBACKS[i]);
+        }
+        return attempts;
+      }
+      function buildTvResolveChain(tmdbId, season, episode) {
+        var attempts = [
+          {
+            label: "VixSrc (fast)",
+            run: function() {
+              return api.resolveTvEpisode(
+                tmdbId,
+                season,
+                episode,
+                FAST_RESOLVE_QUERY,
+                FAST_RESOLVE_TIMEOUT_MS
+              );
+            }
+          },
+          {
+            label: "Auto",
+            run: function() {
+              return api.resolveTvEpisode(
+                tmdbId,
+                season,
+                episode,
+                "backend=auto",
+                config2.PLAY_RESOLVE_TIMEOUT_MS
+              );
+            }
+          }
+        ];
+        for (var i = 0; i < VIDKING_SERVER_FALLBACKS.length; i++) {
+          (function(fb) {
+            attempts.push({
+              label: fb.label,
+              run: function() {
+                return api.resolveTvEpisode(tmdbId, season, episode, fb.query, fb.timeoutMs);
+              }
+            });
+          })(VIDKING_SERVER_FALLBACKS[i]);
+        }
+        return attempts;
+      }
+      function buildReResolveQuery(overrides) {
+        overrides = overrides || {};
+        var parts = [];
+        if (overrides.server) {
+          parts.push("server=" + encodeURIComponent(overrides.server));
+          parts.push("backend=vidking");
+        } else if (overrides.onlySourceId) {
+          parts.push("onlySourceId=" + encodeURIComponent(overrides.onlySourceId));
+          parts.push("backend=tmdb-native");
+        }
+        if (overrides.backend && !overrides.server) {
+          parts.push("backend=" + encodeURIComponent(overrides.backend));
+        }
+        return parts.join("&");
+      }
+      function handlePlaybackFailure(session, err) {
+        if (!isActivePlaySession(session)) return;
+        debug2.debugLog("Playback failed: " + (err && err.message ? err.message : String(err)));
+        playerChrome.destroy();
+        playbackSession.clear();
+        player2.exitPlaybackMode();
+        exitFullscreenPlayback();
+        var wrap = document.getElementById("videoWrap");
+        if (wrap) wrap.classList.add("hidden");
+        var router = require_router();
+        router.rerender();
+        throw new Error(formatPlaybackError(err));
+      }
+      function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
+        var key = type === "tv" ? playbackSession.prefetchKey("tv", tmdbId, season, episode) : playbackSession.prefetchKey("movie", tmdbId);
+        var prefetched = playbackSession.getPrefetch(key);
+        if (prefetched && api.hasPlayableSources(prefetched)) {
+          debug2.debugLog("Using prefetched resolve");
+          if (onStatus) onStatus("Starting playback\u2026");
+          return Promise.resolve(prefetched);
+        }
+        var chain = type === "tv" ? buildTvResolveChain(tmdbId, season, episode) : buildMovieResolveChain(tmdbId);
+        return resolveWithTizenFallback(chain, onStatus, session);
+      }
+      function warmManifestFromPlay(play) {
+        var sources = api.sourcesForPlay(play);
+        if (!sources.length || !sources[0].url) return;
+        var manifestUrl = sources[0].url;
+        api.warmStreamUrl(manifestUrl).then(function() {
+          playbackSession.setWarmedManifest(manifestUrl);
+          debug2.debugLog("Manifest warmed: " + manifestUrl.slice(0, 80));
+        }).catch(function() {
+        });
+      }
+      function prefetchMovie(tmdbId) {
+        api.resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
+            playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
+            warmManifestFromPlay(play);
+          }
+        }).catch(function() {
+        });
+      }
+      function prefetchTvEpisode(tmdbId, season, episode) {
+        api.resolveTvEpisode(tmdbId, season, episode, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
+            playbackSession.setPrefetch(
+              playbackSession.prefetchKey("tv", tmdbId, season, episode),
+              play
+            );
+            warmManifestFromPlay(play);
+          }
+        }).catch(function() {
+        });
+      }
+      function playMovie(tmdbId, title, onStatus, meta) {
+        meta = meta || {};
+        var startSeconds = meta.startSeconds || 0;
+        var sessionMeta = {
+          tmdbId,
+          type: "movie",
+          title,
+          displayTitle: title,
+          showTitle: title
+        };
+        for (var k in meta) {
+          if (Object.prototype.hasOwnProperty.call(meta, k)) sessionMeta[k] = meta[k];
+        }
+        var session = beginPlaybackRequest(sessionMeta, onStatus);
+        return resolvePlayback(tmdbId, "movie", null, null, onStatus, session).then(function(play) {
+          if (!isActivePlaySession(session)) return;
+          if (!play || !api.hasPlayableSources(play)) {
+            return Promise.reject(new Error(formatResolveError(play)));
+          }
+          return playResolved(play, title, onStatus, session, { startSeconds });
+        }).catch(function(err) {
+          return handlePlaybackFailure(session, err);
+        });
+      }
+      function playTvEpisode(tmdbId, season, episode, title, onStatus, meta) {
+        meta = meta || {};
+        var startSeconds = meta.startSeconds || 0;
+        var sessionMeta = {
+          tmdbId,
+          type: "tv",
+          season,
+          episode,
+          title,
+          displayTitle: title,
+          showTitle: meta.showTitle || title,
+          episodeTitle: meta.episodeTitle || "",
+          overview: meta.overview || "",
+          metaLine: meta.metaLine || ""
+        };
+        for (var k in meta) {
+          if (Object.prototype.hasOwnProperty.call(meta, k)) sessionMeta[k] = meta[k];
+        }
+        var session = beginPlaybackRequest(sessionMeta, onStatus);
+        return resolvePlayback(tmdbId, "tv", season, episode, onStatus, session).then(function(play) {
+          if (!isActivePlaySession(session)) return;
+          if (!play || !api.hasPlayableSources(play)) {
+            return Promise.reject(new Error(formatResolveError(play)));
+          }
+          return playResolved(play, title, onStatus, session, { startSeconds });
+        }).catch(function(err) {
+          return handlePlaybackFailure(session, err);
+        });
+      }
+      function switchSource(index, onStatus) {
+        var stored = playbackSession.get();
+        if (!stored || !stored.sources.length) {
+          return Promise.reject(new Error("No sources available"));
+        }
+        if (index < 0 || index >= stored.sources.length) {
+          return Promise.reject(new Error("Invalid source"));
+        }
+        var video = document.getElementById("video");
+        var wrap = document.getElementById("videoWrap");
+        if (!video || !wrap) return Promise.reject(new Error("Video element missing"));
+        player2.destroyPlayer(video);
+        stored.currentSourceIndex = index;
+        var remaining = stored.sources.slice(index);
+        function log(msg) {
+          debug2.debugLog(msg);
+          if (onStatus) onStatus(msg);
+        }
+        player2.playSources(video, remaining, log, wrap, stored.displayTitle || "Playback");
+        return Promise.resolve();
+      }
+      function reResolveWith(overrides, onStatus) {
+        var stored = playbackSession.get();
+        if (!stored) return Promise.reject(new Error("No active playback"));
+        var query = buildReResolveQuery(overrides);
+        if (!query) return Promise.reject(new Error("Nothing to switch"));
+        var video = document.getElementById("video");
+        if (video) player2.destroyPlayer(video);
+        if (onStatus) onStatus("Switching server\u2026");
+        debug2.debugLog("Re-resolving: " + query);
+        var resolvePromise;
+        if (stored.type === "tv") {
+          resolvePromise = api.resolveTvEpisode(
+            stored.tmdbId,
+            stored.season,
+            stored.episode,
+            query,
+            config2.PLAY_RESOLVE_TIMEOUT_MS
+          );
+        } else {
+          resolvePromise = api.resolveMovie(stored.tmdbId, query, config2.PLAY_RESOLVE_TIMEOUT_MS);
+        }
+        return resolvePromise.then(function(play) {
+          if (!play || !api.hasPlayableSources(play)) {
+            return Promise.reject(new Error(formatResolveError(play)));
+          }
+          return playResolved(play, stored.displayTitle, onStatus, playSession);
+        });
+      }
+      function handleBackKey() {
+        if (playerChrome.handleBack()) return true;
+        stop();
+        return true;
+      }
+      function stop(options) {
+        options = options || {};
+        var video = document.getElementById("video");
+        if (video) savePlaybackProgress(video, true);
+        unbindProgressSaver();
+        playSession += 1;
+        var wasFullscreen = document.body && document.body.classList.contains("is-playback-fullscreen");
+        playerChrome.destroy();
+        playbackSession.clear();
+        video = document.getElementById("video");
+        var wrap = document.getElementById("videoWrap");
+        if (video) {
+          video._playerChromeBound = false;
+          player2.destroyPlayer(video);
+          video.removeAttribute("controls");
+          video.removeAttribute("crossorigin");
+        }
+        player2.exitPlaybackMode();
+        exitFullscreenPlayback();
+        if (wrap) wrap.classList.add("hidden");
+        if (wasFullscreen && !options.skipRerender) {
+          var router = require_router();
+          router.rerenderWithSidebarFocus();
+        }
+      }
+      function getSession() {
+        return playbackSession.get();
+      }
+      module.exports = {
+        playResolved,
+        playMovie,
+        playTvEpisode,
+        prefetchMovie,
+        prefetchTvEpisode,
+        stop,
+        getSession,
+        switchSource,
+        reResolveWith,
+        handleBackKey
+      };
+    }
+  });
+
+  // app/js/core/router.js
+  var require_router = __commonJS({
+    "app/js/core/router.js"(exports, module) {
+      var focus2 = require_focus();
+      var playback = require_playback();
+      var stack = [];
+      var screens = {};
+      var rootEl = null;
+      var onFocusHint = null;
+      var focusSidebarOnRender = false;
+      var BROWSE_SCREENS = {
+        home: true,
+        trending: true,
+        tv: true,
+        movies: true,
+        search: true
+      };
+      var IMMERSIVE_SCREENS = {
+        "detail-movie": true,
+        "detail-tv": true
+      };
+      function setImmersiveMode(enabled) {
+        if (enabled) {
+          document.body.classList.add("immersive-detail");
+        } else {
+          document.body.classList.remove("immersive-detail");
+        }
+      }
+      function updateImmersiveMode() {
+        var name = current();
+        setImmersiveMode(!!(name && IMMERSIVE_SCREENS[name]));
+      }
+      function register(name, screen) {
+        screens[name] = screen;
+      }
+      function current() {
+        return stack.length ? stack[stack.length - 1] : null;
+      }
+      function render() {
+        if (!rootEl) return;
+        var name = current();
+        var screen = name ? screens[name] : null;
+        rootEl.innerHTML = "";
+        if (screen && typeof screen.render === "function") {
+          screen.render(rootEl);
+        }
+        updateImmersiveMode();
+        if (focusSidebarOnRender) {
+          focusSidebarOnRender = false;
+          focus2.focusSidebar(name || "");
+        } else {
+          focus2.afterScreenRender(name || "");
+        }
+      }
+      function leaveCurrentScreen() {
+        var name = current();
+        if (!name) return;
+        var screen = screens[name];
+        if (screen && typeof screen.onLeave === "function") {
+          screen.onLeave();
+        }
+      }
+      function navigate(name, params) {
+        var screen = screens[name];
+        if (!screen) return;
+        playback.stop({ skipRerender: true });
+        stack.push(name);
+        if (typeof screen.onEnter === "function") {
+          screen.onEnter(params || {});
+        }
+        render();
+      }
+      function replace(name, params) {
+        leaveCurrentScreen();
+        stack = [];
+        navigate(name, params);
+      }
+      function back() {
+        if (stack.length <= 1) return false;
+        playback.stop({ skipRerender: true });
+        var leaving = stack.pop();
+        var screen = screens[leaving];
+        if (screen && typeof screen.onLeave === "function") {
+          screen.onLeave();
+        }
+        render();
+        var now = current();
+        if (BROWSE_SCREENS[now]) {
+          focus2.restoreMainFocus();
+        }
+        return true;
+      }
+      function rerender() {
+        render();
+      }
+      function rerenderWithSidebarFocus() {
+        focusSidebarOnRender = true;
+        render();
+      }
+      function init2(options) {
+        rootEl = options.root;
+        onFocusHint = options.onFocusHint || null;
+        if (options.initial) {
+          replace(options.initial);
+        }
+      }
+      module.exports = {
+        register,
+        navigate,
+        replace,
+        back,
+        current,
+        rerender,
+        rerenderWithSidebarFocus,
+        init: init2
       };
     }
   });
@@ -1239,6 +2832,10 @@ var TizenflixGate = (() => {
       var lastFocusRowId = null;
       var lastSearchLeftEl = null;
       var scrollAnimGen = 0;
+      var cachedRowAnchorY = null;
+      function invalidateRowAnchorCache() {
+        cachedRowAnchorY = null;
+      }
       function getFocusables(root) {
         if (!root) return [];
         var nodes = root.querySelectorAll(FOCUS_SELECTOR);
@@ -1286,6 +2883,7 @@ var TizenflixGate = (() => {
         var main = getMainRoot();
         if (main) main.scrollTop = 0;
         lastFocusRowId = null;
+        invalidateRowAnchorCache();
         resetAllTrackOffsets();
       }
       function resetAllTrackOffsets() {
@@ -1363,6 +2961,7 @@ var TizenflixGate = (() => {
         return !!el.closest(".row-spotlight");
       }
       function updateSpotlightMode(el) {
+        var wasSpotlight = document.body && document.body.classList.contains("home-spotlight-focus");
         var rows = document.querySelectorAll(".row-spotlight");
         for (var i = 0; i < rows.length; i++) {
           rows[i].classList.remove("is-active");
@@ -1392,6 +2991,8 @@ var TizenflixGate = (() => {
         } else {
           document.body.classList.remove("home-spotlight-focus");
         }
+        var isSpotlight = document.body && document.body.classList.contains("home-spotlight-focus");
+        if (wasSpotlight !== isSpotlight) invalidateRowAnchorCache();
       }
       function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
         if (!track) return;
@@ -1429,13 +3030,18 @@ var TizenflixGate = (() => {
         }
         requestAnimationFrame(step);
       }
-      function animateMainScroll(main, targetScroll, duration) {
+      function animateMainScroll(main, targetScroll, duration, options) {
         if (!main) return;
+        options = options || {};
         targetScroll = Math.max(0, targetScroll);
         var start = main.scrollTop;
         var distance = targetScroll - start;
         if (Math.abs(distance) < 2) return;
-        if (motion.prefersReducedMotion() || motion.shouldSnapScroll(distance)) {
+        if (motion.prefersReducedMotion()) {
+          main.scrollTop = targetScroll;
+          return;
+        }
+        if (!options.forceAnimate && motion.shouldSnapScroll(distance)) {
           main.scrollTop = targetScroll;
           return;
         }
@@ -1475,12 +3081,55 @@ var TizenflixGate = (() => {
         }
         return scrollLeft;
       }
-      function scrollSpotlightRowToTop(el) {
-        var row = el.closest(".row-spotlight");
+      function getRowAnchorViewportY(main, rowEl) {
+        if (!main) return motion.ROW_ANCHOR_FALLBACK_PX;
+        if (document.body && document.body.classList.contains("home-spotlight-focus")) {
+          return motion.ROW_ANCHOR_SPOTLIGHT_PX;
+        }
+        if (rowEl) {
+          var contentRows = main.querySelectorAll(".content-row");
+          for (var i = 0; i < contentRows.length; i++) {
+            if (contentRows[i] === rowEl && i > 0) {
+              var mainRect = main.getBoundingClientRect();
+              var refRect = contentRows[i - 1].getBoundingClientRect();
+              return refRect.top - mainRect.top;
+            }
+          }
+        }
+        if (cachedRowAnchorY !== null) return cachedRowAnchorY;
+        var rows = main.querySelectorAll(".content-row");
+        if (rows.length >= 2 && main.scrollTop < 8) {
+          var mainRect0 = main.getBoundingClientRect();
+          var rowRect0 = rows[1].getBoundingClientRect();
+          cachedRowAnchorY = rowRect0.top - mainRect0.top;
+          if (cachedRowAnchorY < 0) cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
+          return cachedRowAnchorY;
+        }
+        cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
+        return cachedRowAnchorY;
+      }
+      function isHeroFocus(el) {
+        return !!(el && el.closest(".hero"));
+      }
+      function scrollFocusRowToAnchor(el) {
         var main = getMainRoot();
-        if (!row || !main) return;
+        if (!main || !el) return;
+        if (isHeroFocus(el)) {
+          animateMainScroll(main, 0, null, { forceAnimate: true });
+          return;
+        }
+        var rowEl = el.closest(".content-row");
+        if (!rowEl) {
+          scrollIntoView(el);
+          return;
+        }
+        var mainRect = main.getBoundingClientRect();
+        var rowRect = rowEl.getBoundingClientRect();
+        var rowContentTop = rowRect.top - mainRect.top + main.scrollTop;
+        var anchorY = getRowAnchorViewportY(main, rowEl);
+        var targetScrollTop = Math.max(0, rowContentTop - anchorY);
         var profile = motion.getMotionProfile();
-        animateMainScroll(main, Math.max(0, row.offsetTop - 48), profile.mainScrollMs);
+        animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
       }
       function getSpotlightScrollPadding(el) {
         return indexInRow(el) === 0 ? 0 : 40;
@@ -1527,11 +3176,15 @@ var TizenflixGate = (() => {
           if (gen !== scrollAnimGen || currentEl !== el) return;
           if (el.classList.contains("card")) {
             scrollRowIntoView(el, afterHorizontalScroll);
+          } else if (afterHorizontalScroll) {
+            afterHorizontalScroll();
           }
-          if (isSpotlight) {
-            if (rowChanged) scrollSpotlightRowToTop(el);
-          } else {
-            scrollIntoView(el);
+          if (rowChanged) {
+            if (el.closest(".content-row") || isHeroFocus(el)) {
+              scrollFocusRowToAnchor(el);
+            } else {
+              scrollIntoView(el);
+            }
           }
         }
         requestAnimationFrame(runScroll);
@@ -1685,6 +3338,37 @@ var TizenflixGate = (() => {
         }
         return el ? focusElement(el) : false;
       }
+      function isInMainArea(el) {
+        if (!el) el = currentEl;
+        if (!el) return true;
+        return !isInSidebar(el);
+      }
+      function focusSidebar(screenName) {
+        setSidebarExpanded(true);
+        var sidebar = document.getElementById("sidebar");
+        if (!sidebar) return false;
+        var el = null;
+        if (screenName) {
+          el = sidebar.querySelector('.nav-item[data-screen="' + screenName + '"]');
+        }
+        if (!el && lastSidebarEl && sidebar.contains(lastSidebarEl)) {
+          el = lastSidebarEl;
+        }
+        if (!el) {
+          var active = sidebar.querySelector(".nav-item.active");
+          if (active) el = active;
+        }
+        if (!el) {
+          var nav = getSidebarFocusables();
+          el = nav.length ? nav[0] : null;
+        }
+        return el ? focusElement(el) : false;
+      }
+      function handleBrowseBack() {
+        if (isInSidebar(currentEl)) return false;
+        var router = require_router();
+        return focusSidebar(router.current());
+      }
       function rememberMainFocus() {
         if (currentEl && !isInSidebar(currentEl)) {
           rememberedMainEl = currentEl;
@@ -1798,6 +3482,9 @@ var TizenflixGate = (() => {
         focusDefaultMain,
         rememberMainFocus,
         restoreMainFocus,
+        focusSidebar,
+        handleBrowseBack,
+        isInMainArea,
         resetMainScroll,
         afterScreenRender,
         getFocusables,

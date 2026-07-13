@@ -53,6 +53,46 @@ function layoutForRow(rowDef, index) {
   return "standard";
 }
 
+function mapProgressEntry(entry) {
+  return {
+    id: entry.tmdbId,
+    type: entry.type,
+    title: entry.title || "Untitled",
+    poster: entry.poster || null,
+    backdrop: entry.poster || null,
+    season: entry.season,
+    episode: entry.episode,
+    positionSeconds: entry.positionSeconds || 0,
+    durationSeconds: entry.durationSeconds || 0,
+    percent: entry.percent || 0,
+    episodeTitle: entry.episodeTitle || "",
+  };
+}
+
+function enrichContinueWatching(items) {
+  var tasks = items.map(function (item) {
+    if (item.type !== "tv" || item.episodeTitle || item.season == null || item.episode == null) {
+      return Promise.resolve(item);
+    }
+    return api
+      .getEpisodes(item.id, item.season)
+      .then(function (data) {
+        var episodes = data.episodes || data.items || [];
+        for (var i = 0; i < episodes.length; i++) {
+          if (Number(episodes[i].episode) === Number(item.episode)) {
+            item.episodeTitle = episodes[i].title || episodes[i].name || "";
+            break;
+          }
+        }
+        return item;
+      })
+      .catch(function () {
+        return item;
+      });
+  });
+  return Promise.all(tasks);
+}
+
 function openItem(item) {
   focus.rememberMainFocus();
   if (item.type === "tv") {
@@ -60,6 +100,30 @@ function openItem(item) {
   } else {
     router.navigate("detail-movie", { tmdbId: item.id, title: item.title });
   }
+}
+
+function resumeItem(item) {
+  var onStatus = window.TizenflixApp && window.TizenflixApp.showStatus;
+  var startSeconds = item.positionSeconds || 0;
+  if (item.type === "tv") {
+    var season = item.season || 1;
+    var episode = item.episode || 1;
+    var label = (item.title || "Show") + " S" + season + "E" + episode;
+    return playback
+      .playTvEpisode(item.id, season, episode, label, onStatus, {
+        showTitle: item.title,
+        episodeTitle: item.episodeTitle || "",
+        startSeconds: startSeconds,
+      })
+      .catch(function (err) {
+        if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+      });
+  }
+  return playback
+    .playMovie(item.id, item.title, onStatus, { startSeconds: startSeconds })
+    .catch(function (err) {
+      if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+    });
 }
 
 function playItem(item, onStatus) {
@@ -82,9 +146,7 @@ function handleFocusChange(meta) {
   if (viewMode !== "home") return;
 
   var item = itemCache[meta.tmdbId];
-  if (!item || !heroEl) return;
-
-  hero.updateHero(heroEl, item);
+  if (!item) return;
 
   if (meta.rowId) {
     var main = document.getElementById("main");
@@ -101,6 +163,9 @@ function handleFocusChange(meta) {
       }
     }
   }
+
+  if (!heroEl) return;
+  hero.updateHero(heroEl, item);
 }
 
 function loadContent(el) {
@@ -109,11 +174,22 @@ function loadContent(el) {
   featuredItem = null;
   hero.resetHeroState();
 
-  api
-    .browseRows()
-    .then(function (data) {
+  var cwPromise =
+    viewMode === "home"
+      ? api.continueWatching(20).catch(function () {
+          return [];
+        })
+      : Promise.resolve([]);
+
+  Promise.all([
+    api.browseRows(),
+    cwPromise,
+  ])
+    .then(function (results) {
+      var data = results[0];
+      var cwRaw = results[1] || [];
       var rows = filterRows(data.rows || []);
-      if (!rows.length) {
+      if (!rows.length && !cwRaw.length) {
         showError(el, "No browse rows available.");
         return null;
       }
@@ -126,14 +202,21 @@ function loadContent(el) {
         }
       }
 
-      return api.browseRow(heroRowId).then(function (heroData) {
-        return { rows: rows, heroItems: heroData.items || [] };
+      return enrichContinueWatching(cwRaw.map(mapProgressEntry)).then(function (cwItems) {
+        if (!rows.length) {
+          return { rows: [], heroItems: [], cwItems: cwItems };
+        }
+        return api.browseRow(heroRowId).then(function (heroData) {
+          return { rows: rows, heroItems: heroData.items || [], cwItems: cwItems };
+        });
       });
     })
     .then(function (bundle) {
       if (!bundle) return;
 
       el.innerHTML = "";
+
+      var hasContinueWatching = viewMode === "home" && bundle.cwItems && bundle.cwItems.length > 0;
 
       if (bundle.heroItems.length && viewMode === "home") {
         featuredItem = bundle.heroItems[0];
@@ -149,6 +232,21 @@ function loadContent(el) {
         el.appendChild(heroEl);
       }
 
+      if (hasContinueWatching) {
+        cacheItems(bundle.cwItems);
+        el.appendChild(
+          row.createRow("Continue Watching", bundle.cwItems, resumeItem, {
+            layout: "standard",
+            variant: "continue-watching",
+          })
+        );
+      }
+
+      if (!bundle.rows.length) {
+        focus.focusDefaultMain();
+        return;
+      }
+
       var fetches = bundle.rows.map(function (rowDef, rowIndex) {
         return api
           .browseRow(rowDef.id)
@@ -161,7 +259,7 @@ function loadContent(el) {
       });
 
       return Promise.all(fetches).then(function (results) {
-        var renderedCount = 0;
+        var renderedCount = hasContinueWatching ? 1 : 0;
         for (var r = 0; r < results.length; r++) {
           var result = results[r];
           if (!result.items.length) continue;

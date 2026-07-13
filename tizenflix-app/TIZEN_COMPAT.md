@@ -33,6 +33,8 @@ The app uses [`app/js/core/motion.js`](app/js/core/motion.js) for timing profile
 
 **Hero collapse:** `transform: translateY(-24px) scaleY(0)` + `opacity`, not animated `min-height`.
 
+**Vertical row focus:** on row change, animate `#main.scrollTop` so the focused `.content-row` lands at the row above's viewport position (spotlight mode: `48px` anchor). Use `forceAnimate` so TV does not snap large jumps.
+
 Preview TV motion in browser: `http://localhost:3010/app/index.html?tvPerf=1`
 
 ## JavaScript — do not use

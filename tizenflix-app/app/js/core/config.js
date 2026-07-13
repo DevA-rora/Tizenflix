@@ -4,7 +4,7 @@ var DEV_MODE_KEY = "tizenflix.devMode";
 var BACKEND_KEY = "tizenflix.playBackend";
 var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
 var API_PORT = "8790";
-var PLAY_RESOLVE_TIMEOUT_MS = 90000;
+var PLAY_RESOLVE_TIMEOUT_MS = 20000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
 
 function isTizenClient() {

@@ -3,6 +3,39 @@
  */
 
 var current = null;
+var prefetchCache = null;
+var warmedManifestUrl = null;
+var PREFETCH_TTL_MS = 5 * 60 * 1000;
+
+function prefetchKey(type, tmdbId, season, episode) {
+  return type + ":" + tmdbId + ":" + (season || "") + ":" + (episode || "");
+}
+
+function setPrefetch(key, play) {
+  prefetchCache = { key: key, play: play, fetchedAt: Date.now() };
+}
+
+function getPrefetch(key) {
+  if (!prefetchCache || prefetchCache.key !== key) return null;
+  if (Date.now() - prefetchCache.fetchedAt > PREFETCH_TTL_MS) {
+    prefetchCache = null;
+    return null;
+  }
+  return prefetchCache.play;
+}
+
+function clearPrefetch() {
+  prefetchCache = null;
+  warmedManifestUrl = null;
+}
+
+function setWarmedManifest(url) {
+  warmedManifestUrl = url || null;
+}
+
+function getWarmedManifest() {
+  return warmedManifestUrl;
+}
 
 function create(meta) {
   meta = meta || {};
@@ -65,4 +98,10 @@ module.exports = {
   update: update,
   setFromPlay: setFromPlay,
   clear: clear,
+  prefetchKey: prefetchKey,
+  setPrefetch: setPrefetch,
+  getPrefetch: getPrefetch,
+  clearPrefetch: clearPrefetch,
+  setWarmedManifest: setWarmedManifest,
+  getWarmedManifest: getWarmedManifest,
 };

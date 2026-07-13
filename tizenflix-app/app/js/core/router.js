@@ -9,6 +9,7 @@ var stack = [];
 var screens = {};
 var rootEl = null;
 var onFocusHint = null;
+var focusSidebarOnRender = false;
 
 var BROWSE_SCREENS = {
   home: true,
@@ -53,7 +54,12 @@ function render() {
     screen.render(rootEl);
   }
   updateImmersiveMode();
-  focus.afterScreenRender(name || "");
+  if (focusSidebarOnRender) {
+    focusSidebarOnRender = false;
+    focus.focusSidebar(name || "");
+  } else {
+    focus.afterScreenRender(name || "");
+  }
 }
 
 function leaveCurrentScreen() {
@@ -102,6 +108,11 @@ function rerender() {
   render();
 }
 
+function rerenderWithSidebarFocus() {
+  focusSidebarOnRender = true;
+  render();
+}
+
 function init(options) {
   rootEl = options.root;
   onFocusHint = options.onFocusHint || null;
@@ -117,5 +128,6 @@ module.exports = {
   back: back,
   current: current,
   rerender: rerender,
+  rerenderWithSidebarFocus: rerenderWithSidebarFocus,
   init: init,
 };

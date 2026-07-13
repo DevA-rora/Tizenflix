@@ -13,7 +13,7 @@ var TizenflixApp = (() => {
       var BACKEND_KEY = "tizenflix.playBackend";
       var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
       var API_PORT = "8790";
-      var PLAY_RESOLVE_TIMEOUT_MS = 9e4;
+      var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
       function isTizenClient() {
         if (typeof navigator === "undefined") return false;
@@ -314,6 +314,8 @@ var TizenflixApp = (() => {
         fadeMs: 80,
         heroBackdropMs: 250
       };
+      var ROW_ANCHOR_SPOTLIGHT_PX = 48;
+      var ROW_ANCHOR_FALLBACK_PX = 140;
       var tvPerfForced = null;
       function queryTvPerfOverride() {
         if (typeof window === "undefined" || !window.location || !window.location.search) return false;
@@ -346,6 +348,8 @@ var TizenflixApp = (() => {
       module.exports = {
         BROWSER,
         TV,
+        ROW_ANCHOR_SPOTLIGHT_PX,
+        ROW_ANCHOR_FALLBACK_PX,
         isTvPerfMode,
         setTvPerfMode,
         getMotionProfile,
@@ -369,6 +373,10 @@ var TizenflixApp = (() => {
       var lastFocusRowId = null;
       var lastSearchLeftEl = null;
       var scrollAnimGen = 0;
+      var cachedRowAnchorY = null;
+      function invalidateRowAnchorCache() {
+        cachedRowAnchorY = null;
+      }
       function getFocusables(root) {
         if (!root) return [];
         var nodes = root.querySelectorAll(FOCUS_SELECTOR);
@@ -416,6 +424,7 @@ var TizenflixApp = (() => {
         var main = getMainRoot();
         if (main) main.scrollTop = 0;
         lastFocusRowId = null;
+        invalidateRowAnchorCache();
         resetAllTrackOffsets();
       }
       function resetAllTrackOffsets() {
@@ -493,6 +502,7 @@ var TizenflixApp = (() => {
         return !!el.closest(".row-spotlight");
       }
       function updateSpotlightMode(el) {
+        var wasSpotlight = document.body && document.body.classList.contains("home-spotlight-focus");
         var rows = document.querySelectorAll(".row-spotlight");
         for (var i = 0; i < rows.length; i++) {
           rows[i].classList.remove("is-active");
@@ -522,6 +532,8 @@ var TizenflixApp = (() => {
         } else {
           document.body.classList.remove("home-spotlight-focus");
         }
+        var isSpotlight = document.body && document.body.classList.contains("home-spotlight-focus");
+        if (wasSpotlight !== isSpotlight) invalidateRowAnchorCache();
       }
       function animateTrackOffset(track, outer, targetOffset, duration, onComplete) {
         if (!track) return;
@@ -559,13 +571,18 @@ var TizenflixApp = (() => {
         }
         requestAnimationFrame(step);
       }
-      function animateMainScroll(main, targetScroll, duration) {
+      function animateMainScroll(main, targetScroll, duration, options) {
         if (!main) return;
+        options = options || {};
         targetScroll = Math.max(0, targetScroll);
         var start = main.scrollTop;
         var distance = targetScroll - start;
         if (Math.abs(distance) < 2) return;
-        if (motion.prefersReducedMotion() || motion.shouldSnapScroll(distance)) {
+        if (motion.prefersReducedMotion()) {
+          main.scrollTop = targetScroll;
+          return;
+        }
+        if (!options.forceAnimate && motion.shouldSnapScroll(distance)) {
           main.scrollTop = targetScroll;
           return;
         }
@@ -605,12 +622,55 @@ var TizenflixApp = (() => {
         }
         return scrollLeft;
       }
-      function scrollSpotlightRowToTop(el) {
-        var row = el.closest(".row-spotlight");
+      function getRowAnchorViewportY(main, rowEl) {
+        if (!main) return motion.ROW_ANCHOR_FALLBACK_PX;
+        if (document.body && document.body.classList.contains("home-spotlight-focus")) {
+          return motion.ROW_ANCHOR_SPOTLIGHT_PX;
+        }
+        if (rowEl) {
+          var contentRows = main.querySelectorAll(".content-row");
+          for (var i = 0; i < contentRows.length; i++) {
+            if (contentRows[i] === rowEl && i > 0) {
+              var mainRect = main.getBoundingClientRect();
+              var refRect = contentRows[i - 1].getBoundingClientRect();
+              return refRect.top - mainRect.top;
+            }
+          }
+        }
+        if (cachedRowAnchorY !== null) return cachedRowAnchorY;
+        var rows = main.querySelectorAll(".content-row");
+        if (rows.length >= 2 && main.scrollTop < 8) {
+          var mainRect0 = main.getBoundingClientRect();
+          var rowRect0 = rows[1].getBoundingClientRect();
+          cachedRowAnchorY = rowRect0.top - mainRect0.top;
+          if (cachedRowAnchorY < 0) cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
+          return cachedRowAnchorY;
+        }
+        cachedRowAnchorY = motion.ROW_ANCHOR_FALLBACK_PX;
+        return cachedRowAnchorY;
+      }
+      function isHeroFocus(el) {
+        return !!(el && el.closest(".hero"));
+      }
+      function scrollFocusRowToAnchor(el) {
         var main = getMainRoot();
-        if (!row || !main) return;
+        if (!main || !el) return;
+        if (isHeroFocus(el)) {
+          animateMainScroll(main, 0, null, { forceAnimate: true });
+          return;
+        }
+        var rowEl = el.closest(".content-row");
+        if (!rowEl) {
+          scrollIntoView(el);
+          return;
+        }
+        var mainRect = main.getBoundingClientRect();
+        var rowRect = rowEl.getBoundingClientRect();
+        var rowContentTop = rowRect.top - mainRect.top + main.scrollTop;
+        var anchorY = getRowAnchorViewportY(main, rowEl);
+        var targetScrollTop = Math.max(0, rowContentTop - anchorY);
         var profile = motion.getMotionProfile();
-        animateMainScroll(main, Math.max(0, row.offsetTop - 48), profile.mainScrollMs);
+        animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
       }
       function getSpotlightScrollPadding(el) {
         return indexInRow(el) === 0 ? 0 : 40;
@@ -657,11 +717,15 @@ var TizenflixApp = (() => {
           if (gen !== scrollAnimGen || currentEl !== el) return;
           if (el.classList.contains("card")) {
             scrollRowIntoView(el, afterHorizontalScroll);
+          } else if (afterHorizontalScroll) {
+            afterHorizontalScroll();
           }
-          if (isSpotlight) {
-            if (rowChanged) scrollSpotlightRowToTop(el);
-          } else {
-            scrollIntoView(el);
+          if (rowChanged) {
+            if (el.closest(".content-row") || isHeroFocus(el)) {
+              scrollFocusRowToAnchor(el);
+            } else {
+              scrollIntoView(el);
+            }
           }
         }
         requestAnimationFrame(runScroll);
@@ -815,6 +879,37 @@ var TizenflixApp = (() => {
         }
         return el ? focusElement(el) : false;
       }
+      function isInMainArea(el) {
+        if (!el) el = currentEl;
+        if (!el) return true;
+        return !isInSidebar(el);
+      }
+      function focusSidebar(screenName) {
+        setSidebarExpanded(true);
+        var sidebar = document.getElementById("sidebar");
+        if (!sidebar) return false;
+        var el = null;
+        if (screenName) {
+          el = sidebar.querySelector('.nav-item[data-screen="' + screenName + '"]');
+        }
+        if (!el && lastSidebarEl && sidebar.contains(lastSidebarEl)) {
+          el = lastSidebarEl;
+        }
+        if (!el) {
+          var active = sidebar.querySelector(".nav-item.active");
+          if (active) el = active;
+        }
+        if (!el) {
+          var nav = getSidebarFocusables();
+          el = nav.length ? nav[0] : null;
+        }
+        return el ? focusElement(el) : false;
+      }
+      function handleBrowseBack() {
+        if (isInSidebar(currentEl)) return false;
+        var router = require_router();
+        return focusSidebar(router.current());
+      }
       function rememberMainFocus() {
         if (currentEl && !isInSidebar(currentEl)) {
           rememberedMainEl = currentEl;
@@ -928,6 +1023,9 @@ var TizenflixApp = (() => {
         focusDefaultMain,
         rememberMainFocus,
         restoreMainFocus,
+        focusSidebar,
+        handleBrowseBack,
+        isInMainArea,
         resetMainScroll,
         afterScreenRender,
         getFocusables,
@@ -1006,6 +1104,20 @@ var TizenflixApp = (() => {
       function saveProgress(payload) {
         return config.apiPost("/progress", payload);
       }
+      function warmStreamUrl(url) {
+        return config.fetchWithTimeout(url, 8e3).then(function(res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.text();
+        });
+      }
+      function fetchPlaySubtitlesMovie(tmdbId) {
+        return config.apiGet("/play/subtitles/movie/" + encodeURIComponent(tmdbId));
+      }
+      function fetchPlaySubtitlesTv(tmdbId, season, episode) {
+        return config.apiGet(
+          "/play/subtitles/tv/" + encodeURIComponent(tmdbId) + "/" + encodeURIComponent(season) + "/" + encodeURIComponent(episode)
+        );
+      }
       module.exports = {
         getBase,
         setBase: config.setApiBase,
@@ -1024,7 +1136,10 @@ var TizenflixApp = (() => {
         hasPlayableSources,
         getProviders,
         continueWatching,
-        saveProgress
+        saveProgress,
+        warmStreamUrl,
+        fetchPlaySubtitlesMovie,
+        fetchPlaySubtitlesTv
       };
     }
   });
@@ -1215,8 +1330,9 @@ var TizenflixApp = (() => {
         });
       }
       var READY_TIMEOUT_MS = 12e3;
-      var HLS_PRIME_BUFFER_SEC = 20;
-      var HLS_PRIME_TIMEOUT_MS = 25e3;
+      var HLS_PRIME_BUFFER_SEC = 4;
+      var HLS_PRIME_TIMEOUT_MS = 8e3;
+      var HLS_EARLY_START_BUFFER_SEC = 2;
       var MAX_NON_FATAL_RECOVERIES = 8;
       function beginPlaySession() {
         playGeneration += 1;
@@ -1446,6 +1562,7 @@ var TizenflixApp = (() => {
         return url && url.indexOf("/proxy/stream") !== -1;
       }
       function prefersHlsJsFirst(url) {
+        if (prefersNativeHls()) return false;
         return isProxiedHls(url);
       }
       function createHlsInstance() {
@@ -1550,6 +1667,11 @@ var TizenflixApp = (() => {
             started = true;
             debug.debugLog("HLS buffer primed " + Math.floor(ahead) + "s (" + (label || "ready") + ")");
             if (onLog) onLog("Buffer primed " + Math.floor(ahead) + "s \u2014 starting smooth playback");
+            attemptPlay(video, onLog);
+          } else if (ahead >= HLS_EARLY_START_BUFFER_SEC && label === "frag") {
+            started = true;
+            debug.debugLog("HLS early start " + Math.floor(ahead) + "s after first fragment");
+            if (onLog) onLog("Starting with " + Math.floor(ahead) + "s buffered");
             attemptPlay(video, onLog);
           }
         }
@@ -1823,6 +1945,10 @@ var TizenflixApp = (() => {
         currentProvider = sources[0] && sources[0].provider ? sources[0].provider : null;
         playbackReported = false;
         nonFatalRecoveries = 0;
+        if (options.warmedManifestUrl && sources[0] && sources[0].url === options.warmedManifestUrl) {
+          debug.debugLog("Using warmed manifest");
+          if (onLog) onLog("Using warmed manifest");
+        }
         function tryNext(reason) {
           if (reason) {
             debug.debugLog(reason);
@@ -1945,6 +2071,33 @@ var TizenflixApp = (() => {
   var require_playback_session = __commonJS({
     "app/js/services/playback-session.js"(exports, module) {
       var current = null;
+      var prefetchCache = null;
+      var warmedManifestUrl = null;
+      var PREFETCH_TTL_MS = 5 * 60 * 1e3;
+      function prefetchKey(type, tmdbId, season, episode) {
+        return type + ":" + tmdbId + ":" + (season || "") + ":" + (episode || "");
+      }
+      function setPrefetch(key, play) {
+        prefetchCache = { key, play, fetchedAt: Date.now() };
+      }
+      function getPrefetch(key) {
+        if (!prefetchCache || prefetchCache.key !== key) return null;
+        if (Date.now() - prefetchCache.fetchedAt > PREFETCH_TTL_MS) {
+          prefetchCache = null;
+          return null;
+        }
+        return prefetchCache.play;
+      }
+      function clearPrefetch() {
+        prefetchCache = null;
+        warmedManifestUrl = null;
+      }
+      function setWarmedManifest(url) {
+        warmedManifestUrl = url || null;
+      }
+      function getWarmedManifest() {
+        return warmedManifestUrl;
+      }
       function create(meta) {
         meta = meta || {};
         current = {
@@ -2000,7 +2153,13 @@ var TizenflixApp = (() => {
         get,
         update,
         setFromPlay,
-        clear
+        clear,
+        prefetchKey,
+        setPrefetch,
+        getPrefetch,
+        clearPrefetch,
+        setWarmedManifest,
+        getWarmedManifest
       };
     }
   });
@@ -2285,6 +2444,7 @@ var TizenflixApp = (() => {
           panel.innerHTML = "";
         }
         resetHideTimer();
+        playerFocus.focusDefault();
       }
       function closeRail() {
         railOpen = false;
@@ -2292,6 +2452,7 @@ var TizenflixApp = (() => {
         var rail = chromeEl.querySelector(".player-rail");
         if (rail) rail.classList.add("hidden");
         resetHideTimer();
+        playerFocus.focusDefault();
       }
       function openPanel(name) {
         if (!chromeEl) return;
@@ -2670,9 +2831,11 @@ var TizenflixApp = (() => {
       var playbackSession = require_playback_session();
       var playerChrome = require_player_chrome();
       var VIDKING_SERVER_FALLBACKS = [
-        { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 45e3 },
-        { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 45e3 }
+        { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15e3 },
+        { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15e3 }
       ];
+      var FAST_RESOLVE_QUERY = "onlySourceId=vixsrc&backend=tmdb-native";
+      var FAST_RESOLVE_TIMEOUT_MS = 8e3;
       var playSession = 0;
       var progressSaveTimer = null;
       var lastProgressSaveAt = 0;
@@ -2890,6 +3053,7 @@ var TizenflixApp = (() => {
         wrap.classList.remove("hidden");
         player.showPlaybackChrome(wrap, title || play.title || "");
         player.applySubtitles(video, play.subtitles || []);
+        loadSubtitlesAsync(play, video);
         mountChrome(stored, onStatus);
         bindProgressSaver(video);
         debug.debugClear();
@@ -2902,13 +3066,38 @@ var TizenflixApp = (() => {
         if (playOptions.startSeconds > 0) {
           sourceOptions.startSeconds = playOptions.startSeconds;
         }
+        var warmed = playbackSession.getWarmedManifest();
+        if (warmed && sources[0] && sources[0].url === warmed) {
+          sourceOptions.warmedManifestUrl = warmed;
+        }
         player.playSources(video, sources, log, wrap, title || play.title || "Playback", sourceOptions);
         return Promise.resolve();
+      }
+      function loadSubtitlesAsync(play, video) {
+        if (!play || !play.tmdbId) return;
+        var promise;
+        if (play.type === "tv") {
+          promise = api.fetchPlaySubtitlesTv(play.tmdbId, play.season, play.episode);
+        } else {
+          promise = api.fetchPlaySubtitlesMovie(play.tmdbId);
+        }
+        promise.then(function(data) {
+          if (!data || !data.subtitles || !data.subtitles.length) return;
+          player.applySubtitles(video, data.subtitles);
+          playbackSession.update({ subtitles: data.subtitles });
+        }).catch(function() {
+        });
       }
       function buildMovieResolveChain(tmdbId) {
         var attempts = [
           {
-            label: "VixSrc",
+            label: "VixSrc (fast)",
+            run: function() {
+              return api.resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
+            }
+          },
+          {
+            label: "Auto",
             run: function() {
               return api.resolveMovie(tmdbId, "backend=auto", config.PLAY_RESOLVE_TIMEOUT_MS);
             }
@@ -2929,7 +3118,19 @@ var TizenflixApp = (() => {
       function buildTvResolveChain(tmdbId, season, episode) {
         var attempts = [
           {
-            label: "VixSrc",
+            label: "VixSrc (fast)",
+            run: function() {
+              return api.resolveTvEpisode(
+                tmdbId,
+                season,
+                episode,
+                FAST_RESOLVE_QUERY,
+                FAST_RESOLVE_TIMEOUT_MS
+              );
+            }
+          },
+          {
+            label: "Auto",
             run: function() {
               return api.resolveTvEpisode(
                 tmdbId,
@@ -2981,6 +3182,48 @@ var TizenflixApp = (() => {
         router.rerender();
         throw new Error(formatPlaybackError(err));
       }
+      function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
+        var key = type === "tv" ? playbackSession.prefetchKey("tv", tmdbId, season, episode) : playbackSession.prefetchKey("movie", tmdbId);
+        var prefetched = playbackSession.getPrefetch(key);
+        if (prefetched && api.hasPlayableSources(prefetched)) {
+          debug.debugLog("Using prefetched resolve");
+          if (onStatus) onStatus("Starting playback\u2026");
+          return Promise.resolve(prefetched);
+        }
+        var chain = type === "tv" ? buildTvResolveChain(tmdbId, season, episode) : buildMovieResolveChain(tmdbId);
+        return resolveWithTizenFallback(chain, onStatus, session);
+      }
+      function warmManifestFromPlay(play) {
+        var sources = api.sourcesForPlay(play);
+        if (!sources.length || !sources[0].url) return;
+        var manifestUrl = sources[0].url;
+        api.warmStreamUrl(manifestUrl).then(function() {
+          playbackSession.setWarmedManifest(manifestUrl);
+          debug.debugLog("Manifest warmed: " + manifestUrl.slice(0, 80));
+        }).catch(function() {
+        });
+      }
+      function prefetchMovie(tmdbId) {
+        api.resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
+            playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
+            warmManifestFromPlay(play);
+          }
+        }).catch(function() {
+        });
+      }
+      function prefetchTvEpisode(tmdbId, season, episode) {
+        api.resolveTvEpisode(tmdbId, season, episode, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
+            playbackSession.setPrefetch(
+              playbackSession.prefetchKey("tv", tmdbId, season, episode),
+              play
+            );
+            warmManifestFromPlay(play);
+          }
+        }).catch(function() {
+        });
+      }
       function playMovie(tmdbId, title, onStatus, meta) {
         meta = meta || {};
         var startSeconds = meta.startSeconds || 0;
@@ -2995,7 +3238,7 @@ var TizenflixApp = (() => {
           if (Object.prototype.hasOwnProperty.call(meta, k)) sessionMeta[k] = meta[k];
         }
         var session = beginPlaybackRequest(sessionMeta, onStatus);
-        return resolveWithTizenFallback(buildMovieResolveChain(tmdbId), onStatus, session).then(function(play) {
+        return resolvePlayback(tmdbId, "movie", null, null, onStatus, session).then(function(play) {
           if (!isActivePlaySession(session)) return;
           if (!play || !api.hasPlayableSources(play)) {
             return Promise.reject(new Error(formatResolveError(play)));
@@ -3024,7 +3267,7 @@ var TizenflixApp = (() => {
           if (Object.prototype.hasOwnProperty.call(meta, k)) sessionMeta[k] = meta[k];
         }
         var session = beginPlaybackRequest(sessionMeta, onStatus);
-        return resolveWithTizenFallback(buildTvResolveChain(tmdbId, season, episode), onStatus, session).then(function(play) {
+        return resolvePlayback(tmdbId, "tv", season, episode, onStatus, session).then(function(play) {
           if (!isActivePlaySession(session)) return;
           if (!play || !api.hasPlayableSources(play)) {
             return Promise.reject(new Error(formatResolveError(play)));
@@ -3110,7 +3353,7 @@ var TizenflixApp = (() => {
         if (wrap) wrap.classList.add("hidden");
         if (wasFullscreen && !options.skipRerender) {
           var router = require_router();
-          router.rerender();
+          router.rerenderWithSidebarFocus();
         }
       }
       function getSession() {
@@ -3120,6 +3363,8 @@ var TizenflixApp = (() => {
         playResolved,
         playMovie,
         playTvEpisode,
+        prefetchMovie,
+        prefetchTvEpisode,
         stop,
         getSession,
         switchSource,
@@ -3138,6 +3383,7 @@ var TizenflixApp = (() => {
       var screens = {};
       var rootEl = null;
       var onFocusHint = null;
+      var focusSidebarOnRender = false;
       var BROWSE_SCREENS = {
         home: true,
         trending: true,
@@ -3175,7 +3421,12 @@ var TizenflixApp = (() => {
           screen.render(rootEl);
         }
         updateImmersiveMode();
-        focus.afterScreenRender(name || "");
+        if (focusSidebarOnRender) {
+          focusSidebarOnRender = false;
+          focus.focusSidebar(name || "");
+        } else {
+          focus.afterScreenRender(name || "");
+        }
       }
       function leaveCurrentScreen() {
         var name = current();
@@ -3218,6 +3469,10 @@ var TizenflixApp = (() => {
       function rerender() {
         render();
       }
+      function rerenderWithSidebarFocus() {
+        focusSidebarOnRender = true;
+        render();
+      }
       function init(options) {
         rootEl = options.root;
         onFocusHint = options.onFocusHint || null;
@@ -3232,6 +3487,7 @@ var TizenflixApp = (() => {
         back,
         current,
         rerender,
+        rerenderWithSidebarFocus,
         init
       };
     }
@@ -3453,11 +3709,55 @@ var TizenflixApp = (() => {
       function getItemType(item) {
         return item.type || item.mediaType || item.media_type || "movie";
       }
+      function getProgressPercent(item) {
+        if (!item) return 0;
+        if (item.percent != null && isFinite(item.percent)) return Math.max(0, Math.min(100, item.percent));
+        var dur = item.durationSeconds;
+        var pos = item.positionSeconds;
+        if (dur > 0 && pos >= 0) return Math.max(0, Math.min(100, pos / dur * 100));
+        return 0;
+      }
+      function formatTimeLeft(seconds) {
+        var total = Math.max(0, Math.floor(seconds || 0));
+        if (total < 60) return total + "s left";
+        var hours = Math.floor(total / 3600);
+        var minutes = Math.floor(total % 3600 / 60);
+        if (hours > 0) return hours + "h " + minutes + "m left";
+        return minutes + "m left";
+      }
+      function getTimeLeftSeconds(item) {
+        if (!item) return 0;
+        var dur = item.durationSeconds || 0;
+        var pos = item.positionSeconds || 0;
+        if (dur > 0) return Math.max(0, dur - pos);
+        return 0;
+      }
+      function buildEpisodeLine(item) {
+        if (!item) return "";
+        var type = getItemType(item);
+        if (type === "tv" && item.season != null && item.episode != null) {
+          var line = "S" + item.season + " E" + item.episode;
+          if (item.episodeTitle) line += " \u2022 " + item.episodeTitle;
+          return line;
+        }
+        return item.title || item.name || "";
+      }
+      function buildProgressHtml(item) {
+        var pct = getProgressPercent(item);
+        if (pct <= 0) return "";
+        return '<div class="card-progress"><div class="card-progress-fill" style="width:' + pct.toFixed(1) + '%"></div></div>';
+      }
       function buildAriaLabel(item) {
         var title = item.title || item.name || "Untitled";
         var type = getItemType(item);
         var typeLabel = type === "tv" ? "TV series" : "Movie";
-        return title + ", " + typeLabel;
+        var label = title + ", " + typeLabel;
+        if (type === "tv" && item.season != null && item.episode != null) {
+          label += ", season " + item.season + " episode " + item.episode;
+        }
+        var left = getTimeLeftSeconds(item);
+        if (left > 0) label += ", " + formatTimeLeft(left);
+        return label;
       }
       function buildMetaParts(item, extras) {
         extras = extras || {};
@@ -3484,6 +3784,9 @@ var TizenflixApp = (() => {
         }
         return html;
       }
+      function buildContinueWatchingDetailHtml(item) {
+        return '<p class="card-spotlight-episode-line">' + escapeHtml(buildEpisodeLine(item)) + '</p><p class="card-spotlight-time-left">' + escapeHtml(formatTimeLeft(getTimeLeftSeconds(item))) + "</p>";
+      }
       function buildPillsHtml(item) {
         var type = getItemType(item);
         var year = item.year || 0;
@@ -3501,42 +3804,68 @@ var TizenflixApp = (() => {
         if (!pills.length) return "";
         return '<div class="card-spotlight-pills">' + pills.join("") + "</div>";
       }
-      function buildBrandHtml(item, logoUrl) {
+      function buildBrandHtml(item, logoUrl, compact) {
         var type = getItemType(item);
         var title = item.title || item.name || "Untitled";
         var seriesLabel = '<div class="card-spotlight-series"><span class="hero-n">N</span> ' + (type === "tv" ? "SERIES" : "FILM") + "</div>";
         var titleHtml = "";
         if (logoUrl) {
-          titleHtml = '<img class="card-spotlight-logo" src="' + escapeHtml(logoUrl) + '" alt="' + escapeHtml(title) + '">';
+          titleHtml = '<img class="card-spotlight-logo' + (compact ? " card-spotlight-logo-compact" : "") + '" src="' + escapeHtml(logoUrl) + '" alt="' + escapeHtml(title) + '">';
         } else {
-          titleHtml = '<div class="card-spotlight-title-text">' + escapeHtml(title) + "</div>";
+          titleHtml = '<div class="card-spotlight-title-text' + (compact ? " card-spotlight-title-text-compact" : "") + '">' + escapeHtml(title) + "</div>";
         }
-        return '<div class="card-spotlight-brand">' + seriesLabel + titleHtml + "</div>";
+        return '<div class="card-spotlight-brand' + (compact ? " card-spotlight-brand-compact" : "") + '">' + seriesLabel + titleHtml + "</div>";
       }
-      function updateSpotlightCard(cardEl, item, extras) {
+      function updateCardProgress(cardEl, item) {
         if (!cardEl || !item) return;
+        var poster = cardEl.querySelector(".card-poster");
+        if (!poster) return;
+        var existing = poster.querySelector(".card-progress");
+        var html = buildProgressHtml(item);
+        if (!html) {
+          if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+          return;
+        }
+        if (existing) {
+          existing.outerHTML = html;
+        } else {
+          poster.insertAdjacentHTML("beforeend", html);
+        }
+      }
+      function updateSpotlightCard(cardEl, item, extras, options) {
+        if (!cardEl || !item) return;
+        options = options || {};
         extras = extras || {};
         var poster = cardEl.querySelector(".card-poster");
         if (poster) {
           var image = cardEl.classList.contains("tv-focus") ? item.backdrop || item.poster || "" : item.poster || "";
           if (image) poster.style.backgroundImage = "url('" + image.replace(/'/g, "%27") + "')";
         }
+        var isCw = options.variant === "continue-watching";
         var brand = cardEl.querySelector(".card-spotlight-brand");
         if (brand) {
-          brand.outerHTML = buildBrandHtml(item, extras.logo || null);
+          brand.outerHTML = buildBrandHtml(item, extras.logo || null, isCw && !cardEl.classList.contains("tv-focus"));
         }
-        var pills = cardEl.querySelector(".card-spotlight-pills");
-        var pillsHtml = buildPillsHtml(item);
-        if (pills) {
-          if (pillsHtml) pills.outerHTML = pillsHtml;
-          else pills.parentNode.removeChild(pills);
-        } else if (pillsHtml && poster) {
-          poster.insertAdjacentHTML("beforeend", pillsHtml);
+        if (!isCw) {
+          var pills = cardEl.querySelector(".card-spotlight-pills");
+          var pillsHtml = buildPillsHtml(item);
+          if (pills) {
+            if (pillsHtml) pills.outerHTML = pillsHtml;
+            else pills.parentNode.removeChild(pills);
+          } else if (pillsHtml && poster) {
+            poster.insertAdjacentHTML("beforeend", pillsHtml);
+          }
         }
+        if (isCw) updateCardProgress(cardEl, item);
       }
-      function updateSpotlightDetailPanel(panelEl, item, extras) {
+      function updateSpotlightDetailPanel(panelEl, item, extras, options) {
         if (!panelEl || !item) return;
+        options = options || {};
         extras = extras || {};
+        if (options.variant === "continue-watching") {
+          panelEl.innerHTML = buildContinueWatchingDetailHtml(item);
+          return;
+        }
         var metaLine = panelEl.querySelector(".card-spotlight-meta-line");
         var overview = panelEl.querySelector(".card-spotlight-overview");
         if (metaLine) metaLine.innerHTML = buildMetaHtml(item, extras);
@@ -3545,27 +3874,28 @@ var TizenflixApp = (() => {
       function createCard(item, onSelect, options) {
         options = options || {};
         var layout = options.layout || "standard";
+        var variant = options.variant || "";
         var type = getItemType(item);
         var title = item.title || item.name || "Untitled";
         var poster = item.poster || "";
         var backdrop = item.backdrop || poster || "";
+        var isCw = variant === "continue-watching";
         var el = document.createElement("button");
         el.type = "button";
         el.className = "card focusable";
         if (layout === "spotlight") el.classList.add("card-spotlight");
-        if (layout === "landscape") el.classList.add("card-landscape");
+        if (isCw) el.classList.add("card-continue-watching");
         el.setAttribute("data-tmdb-id", String(item.id));
         el.setAttribute("data-media-type", type);
         el.setAttribute("data-poster", poster || "");
         el.setAttribute("data-backdrop", backdrop || "");
         el.setAttribute("aria-label", buildAriaLabel(item));
+        if (isCw && item.season != null) el.setAttribute("data-season", String(item.season));
+        if (isCw && item.episode != null) el.setAttribute("data-episode", String(item.episode));
         if (layout === "spotlight") {
-          el.innerHTML = `<div class="card-spotlight-stack"><div class="card-poster" style="background-image:url('` + escapeHtml(poster) + `')">` + buildBrandHtml(item, null) + buildPillsHtml(item) + '</div></div><span class="card-title">' + escapeHtml(title) + "</span>";
-        } else if (layout === "landscape") {
-          var image = backdrop || poster || "";
-          el.innerHTML = `<div class="card-poster card-poster-landscape" style="background-image:url('` + escapeHtml(image) + `')"></div><span class="card-title">` + escapeHtml(title) + "</span>";
+          el.innerHTML = `<div class="card-spotlight-stack"><div class="card-poster" style="background-image:url('` + escapeHtml(poster) + `')">` + buildBrandHtml(item, null, isCw) + (isCw ? "" : buildPillsHtml(item)) + (isCw ? buildProgressHtml(item) : "") + '</div></div><span class="card-title">' + escapeHtml(title) + "</span>";
         } else {
-          el.innerHTML = `<div class="card-poster" style="background-image:url('` + escapeHtml(poster) + `')"></div><span class="card-title">` + escapeHtml(title) + "</span>";
+          el.innerHTML = `<div class="card-poster" style="background-image:url('` + escapeHtml(poster) + `')">` + (isCw ? buildProgressHtml(item) : "") + '</div><span class="card-title">' + escapeHtml(title) + "</span>";
         }
         el.addEventListener("click", function() {
           if (onSelect) onSelect(item);
@@ -3578,6 +3908,10 @@ var TizenflixApp = (() => {
         updateSpotlightDetailPanel,
         buildMetaHtml,
         buildAriaLabel,
+        buildContinueWatchingDetailHtml,
+        buildEpisodeLine,
+        formatTimeLeft,
+        getProgressPercent,
         truncate
       };
     }
@@ -3591,6 +3925,7 @@ var TizenflixApp = (() => {
       var motion = require_motion();
       var rowCounter = 0;
       var spotlightDetailCache = {};
+      var episodeTitleCache = {};
       function truncate(text, max) {
         return card.truncate(text, max);
       }
@@ -3614,21 +3949,62 @@ var TizenflixApp = (() => {
         syncSpotlightDescribedBy(row);
         syncSpotlightDetailPosition(row);
       }
+      function getRowVariant(row) {
+        return row.getAttribute("data-row-variant") || "";
+      }
+      function fetchEpisodeTitle(item) {
+        if (!item || item.type !== "tv" || item.season == null || item.episode == null) {
+          return Promise.resolve(null);
+        }
+        var cacheKey = item.id + ":" + item.season + ":" + item.episode;
+        if (episodeTitleCache[cacheKey]) {
+          return Promise.resolve(episodeTitleCache[cacheKey]);
+        }
+        return api.getEpisodes(item.id, item.season).then(function(data) {
+          var episodes = data.episodes || data.items || [];
+          for (var i = 0; i < episodes.length; i++) {
+            if (Number(episodes[i].episode) === Number(item.episode)) {
+              var name = episodes[i].title || episodes[i].name || "";
+              if (name) episodeTitleCache[cacheKey] = name;
+              return name || null;
+            }
+          }
+          return null;
+        }).catch(function() {
+          return null;
+        });
+      }
       function updateSpotlightMeta(row, item) {
         if (!row || !item) return;
         var focused = row.querySelector(".card.tv-focus");
         var panel = row.querySelector(".row-spotlight-detail");
         if (!focused || !panel) return;
+        var variant = getRowVariant(row);
         var id = String(item.id);
         var extras = spotlightDetailCache[id] || {};
+        var cardOptions = { variant };
         panel.classList.add("is-fading");
         var fadeMs = motion.getMotionProfile().fadeMs;
         setTimeout(function() {
-          card.updateSpotlightCard(focused, item, extras);
-          card.updateSpotlightDetailPanel(panel, item, extras);
+          card.updateSpotlightCard(focused, item, extras, cardOptions);
+          card.updateSpotlightDetailPanel(panel, item, extras, cardOptions);
           panel.classList.remove("is-fading");
           syncSpotlightDescribedBy(row);
         }, fadeMs);
+        if (variant === "continue-watching") {
+          if (!item.episodeTitle && item.type === "tv") {
+            fetchEpisodeTitle(item).then(function(episodeTitle) {
+              if (!episodeTitle) return;
+              item.episodeTitle = episodeTitle;
+              var current = row.querySelector(".card.tv-focus");
+              if (current && current.getAttribute("data-tmdb-id") === id) {
+                card.updateSpotlightCard(current, item, extras, cardOptions);
+                card.updateSpotlightDetailPanel(panel, item, extras, cardOptions);
+              }
+            });
+          }
+          return;
+        }
         if (spotlightDetailCache[id]) return;
         var type = item.type || item.mediaType || item.media_type || "movie";
         var fetcher = type === "tv" ? api.getTv(id) : api.getMovie(id);
@@ -3642,15 +4018,22 @@ var TizenflixApp = (() => {
           spotlightDetailCache[id] = cached;
           var current = row.querySelector(".card.tv-focus");
           if (current && current.getAttribute("data-tmdb-id") === id) {
-            card.updateSpotlightCard(current, item, cached);
-            card.updateSpotlightDetailPanel(panel, item, cached);
+            card.updateSpotlightCard(current, item, cached, cardOptions);
+            card.updateSpotlightDetailPanel(panel, item, cached, cardOptions);
           }
         }).catch(function() {
         });
       }
+      function buildSpotlightDetailHtml(first, variant) {
+        if (variant === "continue-watching") {
+          return card.buildContinueWatchingDetailHtml(first);
+        }
+        return '<p class="card-spotlight-meta-line">' + card.buildMetaHtml(first, {}) + '</p><p class="card-spotlight-overview">' + escapeHtml(truncate(first.overview || "", 200)) + "</p>";
+      }
       function createRow(title, items, onSelect, options) {
         options = options || {};
         var layout = options.layout || "standard";
+        var variant = options.variant || "";
         rowCounter += 1;
         var rowId = "row-" + rowCounter;
         var row = document.createElement("section");
@@ -3658,6 +4041,10 @@ var TizenflixApp = (() => {
         row.classList.add("row-" + layout);
         row.setAttribute("data-focus-row", rowId);
         row.setAttribute("data-row-layout", layout);
+        if (variant) {
+          row.setAttribute("data-row-variant", variant);
+          if (variant === "continue-watching") row.classList.add("row-continue-watching");
+        }
         var heading = document.createElement("h2");
         heading.className = "row-title";
         heading.textContent = title;
@@ -3669,8 +4056,10 @@ var TizenflixApp = (() => {
           trackOuter.className = "row-track-outer";
           var track = document.createElement("div");
           track.className = "row-track row-spotlight-track";
+          var cardOptions = { layout };
+          if (variant) cardOptions.variant = variant;
           for (var i = 0; i < items.length; i++) {
-            track.appendChild(card.createCard(items[i], onSelect, { layout }));
+            track.appendChild(card.createCard(items[i], onSelect, cardOptions));
           }
           trackOuter.appendChild(track);
           body.appendChild(trackOuter);
@@ -3680,7 +4069,7 @@ var TizenflixApp = (() => {
           detailPanel.className = "row-spotlight-detail";
           detailPanel.id = detailId;
           var first = items[0];
-          detailPanel.innerHTML = '<p class="card-spotlight-meta-line">' + card.buildMetaHtml(first, {}) + '</p><p class="card-spotlight-overview">' + escapeHtml(truncate(first.overview || "", 200)) + "</p>";
+          detailPanel.innerHTML = buildSpotlightDetailHtml(first, variant);
           body.appendChild(detailPanel);
           row.appendChild(body);
           row._updateSpotlightMeta = function(item) {
@@ -3695,7 +4084,9 @@ var TizenflixApp = (() => {
           var standardTrack = document.createElement("div");
           standardTrack.className = "row-track";
           for (var j = 0; j < items.length; j++) {
-            standardTrack.appendChild(card.createCard(items[j], onSelect, { layout }));
+            var standardCardOptions = { layout };
+            if (variant) standardCardOptions.variant = variant;
+            standardTrack.appendChild(card.createCard(items[j], onSelect, standardCardOptions));
           }
           standardOuter.appendChild(standardTrack);
           row.appendChild(standardOuter);
@@ -3721,6 +4112,7 @@ var TizenflixApp = (() => {
       function resetRowCounter() {
         rowCounter = 0;
         spotlightDetailCache = {};
+        episodeTitleCache = {};
       }
       module.exports = {
         createRow,
@@ -3777,6 +4169,41 @@ var TizenflixApp = (() => {
         if (viewMode === "home" && index === 1) return "spotlight";
         return "standard";
       }
+      function mapProgressEntry(entry) {
+        return {
+          id: entry.tmdbId,
+          type: entry.type,
+          title: entry.title || "Untitled",
+          poster: entry.poster || null,
+          backdrop: entry.poster || null,
+          season: entry.season,
+          episode: entry.episode,
+          positionSeconds: entry.positionSeconds || 0,
+          durationSeconds: entry.durationSeconds || 0,
+          percent: entry.percent || 0,
+          episodeTitle: entry.episodeTitle || ""
+        };
+      }
+      function enrichContinueWatching(items) {
+        var tasks = items.map(function(item) {
+          if (item.type !== "tv" || item.episodeTitle || item.season == null || item.episode == null) {
+            return Promise.resolve(item);
+          }
+          return api.getEpisodes(item.id, item.season).then(function(data) {
+            var episodes = data.episodes || data.items || [];
+            for (var i = 0; i < episodes.length; i++) {
+              if (Number(episodes[i].episode) === Number(item.episode)) {
+                item.episodeTitle = episodes[i].title || episodes[i].name || "";
+                break;
+              }
+            }
+            return item;
+          }).catch(function() {
+            return item;
+          });
+        });
+        return Promise.all(tasks);
+      }
       function openItem(item) {
         focus.rememberMainFocus();
         if (item.type === "tv") {
@@ -3784,6 +4211,25 @@ var TizenflixApp = (() => {
         } else {
           router.navigate("detail-movie", { tmdbId: item.id, title: item.title });
         }
+      }
+      function resumeItem(item) {
+        var onStatus = window.TizenflixApp && window.TizenflixApp.showStatus;
+        var startSeconds = item.positionSeconds || 0;
+        if (item.type === "tv") {
+          var season = item.season || 1;
+          var episode = item.episode || 1;
+          var label = (item.title || "Show") + " S" + season + "E" + episode;
+          return playback.playTvEpisode(item.id, season, episode, label, onStatus, {
+            showTitle: item.title,
+            episodeTitle: item.episodeTitle || "",
+            startSeconds
+          }).catch(function(err) {
+            if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+          });
+        }
+        return playback.playMovie(item.id, item.title, onStatus, { startSeconds }).catch(function(err) {
+          if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
+        });
       }
       function playItem(item, onStatus) {
         if (item.type === "tv") {
@@ -3802,8 +4248,7 @@ var TizenflixApp = (() => {
         if (meta.rowId === "hero") return;
         if (viewMode !== "home") return;
         var item = itemCache[meta.tmdbId];
-        if (!item || !heroEl) return;
-        hero.updateHero(heroEl, item);
+        if (!item) return;
         if (meta.rowId) {
           var main = document.getElementById("main");
           if (main) {
@@ -3819,15 +4264,25 @@ var TizenflixApp = (() => {
             }
           }
         }
+        if (!heroEl) return;
+        hero.updateHero(heroEl, item);
       }
       function loadContent(el) {
         itemCache = {};
         heroEl = null;
         featuredItem = null;
         hero.resetHeroState();
-        api.browseRows().then(function(data) {
+        var cwPromise = viewMode === "home" ? api.continueWatching(20).catch(function() {
+          return [];
+        }) : Promise.resolve([]);
+        Promise.all([
+          api.browseRows(),
+          cwPromise
+        ]).then(function(results) {
+          var data = results[0];
+          var cwRaw = results[1] || [];
           var rows = filterRows(data.rows || []);
-          if (!rows.length) {
+          if (!rows.length && !cwRaw.length) {
             showError(el, "No browse rows available.");
             return null;
           }
@@ -3838,12 +4293,18 @@ var TizenflixApp = (() => {
               break;
             }
           }
-          return api.browseRow(heroRowId).then(function(heroData) {
-            return { rows, heroItems: heroData.items || [] };
+          return enrichContinueWatching(cwRaw.map(mapProgressEntry)).then(function(cwItems) {
+            if (!rows.length) {
+              return { rows: [], heroItems: [], cwItems };
+            }
+            return api.browseRow(heroRowId).then(function(heroData) {
+              return { rows, heroItems: heroData.items || [], cwItems };
+            });
           });
         }).then(function(bundle) {
           if (!bundle) return;
           el.innerHTML = "";
+          var hasContinueWatching = viewMode === "home" && bundle.cwItems && bundle.cwItems.length > 0;
           if (bundle.heroItems.length && viewMode === "home") {
             featuredItem = bundle.heroItems[0];
             cacheItems(bundle.heroItems);
@@ -3857,6 +4318,19 @@ var TizenflixApp = (() => {
             });
             el.appendChild(heroEl);
           }
+          if (hasContinueWatching) {
+            cacheItems(bundle.cwItems);
+            el.appendChild(
+              row.createRow("Continue Watching", bundle.cwItems, resumeItem, {
+                layout: "standard",
+                variant: "continue-watching"
+              })
+            );
+          }
+          if (!bundle.rows.length) {
+            focus.focusDefaultMain();
+            return;
+          }
           var fetches = bundle.rows.map(function(rowDef, rowIndex) {
             return api.browseRow(rowDef.id).then(function(rowData) {
               return { rowDef, rowIndex, items: rowData.items || [] };
@@ -3865,7 +4339,7 @@ var TizenflixApp = (() => {
             });
           });
           return Promise.all(fetches).then(function(results) {
-            var renderedCount = 0;
+            var renderedCount = hasContinueWatching ? 1 : 0;
             for (var r = 0; r < results.length; r++) {
               var result = results[r];
               if (!result.items.length) continue;
@@ -4798,6 +5272,7 @@ var TizenflixApp = (() => {
             }
           });
           el.appendChild(hero);
+          playback.prefetchMovie(params.tmdbId);
           var playBtn = el.querySelector("#detailPlayBtn");
           if (playBtn) focus.focusElement(playBtn);
         }).catch(function(err) {
@@ -4910,6 +5385,7 @@ var TizenflixApp = (() => {
               }
             });
             el.appendChild(hero);
+            playback.prefetchTvEpisode(title.id, 1, 1);
             var episodeList = document.createElement("div");
             episodeList.className = "episode-list";
             el.appendChild(episodeList);
@@ -4927,6 +5403,7 @@ var TizenflixApp = (() => {
               }
             });
             el.appendChild(hero);
+            playback.prefetchTvEpisode(title.id, 1, 1);
             var episodeList = document.createElement("div");
             episodeList.className = "episode-list";
             el.appendChild(episodeList);
@@ -4947,6 +5424,7 @@ var TizenflixApp = (() => {
   // app/js/app.js
   var require_app = __commonJS({
     "app/js/app.js"(exports, module) {
+      var APP_BUILD = "0.2.1-speed-gap";
       var router = require_router();
       var focus = require_focus();
       var debug = require_debug();
@@ -5030,6 +5508,10 @@ var TizenflixApp = (() => {
             }
             if (router.back()) {
               e.preventDefault();
+              return;
+            }
+            if (focus.handleBrowseBack()) {
+              e.preventDefault();
             }
             return;
           }
@@ -5057,6 +5539,7 @@ var TizenflixApp = (() => {
         motion.applyBodyClass();
         applyDevMode();
         debug.debugClear();
+        debug.debugLog("Tizenflix build " + APP_BUILD);
         debug.debugLog("Tizenflix \u2014 Tizen TV: " + (player.isTizenTv() ? "yes" : "no"));
         router.register("home", browseScreen("home"));
         router.register("random", random);
