@@ -7,6 +7,7 @@ var playerFocus = require("../core/player-focus.js");
 var api = require("../services/api.js");
 var config = require("../core/config.js");
 var playbackSession = require("../services/playback-session.js");
+var keys = require("../core/keys.js");
 
 var chromeEl = null;
 var handlers = {};
@@ -217,6 +218,7 @@ function renderSubsPanel(panel) {
 function renderSettingsPanel(panel) {
   var modes = ["auto", "high", "medium", "low"];
   var current = config.getQualityMode();
+  var speed = config.getPlaybackSpeed();
   var html = '<h3 class="player-panel-title">Settings</h3><div data-player-zone="panel">';
   html += '<p class="player-panel-hint">Quality</p>';
   for (var i = 0; i < modes.length; i++) {
@@ -234,11 +236,17 @@ function renderSettingsPanel(panel) {
       m.slice(1) +
       "</button>";
   }
+  html +=
+    '<p class="player-panel-hint">Playback speed</p>' +
+    '<button type="button" class="player-panel-item focusable is-active" data-speed="cycle" aria-label="Playback speed">' +
+    speed +
+    "x</button>";
   html += "</div>";
   panel.innerHTML = html;
   bindPanelItems(panel, function (btn) {
     var mode = btn.getAttribute("data-quality");
     if (mode && handlers.onQualitySelect) handlers.onQualitySelect(mode);
+    if (btn.getAttribute("data-speed") && handlers.onSpeedCycle) handlers.onSpeedCycle();
     closePanel();
   });
 }
@@ -615,8 +623,7 @@ function mount(session, h) {
 function onActivity(e) {
   if (!document.body.classList.contains("is-playing")) return;
   if (e.type === "keydown") {
-    var code = e.keyCode;
-    if (code === 10009 || e.key === "Back") return;
+    if (keys.isBackKey(e)) return;
   }
   show();
   resetHideTimer();

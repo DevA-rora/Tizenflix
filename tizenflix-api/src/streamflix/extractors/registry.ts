@@ -14,7 +14,9 @@ import { doodLaExtractor } from "./dood-la.js";
 import { streamWishExtractor } from "./stream-wish.js";
 import { vidGuardExtractor } from "./vid-guard.js";
 import { twoEmbedExtractor } from "./two-embed.js";
+import { afterDarkExtractor } from "./after-dark.js";
 import { amazonDriveExtractor } from "./amazon-drive.js";
+import { frembedExtractor } from "./frembed.js";
 import { apiVoirFilmExtractor } from "./api-voir-film.js";
 import { bigWarpExtractor } from "./big-warp.js";
 import { chillxJeanExtractor } from "./chillx-jean.js";
@@ -105,6 +107,8 @@ import { yourUploadExtractor } from "./your-upload.js";
 import { zillaExtractor } from "./zilla.js";
 
 const EXTRACTORS: ExtractorDef[] = [
+  afterDarkExtractor,
+  frembedExtractor,
   vixcloudExtractor,
   rabbitstreamExtractor,
   vidplayExtractor,
@@ -232,6 +236,11 @@ async function resolveBridge(link: string): Promise<string> {
 
 export async function extractVideo(link: string, serverName?: string): Promise<ExtractedVideo> {
   let finalLink = await resolveBridge(link);
+
+  if (/\.m3u8(\?|$)/i.test(finalLink) || /\.mp4(\?|$)/i.test(finalLink)) {
+    return { source: finalLink, subtitles: [], headers: {} };
+  }
+
   const compareUrl = normalizeCompareUrl(finalLink);
   let found: ExtractorDef | null = null;
 

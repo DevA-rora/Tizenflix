@@ -350,3 +350,70 @@ export async function popularTv(
   );
   return data.results.map(mapTv);
 }
+
+const ANIME_KEYWORDS = "210024,287501";
+
+export async function discoverAnime(
+  apiKey: string,
+  type: "movie" | "tv",
+  page = 1
+): Promise<CatalogItem[]> {
+  const path = type === "movie" ? "/discover/movie" : "/discover/tv";
+  const data = await tmdbFetch<{ results: Record<string, unknown>[] }>(path, apiKey, {
+    page: String(page),
+    with_keywords: ANIME_KEYWORDS,
+    sort_by: "popularity.desc",
+  });
+  return data.results.map(type === "movie" ? mapMovie : mapTv);
+}
+
+export async function discoverByWatchProvider(
+  apiKey: string,
+  type: "movie" | "tv",
+  providerId: number,
+  page = 1,
+  watchRegion = "US"
+): Promise<CatalogItem[]> {
+  const path = type === "movie" ? "/discover/movie" : "/discover/tv";
+  const params: Record<string, string> = {
+    page: String(page),
+    sort_by: "popularity.desc",
+    watch_region: watchRegion,
+  };
+  if (type === "movie") {
+    params.with_watch_providers = String(providerId);
+  } else {
+    params.with_networks = String(providerId);
+  }
+  const data = await tmdbFetch<{ results: Record<string, unknown>[] }>(path, apiKey, params);
+  return data.results.map(type === "movie" ? mapMovie : mapTv);
+}
+
+export interface GenreSummary {
+  id: number;
+  name: string;
+}
+
+export async function listGenres(
+  apiKey: string,
+  type: "movie" | "tv"
+): Promise<GenreSummary[]> {
+  const path = type === "movie" ? "/genre/movie/list" : "/genre/tv/list";
+  const data = await tmdbFetch<{ genres: GenreSummary[] }>(path, apiKey);
+  return data.genres ?? [];
+}
+
+export async function discoverByGenre(
+  apiKey: string,
+  type: "movie" | "tv",
+  genreId: number,
+  page = 1
+): Promise<CatalogItem[]> {
+  const path = type === "movie" ? "/discover/movie" : "/discover/tv";
+  const data = await tmdbFetch<{ results: Record<string, unknown>[] }>(path, apiKey, {
+    page: String(page),
+    with_genres: String(genreId),
+    sort_by: "popularity.desc",
+  });
+  return data.results.map(type === "movie" ? mapMovie : mapTv);
+}

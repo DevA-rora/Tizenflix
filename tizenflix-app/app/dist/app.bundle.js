@@ -12,6 +12,12 @@ var TizenflixApp = (() => {
       var DEV_MODE_KEY = "tizenflix.devMode";
       var BACKEND_KEY = "tizenflix.playBackend";
       var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
+      var GRID_SCALE_KEY = "tizenflix.gridScale";
+      var AUTOPLAY_KEY = "tizenflix.autoplay";
+      var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
+      var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
+      var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
+      var CATALOG_LANG_KEY = "tizenflix.catalogLang";
       var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -44,6 +50,8 @@ var TizenflixApp = (() => {
           backend = null;
         }
         if (backend) parts.push("backend=" + backend);
+        var lang = getCatalogLang();
+        if (lang && lang !== "en") parts.push("lang=" + encodeURIComponent(lang));
         if (extra) parts.push(extra);
         return parts.length ? parts.join("&") : null;
       }
@@ -146,6 +154,122 @@ var TizenflixApp = (() => {
         } catch (err) {
         }
         return m;
+      }
+      function readNumber(key, fallback, min, max) {
+        try {
+          var stored = localStorage.getItem(key);
+          if (stored === null || stored === "") return fallback;
+          var n = parseInt(stored, 10);
+          if (!isFinite(n)) return fallback;
+          if (n < min) return min;
+          if (n > max) return max;
+          return n;
+        } catch (err) {
+          return fallback;
+        }
+      }
+      function writeNumber(key, value) {
+        try {
+          localStorage.setItem(key, String(value));
+        } catch (err) {
+        }
+      }
+      function getGridScale() {
+        return readNumber(GRID_SCALE_KEY, 100, 70, 130);
+      }
+      function setGridScale(value) {
+        var v = readNumber(GRID_SCALE_KEY, value, 70, 130);
+        writeNumber(GRID_SCALE_KEY, v);
+        applyGridScale(v);
+        return v;
+      }
+      function applyGridScale(scale) {
+        if (typeof document === "undefined" || !document.body) return;
+        var pct = scale || getGridScale();
+        document.body.style.fontSize = Math.round(28 * (pct / 100)) + "px";
+        document.body.setAttribute("data-grid-scale", String(pct));
+      }
+      function getAutoplayNext() {
+        try {
+          var stored = localStorage.getItem(AUTOPLAY_KEY);
+          if (stored === "0" || stored === "false") return false;
+        } catch (err) {
+        }
+        return true;
+      }
+      function setAutoplayNext(enabled) {
+        try {
+          localStorage.setItem(AUTOPLAY_KEY, enabled ? "1" : "0");
+        } catch (err) {
+        }
+        return !!enabled;
+      }
+      function getAutoplayBufferSec() {
+        return readNumber(AUTOPLAY_BUFFER_KEY, 3, 0, 30);
+      }
+      function setAutoplayBufferSec(sec) {
+        var v = readNumber(AUTOPLAY_BUFFER_KEY, sec, 0, 30);
+        writeNumber(AUTOPLAY_BUFFER_KEY, v);
+        return v;
+      }
+      function getExtraBuffering() {
+        try {
+          return localStorage.getItem(EXTRA_BUFFER_KEY) === "1";
+        } catch (err) {
+          return false;
+        }
+      }
+      function setExtraBuffering(enabled) {
+        try {
+          localStorage.setItem(EXTRA_BUFFER_KEY, enabled ? "1" : "0");
+        } catch (err) {
+        }
+        return !!enabled;
+      }
+      function getPlaybackSpeed() {
+        var speeds = [0.75, 1, 1.25, 1.5, 2];
+        var stored = "1";
+        try {
+          stored = localStorage.getItem(PLAYBACK_SPEED_KEY) || "1";
+        } catch (err) {
+        }
+        var n = parseFloat(stored);
+        for (var i = 0; i < speeds.length; i++) {
+          if (speeds[i] === n) return n;
+        }
+        return 1;
+      }
+      function setPlaybackSpeed(speed) {
+        var n = parseFloat(speed);
+        if (!isFinite(n) || n <= 0) n = 1;
+        try {
+          localStorage.setItem(PLAYBACK_SPEED_KEY, String(n));
+        } catch (err) {
+        }
+        return n;
+      }
+      function cyclePlaybackSpeed() {
+        var speeds = [0.75, 1, 1.25, 1.5, 2];
+        var current = getPlaybackSpeed();
+        var idx = speeds.indexOf(current);
+        var next = speeds[(idx + 1) % speeds.length];
+        return setPlaybackSpeed(next);
+      }
+      function getCatalogLang() {
+        try {
+          var stored = localStorage.getItem(CATALOG_LANG_KEY);
+          if (stored && typeof stored === "string") return stored;
+        } catch (err) {
+        }
+        return "en";
+      }
+      function setCatalogLang(lang) {
+        var code = (lang || "en").toLowerCase().split("-")[0];
+        try {
+          localStorage.setItem(CATALOG_LANG_KEY, code);
+        } catch (err) {
+        }
+        return code;
       }
       function resolvePlay(apiBase, path, query, timeoutMs) {
         var url = apiBase + path;
@@ -287,7 +411,22 @@ var TizenflixApp = (() => {
         logLine,
         apiGet,
         apiPost,
-        fetchWithTimeout
+        fetchWithTimeout,
+        GRID_SCALE_KEY,
+        getGridScale,
+        setGridScale,
+        applyGridScale,
+        getAutoplayNext,
+        setAutoplayNext,
+        getAutoplayBufferSec,
+        setAutoplayBufferSec,
+        getExtraBuffering,
+        setExtraBuffering,
+        getPlaybackSpeed,
+        setPlaybackSpeed,
+        cyclePlaybackSpeed,
+        getCatalogLang,
+        setCatalogLang
       };
     }
   });
@@ -1570,6 +1709,20 @@ var TizenflixApp = (() => {
           "/play/subtitles/tv/" + encodeURIComponent(tmdbId) + "/" + encodeURIComponent(season) + "/" + encodeURIComponent(episode)
         );
       }
+      function listGenres(type) {
+        return config.apiGet("/browse/genres?type=" + encodeURIComponent(type || "movie"));
+      }
+      function browseGenre(genreId, type, page) {
+        var q = "?type=" + encodeURIComponent(type || "movie");
+        if (page) q += "&page=" + encodeURIComponent(page);
+        return config.apiGet("/browse/genre/" + encodeURIComponent(genreId) + q);
+      }
+      function getStreamflixProviders() {
+        return config.apiGet("/providers/streamflix");
+      }
+      function toggleStreamflixProvider(id, enabled) {
+        return config.apiPost("/providers/streamflix/toggle", { id, enabled });
+      }
       module.exports = {
         getBase,
         setBase: config.setApiBase,
@@ -1591,7 +1744,11 @@ var TizenflixApp = (() => {
         saveProgress,
         warmStreamUrl,
         fetchPlaySubtitlesMovie,
-        fetchPlaySubtitlesTv
+        fetchPlaySubtitlesTv,
+        listGenres,
+        browseGenre,
+        getStreamflixProviders,
+        toggleStreamflixProvider
       };
     }
   });
@@ -2018,10 +2175,11 @@ var TizenflixApp = (() => {
         return isProxiedHls(url);
       }
       function createHlsInstance() {
+        var extra = config.getExtraBuffering();
         return new Hls({
           enableWorker: false,
-          maxBufferLength: 60,
-          maxMaxBufferLength: 180,
+          maxBufferLength: extra ? 120 : 60,
+          maxMaxBufferLength: extra ? 300 : 180,
           maxBufferSize: 120 * 1e3 * 1e3,
           maxBufferHole: 2,
           highBufferWatchdogPeriod: 3,
@@ -2786,6 +2944,21 @@ var TizenflixApp = (() => {
     }
   });
 
+  // app/js/core/keys.js
+  var require_keys = __commonJS({
+    "app/js/core/keys.js"(exports, module) {
+      function isBackKey(e) {
+        if (!e) return false;
+        if (e.key === "Back" || e.key === "Escape") return true;
+        var code = e.keyCode;
+        return code === 10009 || code === 461;
+      }
+      module.exports = {
+        isBackKey
+      };
+    }
+  });
+
   // app/js/components/player-chrome.js
   var require_player_chrome = __commonJS({
     "app/js/components/player-chrome.js"(exports, module) {
@@ -2794,6 +2967,7 @@ var TizenflixApp = (() => {
       var api = require_api();
       var config = require_config();
       var playbackSession = require_playback_session();
+      var keys = require_keys();
       var chromeEl = null;
       var handlers = {};
       var hideTimer = null;
@@ -2957,6 +3131,7 @@ var TizenflixApp = (() => {
       function renderSettingsPanel(panel) {
         var modes = ["auto", "high", "medium", "low"];
         var current = config.getQualityMode();
+        var speed = config.getPlaybackSpeed();
         var html = '<h3 class="player-panel-title">Settings</h3><div data-player-zone="panel">';
         html += '<p class="player-panel-hint">Quality</p>';
         for (var i = 0; i < modes.length; i++) {
@@ -2964,11 +3139,13 @@ var TizenflixApp = (() => {
           var active = m === current ? " is-active" : "";
           html += '<button type="button" class="player-panel-item focusable' + active + '" data-quality="' + m + '" aria-label="Quality ' + m + '">' + m.charAt(0).toUpperCase() + m.slice(1) + "</button>";
         }
+        html += '<p class="player-panel-hint">Playback speed</p><button type="button" class="player-panel-item focusable is-active" data-speed="cycle" aria-label="Playback speed">' + speed + "x</button>";
         html += "</div>";
         panel.innerHTML = html;
         bindPanelItems(panel, function(btn) {
           var mode = btn.getAttribute("data-quality");
           if (mode && handlers.onQualitySelect) handlers.onQualitySelect(mode);
+          if (btn.getAttribute("data-speed") && handlers.onSpeedCycle) handlers.onSpeedCycle();
           closePanel();
         });
       }
@@ -3221,8 +3398,7 @@ var TizenflixApp = (() => {
       function onActivity(e) {
         if (!document.body.classList.contains("is-playing")) return;
         if (e.type === "keydown") {
-          var code = e.keyCode;
-          if (code === 10009 || e.key === "Back") return;
+          if (keys.isBackKey(e)) return;
         }
         show();
         resetHideTimer();
@@ -3292,6 +3468,45 @@ var TizenflixApp = (() => {
       var progressSaveTimer = null;
       var lastProgressSaveAt = 0;
       var PROGRESS_SAVE_INTERVAL_MS = 3e4;
+      var autoplayTimer = null;
+      var autoplayEndedHandler = null;
+      function clearAutoplayTimer() {
+        if (autoplayTimer) {
+          clearInterval(autoplayTimer);
+          autoplayTimer = null;
+        }
+      }
+      function unbindAutoplayHandler() {
+        clearAutoplayTimer();
+        var video = document.getElementById("video");
+        if (video && autoplayEndedHandler) {
+          video.removeEventListener("ended", autoplayEndedHandler);
+        }
+        autoplayEndedHandler = null;
+      }
+      function bindAutoplayHandler(video, onStatus) {
+        unbindAutoplayHandler();
+        if (!video || !config.getAutoplayNext()) return;
+        autoplayEndedHandler = function() {
+          var session = playbackSession.get();
+          if (!session || session.type !== "tv" || !session.nextEpisode) return;
+          var bufferSec = config.getAutoplayBufferSec();
+          var remaining = bufferSec;
+          if (onStatus) onStatus("Next episode in " + remaining + "s\u2026");
+          clearAutoplayTimer();
+          autoplayTimer = setInterval(function() {
+            remaining -= 1;
+            if (remaining > 0) {
+              if (onStatus) onStatus("Next episode in " + remaining + "s\u2026");
+              return;
+            }
+            clearAutoplayTimer();
+            var handlers = buildChromeHandlers(onStatus);
+            if (handlers.onNextEpisode) handlers.onNextEpisode();
+          }, 1e3);
+        };
+        video.addEventListener("ended", autoplayEndedHandler);
+      }
       function buildProgressPayload(video) {
         var session = playbackSession.get();
         if (!session || !session.tmdbId) return null;
@@ -3405,6 +3620,11 @@ var TizenflixApp = (() => {
             player.applyQualityMode(player.getHlsInstance(), mode);
             log("Quality: " + mode);
           },
+          onSpeedCycle: function() {
+            var next = config.cyclePlaybackSpeed();
+            video.playbackRate = next;
+            log("Speed: " + next + "x");
+          },
           onReResolve: function(overrides) {
             reResolveWith(overrides, onStatus).catch(function(err) {
               log(err.message);
@@ -3508,6 +3728,8 @@ var TizenflixApp = (() => {
         loadSubtitlesAsync(play, video);
         mountChrome(stored, onStatus);
         bindProgressSaver(video);
+        video.playbackRate = config.getPlaybackSpeed();
+        bindAutoplayHandler(video, onStatus);
         debug.debugClear();
         debug.debugLog("Playing: " + (title || play.title || ""));
         function log(msg) {
@@ -3788,6 +4010,7 @@ var TizenflixApp = (() => {
         var video = document.getElementById("video");
         if (video) savePlaybackProgress(video, true);
         unbindProgressSaver();
+        unbindAutoplayHandler();
         playSession += 1;
         var wasFullscreen = document.body && document.body.classList.contains("is-playback-fullscreen");
         playerChrome.destroy();
@@ -5266,6 +5489,7 @@ var TizenflixApp = (() => {
     "app/js/screens/settings.js"(exports, module) {
       var api = require_api();
       var config = require_config();
+      var focus = require_focus();
       function applyDevModeFromSettings(enabled) {
         config.setDevMode(enabled);
         if (document.body) {
@@ -5273,17 +5497,104 @@ var TizenflixApp = (() => {
           document.body.classList.toggle("dev-mode-off", !enabled);
         }
       }
+      function renderProviderManager(container, onBack) {
+        container.innerHTML = '<div class="screen screen-settings"><h2>Stream providers</h2><p class="settings-hint">Toggle scraper providers (saved on API server).</p><div id="providerList" class="settings-provider-list loading-msg">Loading\u2026</div><button type="button" id="providersBackBtn" class="btn btn-info focusable">Back</button></div>';
+        var listEl = container.querySelector("#providerList");
+        var backBtn = container.querySelector("#providersBackBtn");
+        backBtn.addEventListener("click", onBack);
+        api.getStreamflixProviders().then(function(data) {
+          var providers = data.providers || [];
+          var html = "";
+          for (var i = 0; i < providers.length; i++) {
+            var p = providers[i];
+            if (p.implementationStatus === "stub") continue;
+            var health = p.health;
+            var healthTxt = health ? " (" + health.successes + " ok / " + health.failures + " fail)" : "";
+            html += '<div class="settings-field" data-focus-row="prov-' + i + '"><button type="button" class="btn btn-info focusable provider-toggle" data-id="' + p.id + '" data-enabled="' + (p.enabled ? "1" : "0") + '">' + (p.enabled ? "ON" : "OFF") + " \u2014 " + p.name + " [" + p.language + "]" + healthTxt + "</button></div>";
+          }
+          listEl.className = "settings-provider-list";
+          listEl.innerHTML = html || "<p>No providers</p>";
+          var toggles = listEl.querySelectorAll(".provider-toggle");
+          for (var t = 0; t < toggles.length; t++) {
+            toggles[t].addEventListener("click", function() {
+              var btn = this;
+              var id = btn.getAttribute("data-id");
+              var enabled = btn.getAttribute("data-enabled") !== "1";
+              api.toggleStreamflixProvider(id, enabled).then(function() {
+                btn.setAttribute("data-enabled", enabled ? "1" : "0");
+                btn.textContent = (enabled ? "ON" : "OFF") + btn.textContent.substring(btn.textContent.indexOf(" \u2014"));
+              });
+            });
+          }
+          focus.refresh(container);
+        }).catch(function(err) {
+          listEl.textContent = "Failed: " + err.message;
+        });
+      }
       function render(container) {
         var devOn = config.getDevMode();
+        var gridScale = config.getGridScale();
+        var autoplay = config.getAutoplayNext();
+        var bufferSec = config.getAutoplayBufferSec();
+        var extraBuf = config.getExtraBuffering();
+        var catalogLang = config.getCatalogLang();
         var el = document.createElement("div");
         el.className = "screen screen-settings";
-        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button><p class="settings-hint">Dev mode shows focus hints and the debug log overlay.</p></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle backend</button></p><p class="settings-hint">Quality: <strong>' + config.getQualityMode() + '</strong> (adaptive)</p><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p><p class="settings-hint">Browser dev: use <code>http://localhost:8790</code> if the API runs on this PC.</p>';
+        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-grid"><label for="gridScaleInput">Grid size: ' + gridScale + '%</label><input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' + gridScale + '" /></div><div class="settings-field" data-focus-row="settings-lang"><label for="catalogLangInput">Catalog language</label><select id="catalogLangInput" class="focusable"><option value="en"' + (catalogLang === "en" ? " selected" : "") + '>English</option><option value="de"' + (catalogLang === "de" ? " selected" : "") + '>German</option><option value="fr"' + (catalogLang === "fr" ? " selected" : "") + '>French</option><option value="it"' + (catalogLang === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (catalogLang === "es" ? " selected" : "") + '>Spanish</option></select></div><div class="settings-field" data-focus-row="settings-autoplay"><button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ' + (autoplay ? "ON" : "OFF") + '</button><label for="autoplayBufferInput">Countdown (sec): ' + bufferSec + '</label><input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' + bufferSec + '" /></div><div class="settings-field" data-focus-row="settings-buffer"><button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' + (extraBuf ? "ON" : "OFF") + '</button></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p><button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
         container.appendChild(el);
         var input = el.querySelector("#apiBaseInput");
         var saveBtn = el.querySelector("#saveApiBtn");
         var devBtn = el.querySelector("#devModeBtn");
         var backendBtn = el.querySelector("#backendCycleBtn");
+        var gridInput = el.querySelector("#gridScaleInput");
+        var langInput = el.querySelector("#catalogLangInput");
+        var autoplayBtn = el.querySelector("#autoplayBtn");
+        var bufferInput = el.querySelector("#autoplayBufferInput");
+        var extraBtn = el.querySelector("#extraBufferBtn");
+        var providersBtn = el.querySelector("#providersBtn");
         var status = el.querySelector("#settingsStatus");
+        if (gridInput) {
+          gridInput.addEventListener("input", function() {
+            var v = config.setGridScale(parseInt(gridInput.value, 10));
+            gridInput.previousElementSibling.textContent = "Grid size: " + v + "%";
+          });
+        }
+        if (langInput) {
+          langInput.addEventListener("change", function() {
+            config.setCatalogLang(langInput.value);
+          });
+        }
+        if (autoplayBtn) {
+          autoplayBtn.addEventListener("click", function() {
+            var next = !config.getAutoplayNext();
+            config.setAutoplayNext(next);
+            autoplayBtn.textContent = "Autoplay next: " + (next ? "ON" : "OFF");
+          });
+        }
+        if (bufferInput) {
+          bufferInput.addEventListener("input", function() {
+            var v = config.setAutoplayBufferSec(parseInt(bufferInput.value, 10));
+            bufferInput.previousElementSibling.textContent = "Countdown (sec): " + v;
+          });
+        }
+        if (extraBtn) {
+          extraBtn.addEventListener("click", function() {
+            var next = !config.getExtraBuffering();
+            config.setExtraBuffering(next);
+            extraBtn.textContent = "Extra buffering: " + (next ? "ON" : "OFF");
+          });
+        }
+        if (providersBtn) {
+          providersBtn.addEventListener("click", function() {
+            container.innerHTML = "";
+            renderProviderManager(container, function() {
+              container.innerHTML = "";
+              render(container);
+              focus.refresh(container);
+            });
+            focus.refresh(container);
+          });
+        }
         if (backendBtn) {
           backendBtn.addEventListener("click", function() {
             var order = ["auto", "tmdb-native", "vidking", "streamflix"];
@@ -5324,11 +5635,76 @@ var TizenflixApp = (() => {
   // app/js/screens/categories.js
   var require_categories = __commonJS({
     "app/js/screens/categories.js"(exports, module) {
+      var api = require_api();
+      var focus = require_focus();
+      var choreography = require_choreography();
+      var row = require_row();
+      var selectedType = "movie";
+      var selectedGenre = null;
+      function openItem(item) {
+        choreography.openDetail(item);
+      }
+      function renderGenrePicker(container) {
+        container.innerHTML = '<div class="screen screen-categories"><h2>Categories</h2><div class="settings-field" data-focus-row="cat-type"><button type="button" id="catMoviesBtn" class="btn btn-info focusable">Movies</button> <button type="button" id="catTvBtn" class="btn btn-info focusable">TV Shows</button></div><div id="genreList" class="settings-provider-list loading-msg">Loading genres\u2026</div></div>';
+        var moviesBtn = container.querySelector("#catMoviesBtn");
+        var tvBtn = container.querySelector("#catTvBtn");
+        var listEl = container.querySelector("#genreList");
+        function loadGenres() {
+          listEl.textContent = "Loading genres\u2026";
+          api.listGenres(selectedType).then(function(data) {
+            var genres = data.genres || [];
+            var html = "";
+            for (var i = 0; i < genres.length; i++) {
+              var g = genres[i];
+              html += '<div class="settings-field" data-focus-row="genre-' + i + '"><button type="button" class="btn btn-play focusable genre-pick" data-id="' + g.id + '" data-name="' + String(g.name).replace(/"/g, "") + '">' + g.name + "</button></div>";
+            }
+            listEl.className = "settings-provider-list";
+            listEl.innerHTML = html || "<p>No genres</p>";
+            var picks = listEl.querySelectorAll(".genre-pick");
+            for (var p = 0; p < picks.length; p++) {
+              picks[p].addEventListener("click", function() {
+                selectedGenre = {
+                  id: this.getAttribute("data-id"),
+                  name: this.getAttribute("data-name")
+                };
+                renderGenreItems(container);
+              });
+            }
+            focus.refresh(container);
+          });
+        }
+        moviesBtn.addEventListener("click", function() {
+          selectedType = "movie";
+          selectedGenre = null;
+          loadGenres();
+        });
+        tvBtn.addEventListener("click", function() {
+          selectedType = "tv";
+          selectedGenre = null;
+          loadGenres();
+        });
+        loadGenres();
+      }
+      function renderGenreItems(container) {
+        if (!selectedGenre) return renderGenrePicker(container);
+        container.innerHTML = '<div class="screen screen-categories"><h2>' + selectedGenre.name + '</h2><button type="button" id="catBackBtn" class="btn btn-info focusable">All genres</button><div id="genreRowHost"></div></div>';
+        container.querySelector("#catBackBtn").addEventListener("click", function() {
+          selectedGenre = null;
+          renderGenrePicker(container);
+        });
+        var host = container.querySelector("#genreRowHost");
+        host.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
+        api.browseGenre(selectedGenre.id, selectedType, 1).then(function(data) {
+          host.innerHTML = "";
+          var items = data.items || [];
+          host.appendChild(
+            row.createRow(selectedGenre.name, items, openItem, { layout: "standard" })
+          );
+          focus.refresh(container);
+        });
+      }
       function render(container) {
-        var el = document.createElement("div");
-        el.className = "screen screen-categories";
-        el.innerHTML = '<div class="loading-msg" style="padding:48px"><h2>Categories</h2><p>Browse by genre \u2014 coming soon.</p></div>';
-        container.appendChild(el);
+        renderGenrePicker(container);
       }
       module.exports = {
         render
@@ -5928,6 +6304,7 @@ var TizenflixApp = (() => {
       var motion = require_motion();
       var player = require_player();
       var playback = require_playback();
+      var keys = require_keys();
       var home = require_home();
       var search = require_search();
       var random = require_random();
@@ -5996,7 +6373,7 @@ var TizenflixApp = (() => {
       }
       function wireGlobalKeys() {
         document.addEventListener("keydown", function(e) {
-          if (e.keyCode === 10009 || e.key === "Back") {
+          if (keys.isBackKey(e)) {
             if (document.body.classList.contains("is-playing")) {
               playback.handleBackKey();
               e.preventDefault();
@@ -6059,6 +6436,7 @@ var TizenflixApp = (() => {
         wirePlayback();
         wireGlobalKeys();
         focus.init(updateFocusHint);
+        config.applyGridScale();
       }
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", init);

@@ -3,6 +3,12 @@ var QUALITY_MODE_KEY = "tizenflix.qualityMode";
 var DEV_MODE_KEY = "tizenflix.devMode";
 var BACKEND_KEY = "tizenflix.playBackend";
 var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
+var GRID_SCALE_KEY = "tizenflix.gridScale";
+var AUTOPLAY_KEY = "tizenflix.autoplay";
+var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
+var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
+var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
+var CATALOG_LANG_KEY = "tizenflix.catalogLang";
 var API_PORT = "8790";
 var PLAY_RESOLVE_TIMEOUT_MS = 20000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -41,6 +47,8 @@ function buildPlayQuery(extra) {
     backend = null;
   }
   if (backend) parts.push("backend=" + backend);
+  var lang = getCatalogLang();
+  if (lang && lang !== "en") parts.push("lang=" + encodeURIComponent(lang));
   if (extra) parts.push(extra);
   return parts.length ? parts.join("&") : null;
 }
@@ -166,6 +174,146 @@ function setQualityMode(mode) {
     /* TV may block storage */
   }
   return m;
+}
+
+function readNumber(key, fallback, min, max) {
+  try {
+    var stored = localStorage.getItem(key);
+    if (stored === null || stored === "") return fallback;
+    var n = parseInt(stored, 10);
+    if (!isFinite(n)) return fallback;
+    if (n < min) return min;
+    if (n > max) return max;
+    return n;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function writeNumber(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch (err) {
+    /* TV may block storage */
+  }
+}
+
+function getGridScale() {
+  return readNumber(GRID_SCALE_KEY, 100, 70, 130);
+}
+
+function setGridScale(value) {
+  var v = readNumber(GRID_SCALE_KEY, value, 70, 130);
+  writeNumber(GRID_SCALE_KEY, v);
+  applyGridScale(v);
+  return v;
+}
+
+function applyGridScale(scale) {
+  if (typeof document === "undefined" || !document.body) return;
+  var pct = scale || getGridScale();
+  document.body.style.fontSize = Math.round(28 * (pct / 100)) + "px";
+  document.body.setAttribute("data-grid-scale", String(pct));
+}
+
+function getAutoplayNext() {
+  try {
+    var stored = localStorage.getItem(AUTOPLAY_KEY);
+    if (stored === "0" || stored === "false") return false;
+  } catch (err) {
+    /* */
+  }
+  return true;
+}
+
+function setAutoplayNext(enabled) {
+  try {
+    localStorage.setItem(AUTOPLAY_KEY, enabled ? "1" : "0");
+  } catch (err) {
+    /* */
+  }
+  return !!enabled;
+}
+
+function getAutoplayBufferSec() {
+  return readNumber(AUTOPLAY_BUFFER_KEY, 3, 0, 30);
+}
+
+function setAutoplayBufferSec(sec) {
+  var v = readNumber(AUTOPLAY_BUFFER_KEY, sec, 0, 30);
+  writeNumber(AUTOPLAY_BUFFER_KEY, v);
+  return v;
+}
+
+function getExtraBuffering() {
+  try {
+    return localStorage.getItem(EXTRA_BUFFER_KEY) === "1";
+  } catch (err) {
+    return false;
+  }
+}
+
+function setExtraBuffering(enabled) {
+  try {
+    localStorage.setItem(EXTRA_BUFFER_KEY, enabled ? "1" : "0");
+  } catch (err) {
+    /* */
+  }
+  return !!enabled;
+}
+
+function getPlaybackSpeed() {
+  var speeds = [0.75, 1, 1.25, 1.5, 2];
+  var stored = "1";
+  try {
+    stored = localStorage.getItem(PLAYBACK_SPEED_KEY) || "1";
+  } catch (err) {
+    /* */
+  }
+  var n = parseFloat(stored);
+  for (var i = 0; i < speeds.length; i++) {
+    if (speeds[i] === n) return n;
+  }
+  return 1;
+}
+
+function setPlaybackSpeed(speed) {
+  var n = parseFloat(speed);
+  if (!isFinite(n) || n <= 0) n = 1;
+  try {
+    localStorage.setItem(PLAYBACK_SPEED_KEY, String(n));
+  } catch (err) {
+    /* */
+  }
+  return n;
+}
+
+function cyclePlaybackSpeed() {
+  var speeds = [0.75, 1, 1.25, 1.5, 2];
+  var current = getPlaybackSpeed();
+  var idx = speeds.indexOf(current);
+  var next = speeds[(idx + 1) % speeds.length];
+  return setPlaybackSpeed(next);
+}
+
+function getCatalogLang() {
+  try {
+    var stored = localStorage.getItem(CATALOG_LANG_KEY);
+    if (stored && typeof stored === "string") return stored;
+  } catch (err) {
+    /* */
+  }
+  return "en";
+}
+
+function setCatalogLang(lang) {
+  var code = (lang || "en").toLowerCase().split("-")[0];
+  try {
+    localStorage.setItem(CATALOG_LANG_KEY, code);
+  } catch (err) {
+    /* */
+  }
+  return code;
 }
 
 function resolvePlay(apiBase, path, query, timeoutMs) {
@@ -327,4 +475,19 @@ module.exports = {
   apiGet: apiGet,
   apiPost: apiPost,
   fetchWithTimeout: fetchWithTimeout,
+  GRID_SCALE_KEY: GRID_SCALE_KEY,
+  getGridScale: getGridScale,
+  setGridScale: setGridScale,
+  applyGridScale: applyGridScale,
+  getAutoplayNext: getAutoplayNext,
+  setAutoplayNext: setAutoplayNext,
+  getAutoplayBufferSec: getAutoplayBufferSec,
+  setAutoplayBufferSec: setAutoplayBufferSec,
+  getExtraBuffering: getExtraBuffering,
+  setExtraBuffering: setExtraBuffering,
+  getPlaybackSpeed: getPlaybackSpeed,
+  setPlaybackSpeed: setPlaybackSpeed,
+  cyclePlaybackSpeed: cyclePlaybackSpeed,
+  getCatalogLang: getCatalogLang,
+  setCatalogLang: setCatalogLang,
 };

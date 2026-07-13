@@ -1,13 +1,19 @@
 # Todo
-- [ ] Add animations when moving between shows/movies (like Netflix)
-- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see if we can use OR reverse engineer the servers present so that we should have literally no issues with streaming / API.
-- [ ] Add to settings the ability for the user to change the size of the grids.
+- [ ] When the user clicks the search button, 
+- [ ] Revamp player UI (it looks like ass rn)
+- [ ] Integrate subDL + opensubtitles so that we can get subtitles with movies!
+opensubtitles is best for western movies, and subDL for non-western showings.
+- [ ] Fix weird row UI scrolling bug (skipping rows!?!)
+- [ ] Add to settings the ability for the user to change the size of the grids. (small medium large)
 
 
 # Doing
-- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see how much code we can "steal".
 
 # Done
+- [x] port other tmdbprovider hot-path extractors to typescript
+- [x] Add animations when moving between shows/movies (like Netflix)
+- [x] Using this repository: https://github.com/streamflix-reborn/streamflix , see if we can use OR reverse engineer the servers present so that we should have literally no issues with streaming / API.
+- [x] Using this repository: https://github.com/streamflix-reborn/streamflix , see how much code we can "steal".
 - [x] Copy Netflix sidebar.
 - [x] Revamp the UI using /frontend-design skill.
 - [x] Be able to preview the application on laptop so I can make changes without having to be at the TV.

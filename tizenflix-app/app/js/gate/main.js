@@ -2,6 +2,7 @@ var config = require("../core/config.js");
 var player = require("../player/player.js");
 var focus = require("../core/focus.js");
 var debug = require("../core/debug.js");
+var keys = require("../core/keys.js");
 
 var TEST_MOVIE_TMDB_ID = "27205";
 var OFF_CAMPUS_TMDB_ID = "273240";
@@ -326,7 +327,7 @@ function init() {
   }
 
   document.addEventListener("keydown", function (e) {
-    if (e.keyCode === 10009 || e.key === "Back") {
+    if (keys.isBackKey(e)) {
       markCheck(checks.back, true);
     }
     if (player.isMediaPlayPauseKey(e)) {

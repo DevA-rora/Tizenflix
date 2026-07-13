@@ -16,13 +16,18 @@ import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from ".
 import { rewriteM3u8 } from "../proxy/rewrite-m3u8.js";
 import { validatePlaySources } from "../proxy/validate-sources.js";
 import { resolvePlayableSources, listProviders } from "../normalize/to-play-response.js";
-import { parseBackendParam, parseSourcesParam, resolveWithBackend } from "../normalize/resolve-backend.js";
+import { parseBackendParam, parseLangParam, parseSourcesParam, resolveWithBackend } from "../normalize/resolve-backend.js";
 import { fetchMetadata } from "../api/metadata.js";
 import { enrichWithOpenSubtitles } from "../subtitles/opensubtitles.js";
 import type { Metadata, PlayResponse } from "../types.js";
 import { ProgressService } from "../store/progress.js";
 import { ProviderHealthService } from "../store/provider-health.js";
-import { getAllProviders } from "../streamflix/providers/registry.js";
+import {
+  getAllProviders,
+  getProviderConfig,
+  setProviderConfig,
+  setProviderEnabled,
+} from "../streamflix/providers/registry.js";
 import { TMDB_NATIVE_SOURCES } from "../streamflix/tmdb-native/registry.js";
 import * as tmdb from "../tmdb/client.js";
 
@@ -271,8 +276,41 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           { id: "trending-movies", title: "Trending Movies", layout: "spotlight" },
           { id: "popular-movies", title: "Popular Movies", layout: "standard" },
           { id: "popular-tv", title: "Popular TV", layout: "standard" },
+          { id: "popular-anime", title: "Popular Anime", layout: "standard" },
+          { id: "netflix", title: "Netflix", layout: "standard" },
+          { id: "amazon", title: "Amazon Prime", layout: "standard" },
+          { id: "disney", title: "Disney+", layout: "standard" },
+          { id: "hulu", title: "Hulu", layout: "standard" },
+          { id: "apple-tv", title: "Apple TV+", layout: "standard" },
+          { id: "hbo", title: "HBO", layout: "standard" },
         ],
       });
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/browse/genres", async (req, res) => {
+    const apiKey = tmdbRequired(res, config);
+    if (!apiKey) return;
+    const type = req.query.type === "tv" ? "tv" : "movie";
+    try {
+      const genres = await tmdb.listGenres(apiKey, type);
+      res.json({ type, genres });
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/browse/genre/:genreId", async (req, res) => {
+    const apiKey = tmdbRequired(res, config);
+    if (!apiKey) return;
+    const page = Number(req.query.page ?? 1);
+    const type = req.query.type === "tv" ? "tv" : "movie";
+    const genreId = Number(req.params.genreId);
+    try {
+      const items = await tmdb.discoverByGenre(apiKey, type, genreId, page);
+      res.json({ genreId, type, page, items });
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -297,6 +335,62 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         case "popular-tv":
           items = await tmdb.popularTv(apiKey, page);
           break;
+        case "popular-anime": {
+          const [movies, tv] = await Promise.all([
+            tmdb.discoverAnime(apiKey, "movie", page),
+            tmdb.discoverAnime(apiKey, "tv", page),
+          ]);
+          items = [...movies, ...tv].slice(0, 20);
+          break;
+        }
+        case "netflix": {
+          const [movies, tv] = await Promise.all([
+            tmdb.discoverByWatchProvider(apiKey, "movie", 8, page),
+            tmdb.discoverByWatchProvider(apiKey, "tv", 213, page),
+          ]);
+          items = [...movies, ...tv].slice(0, 20);
+          break;
+        }
+        case "amazon": {
+          const [movies, tv] = await Promise.all([
+            tmdb.discoverByWatchProvider(apiKey, "movie", 9, page),
+            tmdb.discoverByWatchProvider(apiKey, "tv", 1024, page),
+          ]);
+          items = [...movies, ...tv].slice(0, 20);
+          break;
+        }
+        case "disney": {
+          const [movies, tv] = await Promise.all([
+            tmdb.discoverByWatchProvider(apiKey, "movie", 337, page),
+            tmdb.discoverByWatchProvider(apiKey, "tv", 2739, page),
+          ]);
+          items = [...movies, ...tv].slice(0, 20);
+          break;
+        }
+        case "hulu": {
+          const [movies, tv] = await Promise.all([
+            tmdb.discoverByWatchProvider(apiKey, "movie", 15, page),
+            tmdb.discoverByWatchProvider(apiKey, "tv", 453, page),
+          ]);
+          items = [...movies, ...tv].slice(0, 20);
+          break;
+        }
+        case "apple-tv": {
+          const [movies, tv] = await Promise.all([
+            tmdb.discoverByWatchProvider(apiKey, "movie", 350, page),
+            tmdb.discoverByWatchProvider(apiKey, "tv", 2552, page),
+          ]);
+          items = [...movies, ...tv].slice(0, 20);
+          break;
+        }
+        case "hbo": {
+          const [movies, tv] = await Promise.all([
+            tmdb.discoverByWatchProvider(apiKey, "movie", 384, page),
+            tmdb.discoverByWatchProvider(apiKey, "tv", 49, page),
+          ]);
+          items = [...movies, ...tv].slice(0, 20);
+          break;
+        }
         default:
           return res.status(404).json({ error: "Unknown browse row" });
       }
@@ -326,17 +420,59 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
 
   app.get("/providers/streamflix", (_req, res) => {
     try {
-      const providers = getAllProviders().map((p) => ({
-        id: p.id,
-        name: p.name,
-        language: p.language,
-        supportsMovies: p.supportsMovies,
-        supportsTv: p.supportsTv,
-        enabled: p.enabled !== false && p.implementationStatus !== "stub",
-        implementationStatus: p.implementationStatus ?? "stub",
-        requiresPlaywright: p.requiresPlaywright ?? false,
-      }));
-      res.json({ count: providers.length, providers });
+      const healthList = providerHealth.list(
+        getAllProviders().map((p) => ({
+          id: p.name,
+          name: p.name,
+          endpoint: "streamflix",
+        }))
+      );
+      const healthByName = new Map(healthList.map((h) => [h.name, h]));
+      const providers = getAllProviders().map((p) => {
+        const health = healthByName.get(p.name);
+        return {
+          id: p.id,
+          name: p.name,
+          language: p.language,
+          supportsMovies: p.supportsMovies,
+          supportsTv: p.supportsTv,
+          enabled: p.enabled !== false && p.implementationStatus !== "stub",
+          implementationStatus: p.implementationStatus ?? "stub",
+          requiresPlaywright: p.requiresPlaywright ?? false,
+          health: health
+            ? {
+                successes: health.successes,
+                failures: health.failures,
+                status: health.status,
+              }
+            : null,
+        };
+      });
+      res.json({ count: providers.length, providers, config: getProviderConfig() });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post("/providers/streamflix/toggle", (req, res) => {
+    try {
+      const id = typeof req.body?.id === "string" ? req.body.id : "";
+      const enabled = req.body?.enabled !== false;
+      if (!id) return res.status(400).json({ error: "id required" });
+      setProviderEnabled(id, enabled);
+      res.json({ ok: true, id, enabled });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post("/providers/streamflix/config", (req, res) => {
+    try {
+      const disabled = Array.isArray(req.body?.disabled)
+        ? req.body.disabled.filter((d: unknown) => typeof d === "string")
+        : [];
+      setProviderConfig(disabled);
+      res.json({ ok: true, disabled });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -480,10 +616,12 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
     const sources = parseSourcesParam(req.query.sources);
+    const lang = parseLangParam(req.query.lang);
     const play = await resolveWithBackend({
       ...options,
       sources,
       onlySourceId,
+      lang,
       providerScore: providerScoreFromList(providerList),
     });
     setCachedPlay(cacheKey, play);

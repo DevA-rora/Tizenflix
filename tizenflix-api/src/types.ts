@@ -109,6 +109,8 @@ export interface ResolveOptions {
   onePerSource?: boolean;
   mergeOrder?: string[];
   sourceTimeoutMs?: number;
+  /** Catalog / resolve language (e.g. en, de, fr) */
+  lang?: string;
 }
 
 export interface ServerResult {

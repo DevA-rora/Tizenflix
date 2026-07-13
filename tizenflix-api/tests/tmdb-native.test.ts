@@ -8,8 +8,10 @@ describe("tmdb-native registry", () => {
     expect(typeof resolveTmdbNativeRace).toBe("function");
   });
 
-  it("lists 12 English-global sources", () => {
-    expect(TMDB_NATIVE_SOURCES.length).toBe(12);
+  it("lists TMDB-native sources including locale extras", () => {
+    expect(TMDB_NATIVE_SOURCES.length).toBeGreaterThanOrEqual(16);
+    expect(TMDB_NATIVE_SOURCES.some((s) => s.id === "moflix")).toBe(true);
+    expect(TMDB_NATIVE_SOURCES.some((s) => s.id === "afterdark")).toBe(true);
   });
 
   it("builds VixSrc movie URL from TMDB id", async () => {

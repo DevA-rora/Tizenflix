@@ -11,6 +11,7 @@ var config = require("./core/config.js");
 var motion = require("./core/motion.js");
 var player = require("./player/player.js");
 var playback = require("./services/playback.js");
+var keys = require("./core/keys.js");
 
 var home = require("./screens/home.js");
 var search = require("./screens/search.js");
@@ -88,7 +89,7 @@ function wirePlayback() {
 
 function wireGlobalKeys() {
   document.addEventListener("keydown", function (e) {
-    if (e.keyCode === 10009 || e.key === "Back") {
+    if (keys.isBackKey(e)) {
       if (document.body.classList.contains("is-playing")) {
         playback.handleBackKey();
         e.preventDefault();
@@ -158,6 +159,7 @@ function init() {
   wirePlayback();
   wireGlobalKeys();
   focus.init(updateFocusHint);
+  config.applyGridScale();
 }
 
 if (document.readyState === "loading") {

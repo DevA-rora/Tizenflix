@@ -1,59 +1,62 @@
 # Streamflix Benchmark v3
 
-Generated: 2026-07-12T09:00:50.435Z
+Generated: 2026-07-13T06:51:32.214Z
 Playwright: ready
-Enabled providers: 27
+Enabled providers: 30
 
 ## Summary
 
-- Vidking wins: 2
+- Vidking wins: 10
 - Streamflix wins: 0
 - Ties: 0
-- Unresolved: 8
+- Unresolved: 0
 
 ## Per title
 
 | Title | Vidking HLS | Streamflix HLS | Winner | Top provider |
 |-------|-------------|----------------|--------|--------------|
-| Inception | 5 | 0 | vidking | - |
+| Inception | 5 | 1 | vidking | MoflixStream |
 | Off Campus S1E1 | 4 | 0 | vidking | - |
-| The Matrix | 0 | 0 | none | - |
-| Breaking Bad S1E1 | 0 | 0 | none | - |
-| Interstellar | 0 | 0 | none | - |
-| The Office S1E1 | 0 | 0 | none | - |
-| Pulp Fiction | 0 | 0 | none | - |
-| Stranger Things S1E1 | 0 | 0 | none | - |
-| The Dark Knight | 0 | 0 | none | - |
-| Game of Thrones S1E1 | 0 | 0 | none | - |
+| The Matrix | 5 | 1 | vidking | MoflixStream |
+| Breaking Bad S1E1 | 5 | 0 | vidking | - |
+| Interstellar | 5 | 0 | vidking | - |
+| The Office S1E1 | 4 | 0 | vidking | - |
+| Pulp Fiction | 5 | 0 | vidking | - |
+| Stranger Things S1E1 | 4 | 0 | vidking | - |
+| The Dark Knight | 5 | 0 | vidking | - |
+| Game of Thrones S1E1 | 5 | 0 | vidking | - |
 
 ## Provider matrix (Inception)
 
 | Provider | OK | HLS | ms | Layer | CF | Error |
 |----------|----|-----|-----|-------|-----|-------|
-| SFlix | false | 0 | 307 | provider | false | fetch failed |
-| Ridomovies | false | 0 | 249 | provider | false | fetch failed |
-| SuperStream | false | 0 | 261 | network | false | SuperStream HTTP 403 |
-| StreamingCommunity (EN) | false | 0 | 277 | provider | false | fetch failed |
-| StreamingCommunity (IT) | false | 0 | 258 | provider | false | fetch failed |
-| AnimeWorld | false | 0 | 243 | provider | false | fetch failed |
-| Mkissa | false | 0 | 282 | provider | false | fetch failed |
-| Anikoto | false | 0 | 279 | provider | false | fetch failed |
-| Wiflix | false | 0 | 286 | provider | false | fetch failed |
-| MoflixStream | false | 0 | 271 | provider | false | fetch failed |
-| FilmPalast | false | 0 | 257 | provider | false | fetch failed |
-| PoseidonHD2 | false | 0 | 591 | provider | false | fetch failed |
-| Cuevana 3 | false | 0 | 265 | provider | false | fetch failed |
-| CineCalidad | false | 0 | 244 | provider | false | fetch failed |
-| FlixLatam | false | 0 | 284 | provider | false | fetch failed |
-| AnimeOnlineNinja | false | 0 | 279 | provider | false | fetch failed |
-| SoloLatino | false | 0 | 240 | provider | false | fetch failed |
-| Cine24h | false | 0 | 260 | provider | false | fetch failed |
-| PelisflixHd | false | 0 | 289 | provider | false | fetch failed |
-| Altadefinizione01 | false | 0 | 289 | provider | false | fetch failed |
-| CB01 | false | 0 | 289 | provider | false | fetch failed |
-| FrenchStream | false | 0 | 610 | provider | false | fetch failed |
-| Einschalten | false | 0 | 247 | provider | false | fetch failed |
-| HDFilme | false | 0 | 284 | provider | false | fetch failed |
-| MEGAKino | false | 0 | 264 | provider | false | fetch failed |
-| FilmyOnline | false | 0 | 286 | provider | false | fetch failed |
-| Zeriun | false | 0 | 255 | provider | false | fetch failed |
+| SFlix | false | 0 | 20011 | provider | false | provider timeout |
+| Ridomovies | false | 0 | 20005 | provider | false | provider timeout |
+| SuperStream | false | 0 | 143 | network | false | SuperStream HTTP 403 |
+| StreamingCommunity (EN) | false | 0 | 846 | network | false | HTTP 404 for https://streamingunity.dog/search?q=Inception&p |
+| StreamingCommunity (IT) | false | 0 | 773 | network | false | HTTP 404 for https://streamingunity.dog/search?q=Inception&p |
+| AnimeWorld | false | 0 | 1747 | provider | false | no TMDB match |
+| Mkissa | false | 0 | 20000 | provider | false | provider timeout |
+| Anikoto | false | 0 | 20000 | provider | false | provider timeout |
+| Wiflix | false | 0 | 19999 | provider | false | provider timeout |
+| AnyMovie | false | 0 | 1691 | provider | false | no TMDB match |
+| HiAnime | false | 0 | 19999 | provider | false | provider timeout |
+| MoflixStream | true | 1 | 3783 | - | false |  |
+| FilmPalast | false | 0 | 20000 | provider | false | provider timeout |
+| PoseidonHD2 | false | 0 | 1481 | provider | false | no TMDB match |
+| Cuevana 3 | false | 0 | 10309 | provider | false | fetch failed |
+| CineCalidad | false | 0 | 2130 | provider | false | no TMDB match |
+| FlixLatam | false | 0 | 19999 | provider | false | provider timeout |
+| AnimeOnlineNinja | false | 0 | 19999 | provider | false | provider timeout |
+| SoloLatino | false | 0 | 1477 | provider | false | no TMDB match |
+| Cine24h | false | 0 | 19999 | provider | false | provider timeout |
+| PelisflixHd | false | 0 | 578 | provider | false | fetch failed |
+| Altadefinizione01 | false | 0 | 519 | provider | false | fetch failed |
+| CB01 | false | 0 | 545 | provider | false | fetch failed |
+| FrenchStream | false | 0 | 4318 | provider | false | no TMDB match |
+| Einschalten | false | 0 | 2305 | provider | false | no TMDB match |
+| HDFilme | false | 0 | 20000 | provider | false | provider timeout |
+| MEGAKino | false | 0 | 20000 | provider | false | provider timeout |
+| FilmyOnline | false | 0 | 20000 | provider | false | provider timeout |
+| Zeriun | false | 0 | 989 | network | false | HTTP 404 for https://zeriun.com/?s=Inception |
+| Frembed | false | 0 | 20000 | provider | false | provider timeout |

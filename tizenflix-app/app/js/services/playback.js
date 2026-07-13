@@ -20,6 +20,49 @@ var playSession = 0;
 var progressSaveTimer = null;
 var lastProgressSaveAt = 0;
 var PROGRESS_SAVE_INTERVAL_MS = 30000;
+var autoplayTimer = null;
+var autoplayEndedHandler = null;
+
+function clearAutoplayTimer() {
+  if (autoplayTimer) {
+    clearInterval(autoplayTimer);
+    autoplayTimer = null;
+  }
+}
+
+function unbindAutoplayHandler() {
+  clearAutoplayTimer();
+  var video = document.getElementById("video");
+  if (video && autoplayEndedHandler) {
+    video.removeEventListener("ended", autoplayEndedHandler);
+  }
+  autoplayEndedHandler = null;
+}
+
+function bindAutoplayHandler(video, onStatus) {
+  unbindAutoplayHandler();
+  if (!video || !config.getAutoplayNext()) return;
+
+  autoplayEndedHandler = function () {
+    var session = playbackSession.get();
+    if (!session || session.type !== "tv" || !session.nextEpisode) return;
+    var bufferSec = config.getAutoplayBufferSec();
+    var remaining = bufferSec;
+    if (onStatus) onStatus("Next episode in " + remaining + "s…");
+    clearAutoplayTimer();
+    autoplayTimer = setInterval(function () {
+      remaining -= 1;
+      if (remaining > 0) {
+        if (onStatus) onStatus("Next episode in " + remaining + "s…");
+        return;
+      }
+      clearAutoplayTimer();
+      var handlers = buildChromeHandlers(onStatus);
+      if (handlers.onNextEpisode) handlers.onNextEpisode();
+    }, 1000);
+  };
+  video.addEventListener("ended", autoplayEndedHandler);
+}
 
 function buildProgressPayload(video) {
   var session = playbackSession.get();
@@ -151,6 +194,11 @@ function buildChromeHandlers(onStatus) {
       player.applyQualityMode(player.getHlsInstance(), mode);
       log("Quality: " + mode);
     },
+    onSpeedCycle: function () {
+      var next = config.cyclePlaybackSpeed();
+      video.playbackRate = next;
+      log("Speed: " + next + "x");
+    },
     onReResolve: function (overrides) {
       reResolveWith(overrides, onStatus).catch(function (err) {
         log(err.message);
@@ -268,6 +316,8 @@ function playResolved(play, title, onStatus, session, playOptions) {
   loadSubtitlesAsync(play, video);
   mountChrome(stored, onStatus);
   bindProgressSaver(video);
+  video.playbackRate = config.getPlaybackSpeed();
+  bindAutoplayHandler(video, onStatus);
 
   debug.debugClear();
   debug.debugLog("Playing: " + (title || play.title || ""));
@@ -602,6 +652,7 @@ function stop(options) {
   var video = document.getElementById("video");
   if (video) savePlaybackProgress(video, true);
   unbindProgressSaver();
+  unbindAutoplayHandler();
 
   playSession += 1;
   var wasFullscreen =

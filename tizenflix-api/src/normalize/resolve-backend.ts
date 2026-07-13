@@ -1,9 +1,9 @@
 import { resolvePlayableSources } from "../normalize/to-play-response.js";
 import {
-  autoTmdbSourceIdsForType,
   resolveTmdbNativeFromOptions,
   resolveTmdbNativeRaceFromOptions,
 } from "../streamflix/tmdb-native/resolve.js";
+import { mergeOrderForLanguage, simplifyLang, tmdbSourceIdsForLanguage } from "../streamflix/tmdb-native/lang-sources.js";
 import type { PlayResponse, ResolveOptions } from "../types.js";
 
 const TIER1_TIMEOUT_MS = 4_000;
@@ -27,15 +27,22 @@ async function resolveAutoTiered(
   options: ResolveOptions,
   fetchImpl: typeof fetch
 ): Promise<PlayResponse> {
-  const autoIds = options.onlySourceIds ?? options.sources ?? autoTmdbSourceIdsForType(options.type);
+  const lang = options.lang ?? "en";
+  const langIds = tmdbSourceIdsForLanguage(options.type, lang);
+  const autoIds =
+    options.onlySourceIds ??
+    options.sources ??
+    mergeOrderForLanguage(options.type, lang, langIds);
 
-  // Tier 1: VixSrc only (fast path)
+  // Tier 1: VixSrc only (fast path) — or Moflix for DE
+  const tier1Id = simplifyLang(lang) === "de" ? "moflix" : "vixsrc";
   try {
     const { result, ms } = await timed(() =>
       resolveTmdbNativeFromOptions(
         {
           ...options,
-          onlySourceIds: ["vixsrc"],
+          lang,
+          onlySourceIds: [tier1Id],
           onePerSource: true,
           sourceTimeoutMs: TIER1_TIMEOUT_MS,
         },
@@ -50,11 +57,11 @@ async function resolveAutoTiered(
   }
 
   // Tier 2: remaining TMDB-native sources (race)
-  const tier2Ids = autoIds.filter((id) => id !== "vixsrc");
+  const tier2Ids = autoIds.filter((id) => id !== tier1Id);
   if (tier2Ids.length) {
     try {
       const { result, ms } = await timed(() =>
-        resolveTmdbNativeRaceFromOptions(options, tier2Ids, TIER2_TIMEOUT_MS, fetchImpl)
+        resolveTmdbNativeRaceFromOptions({ ...options, lang }, tier2Ids, TIER2_TIMEOUT_MS, fetchImpl)
       );
       if (hasPlayableSources(result)) {
         return tagBackend({ ...result, backend: "auto" }, "auto", ms);
@@ -139,4 +146,9 @@ export function parseSourcesParam(raw: unknown): string[] | undefined {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
+}
+
+export function parseLangParam(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  return raw.trim().toLowerCase().split("-")[0];
 }

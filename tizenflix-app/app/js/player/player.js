@@ -365,10 +365,11 @@ function prefersHlsJsFirst(url) {
 }
 
 function createHlsInstance() {
+  var extra = config.getExtraBuffering();
   return new Hls({
     enableWorker: false,
-    maxBufferLength: 60,
-    maxMaxBufferLength: 180,
+    maxBufferLength: extra ? 120 : 60,
+    maxMaxBufferLength: extra ? 300 : 180,
     maxBufferSize: 120 * 1000 * 1000,
     maxBufferHole: 2.0,
     highBufferWatchdogPeriod: 3,

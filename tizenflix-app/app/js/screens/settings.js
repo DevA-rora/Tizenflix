@@ -1,9 +1,10 @@
 /**
- * Settings — API URL, quality mode, gate link.
+ * Settings — API URL, playback prefs, providers, gate link.
  */
 
 var api = require("../services/api.js");
 var config = require("../core/config.js");
+var focus = require("../core/focus.js");
 
 function applyDevModeFromSettings(enabled) {
   config.setDevMode(enabled);
@@ -13,8 +14,81 @@ function applyDevModeFromSettings(enabled) {
   }
 }
 
+function renderProviderManager(container, onBack) {
+  container.innerHTML =
+    '<div class="screen screen-settings">' +
+    "<h2>Stream providers</h2>" +
+    '<p class="settings-hint">Toggle scraper providers (saved on API server).</p>' +
+    '<div id="providerList" class="settings-provider-list loading-msg">Loading…</div>' +
+    '<button type="button" id="providersBackBtn" class="btn btn-info focusable">Back</button>' +
+    "</div>";
+
+  var listEl = container.querySelector("#providerList");
+  var backBtn = container.querySelector("#providersBackBtn");
+  backBtn.addEventListener("click", onBack);
+
+  api
+    .getStreamflixProviders()
+    .then(function (data) {
+      var providers = data.providers || [];
+      var html = "";
+      for (var i = 0; i < providers.length; i++) {
+        var p = providers[i];
+        if (p.implementationStatus === "stub") continue;
+        var health = p.health;
+        var healthTxt = health
+          ? " (" + health.successes + " ok / " + health.failures + " fail)"
+          : "";
+        html +=
+          '<div class="settings-field" data-focus-row="prov-' +
+          i +
+          '">' +
+          '<button type="button" class="btn btn-info focusable provider-toggle" data-id="' +
+          p.id +
+          '" data-enabled="' +
+          (p.enabled ? "1" : "0") +
+          '">' +
+          (p.enabled ? "ON" : "OFF") +
+          " — " +
+          p.name +
+          " [" +
+          p.language +
+          "]" +
+          healthTxt +
+          "</button></div>";
+      }
+      listEl.className = "settings-provider-list";
+      listEl.innerHTML = html || "<p>No providers</p>";
+
+      var toggles = listEl.querySelectorAll(".provider-toggle");
+      for (var t = 0; t < toggles.length; t++) {
+        toggles[t].addEventListener("click", function () {
+          var btn = this;
+          var id = btn.getAttribute("data-id");
+          var enabled = btn.getAttribute("data-enabled") !== "1";
+          api.toggleStreamflixProvider(id, enabled).then(function () {
+            btn.setAttribute("data-enabled", enabled ? "1" : "0");
+            btn.textContent =
+              (enabled ? "ON" : "OFF") +
+              btn.textContent.substring(btn.textContent.indexOf(" —"));
+          });
+        });
+      }
+      focus.refresh(container);
+    })
+    .catch(function (err) {
+      listEl.textContent = "Failed: " + err.message;
+    });
+}
+
 function render(container) {
   var devOn = config.getDevMode();
+  var gridScale = config.getGridScale();
+  var autoplay = config.getAutoplayNext();
+  var bufferSec = config.getAutoplayBufferSec();
+  var extraBuf = config.getExtraBuffering();
+  var catalogLang = config.getCatalogLang();
+
   var el = document.createElement("div");
   el.className = "screen screen-settings";
   el.innerHTML =
@@ -33,23 +107,115 @@ function render(container) {
     '<button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' +
     (devOn ? "ON" : "OFF") +
     "</button>" +
-    '<p class="settings-hint">Dev mode shows focus hints and the debug log overlay.</p>' +
     "</div>" +
+    '<div class="settings-field" data-focus-row="settings-grid">' +
+    '<label for="gridScaleInput">Grid size: ' +
+    gridScale +
+    "%</label>" +
+    '<input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' +
+    gridScale +
+    '" />' +
+    "</div>" +
+    '<div class="settings-field" data-focus-row="settings-lang">' +
+    '<label for="catalogLangInput">Catalog language</label>' +
+    '<select id="catalogLangInput" class="focusable">' +
+    '<option value="en"' +
+    (catalogLang === "en" ? " selected" : "") +
+    ">English</option>" +
+    '<option value="de"' +
+    (catalogLang === "de" ? " selected" : "") +
+    ">German</option>" +
+    '<option value="fr"' +
+    (catalogLang === "fr" ? " selected" : "") +
+    ">French</option>" +
+    '<option value="it"' +
+    (catalogLang === "it" ? " selected" : "") +
+    ">Italian</option>" +
+    '<option value="es"' +
+    (catalogLang === "es" ? " selected" : "") +
+    ">Spanish</option>" +
+    "</select></div>" +
+    '<div class="settings-field" data-focus-row="settings-autoplay">' +
+    '<button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ' +
+    (autoplay ? "ON" : "OFF") +
+    "</button>" +
+    '<label for="autoplayBufferInput">Countdown (sec): ' +
+    bufferSec +
+    "</label>" +
+    '<input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' +
+    bufferSec +
+    '" />' +
+    "</div>" +
+    '<div class="settings-field" data-focus-row="settings-buffer">' +
+    '<button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' +
+    (extraBuf ? "ON" : "OFF") +
+    "</button></div>" +
     '<p class="settings-hint">Play backend: <strong>' +
     config.getPlayBackend() +
-    '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle backend</button></p>' +
-    '<p class="settings-hint">Quality: <strong>' +
-    config.getQualityMode() +
-    "</strong> (adaptive)</p>" +
-    '<p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>' +
-    '<p class="settings-hint">Browser dev: use <code>http://localhost:8790</code> if the API runs on this PC.</p>';
+    '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p>' +
+    '<button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button>' +
+    '<p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
   container.appendChild(el);
 
   var input = el.querySelector("#apiBaseInput");
   var saveBtn = el.querySelector("#saveApiBtn");
   var devBtn = el.querySelector("#devModeBtn");
   var backendBtn = el.querySelector("#backendCycleBtn");
+  var gridInput = el.querySelector("#gridScaleInput");
+  var langInput = el.querySelector("#catalogLangInput");
+  var autoplayBtn = el.querySelector("#autoplayBtn");
+  var bufferInput = el.querySelector("#autoplayBufferInput");
+  var extraBtn = el.querySelector("#extraBufferBtn");
+  var providersBtn = el.querySelector("#providersBtn");
   var status = el.querySelector("#settingsStatus");
+
+  if (gridInput) {
+    gridInput.addEventListener("input", function () {
+      var v = config.setGridScale(parseInt(gridInput.value, 10));
+      gridInput.previousElementSibling.textContent = "Grid size: " + v + "%";
+    });
+  }
+
+  if (langInput) {
+    langInput.addEventListener("change", function () {
+      config.setCatalogLang(langInput.value);
+    });
+  }
+
+  if (autoplayBtn) {
+    autoplayBtn.addEventListener("click", function () {
+      var next = !config.getAutoplayNext();
+      config.setAutoplayNext(next);
+      autoplayBtn.textContent = "Autoplay next: " + (next ? "ON" : "OFF");
+    });
+  }
+
+  if (bufferInput) {
+    bufferInput.addEventListener("input", function () {
+      var v = config.setAutoplayBufferSec(parseInt(bufferInput.value, 10));
+      bufferInput.previousElementSibling.textContent = "Countdown (sec): " + v;
+    });
+  }
+
+  if (extraBtn) {
+    extraBtn.addEventListener("click", function () {
+      var next = !config.getExtraBuffering();
+      config.setExtraBuffering(next);
+      extraBtn.textContent = "Extra buffering: " + (next ? "ON" : "OFF");
+    });
+  }
+
+  if (providersBtn) {
+    providersBtn.addEventListener("click", function () {
+      container.innerHTML = "";
+      renderProviderManager(container, function () {
+        container.innerHTML = "";
+        render(container);
+        focus.refresh(container);
+      });
+      focus.refresh(container);
+    });
+  }
 
   if (backendBtn) {
     backendBtn.addEventListener("click", function () {

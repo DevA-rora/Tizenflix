@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import type { StreamServer, ExtractedVideo } from "../types.js";
 import type { ContentProvider } from "./types.js";
-import { BROWSER_UA, fetchJson, fetchText } from "../http.js";
+import { fetchJson, fetchText } from "../network/client.js";
 import { extractVideo } from "../extractors/registry.js";
 
 const BASE_URL = "https://ridomovies.tv/";
@@ -55,7 +55,7 @@ interface EpisodeEntry {
 async function searchByTmdb(tmdbId: string, title: string): Promise<SearchItem | null> {
   const response = await fetchJson<ApiResponse<{ items: SearchItem[] }>>(
     `${BASE_URL}core/api/search?q=${encodeURIComponent(title)}&page[number]=1`,
-    { headers: RIDO_HEADERS }
+    { referer: BASE_URL, mode: "json", headers: RIDO_HEADERS }
   );
 
   const exact = response.data.items.find(
@@ -81,7 +81,11 @@ export async function getRidomoviesServers(
       ? `${BASE_URL}api/movies/${slug}`
       : `${BASE_URL}api/episodes/${episodeId}`;
 
-  const response = await fetchJson<ApiResponse<VideoEntry[]>>(path, { headers: RIDO_HEADERS });
+  const response = await fetchJson<ApiResponse<VideoEntry[]>>(path, {
+    referer: BASE_URL,
+    mode: "json",
+    headers: RIDO_HEADERS,
+  });
   const servers: StreamServer[] = [];
 
   for (const entry of response.data) {
@@ -105,7 +109,7 @@ export async function resolveRidomoviesEpisodeId(
 ): Promise<string> {
   const seasonsRes = await fetchJson<ApiResponse<{ items: SeasonEntry[] }>>(
     `${BASE_URL}core/api/series/${slug}/seasons`,
-    { headers: RIDO_HEADERS }
+    { referer: BASE_URL, mode: "json", headers: RIDO_HEADERS }
   );
 
   const seasonNum = parseInt(season, 10);
@@ -116,7 +120,7 @@ export async function resolveRidomoviesEpisodeId(
 
   const episodesRes = await fetchJson<ApiResponse<{ items: EpisodeEntry[] }>>(
     `${BASE_URL}core/api/series/${slug}/seasons/${seasonEntry.id}/episodes`,
-    { headers: RIDO_HEADERS }
+    { referer: BASE_URL, mode: "json", headers: RIDO_HEADERS }
   );
 
   const epNum = parseInt(episode, 10);
@@ -148,7 +152,7 @@ export async function findRidomoviesContent(
 /** Verify ridomovies is reachable */
 export async function pingRidomovies(): Promise<boolean> {
   try {
-    await fetchText(`${BASE_URL}home`, { timeoutMs: 10_000 });
+    await fetchText(`${BASE_URL}home`, { referer: BASE_URL, mode: "document", timeoutMs: 10_000 });
     return true;
   } catch {
     return false;

@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import { buildAfterDarkEntries } from "../extractors/after-dark.js";
+import { buildFrembedEntries } from "../extractors/frembed.js";
+import { buildMoflixEntries } from "../extractors/moflix.js";
+import { buildEinschaltenEntry } from "../extractors/einschalten.js";
 import { BROWSER_UA, fetchJson } from "../http.js";
 import type { TmdbNativeEntry, TmdbNativeResolveOpts, TmdbNativeSource } from "./types.js";
 
@@ -205,6 +209,45 @@ export const TMDB_NATIVE_SOURCES: TmdbNativeSource[] = [
       (id, s, e) => `${VIDSRC_TO}/embed/tv/${id}/${s}/${e}`
     )
   ),
+  {
+    id: "moflix",
+    name: "Moflix",
+    mainUrl: "https://moflix-stream.xyz/",
+    priority: 0,
+    supportsMovies: true,
+    supportsTv: true,
+    buildEntries: (o) => buildMoflixEntries(o),
+  },
+  {
+    id: "frembed",
+    name: "Frembed",
+    mainUrl: "https://frembed.click",
+    priority: 0,
+    supportsMovies: true,
+    supportsTv: true,
+    buildEntries: (o) => buildFrembedEntries(o),
+  },
+  {
+    id: "afterdark",
+    name: "AfterDark",
+    mainUrl: "https://afterdark.best",
+    priority: 0,
+    supportsMovies: true,
+    supportsTv: true,
+    buildEntries: (o) => buildAfterDarkEntries(o),
+  },
+  {
+    id: "einschalten",
+    name: "Einschalten",
+    mainUrl: "https://einschalten.in",
+    priority: 0,
+    supportsMovies: true,
+    supportsTv: false,
+    buildEntries(o) {
+      const entry = buildEinschaltenEntry(o);
+      return entry ? [entry] : [];
+    },
+  },
 ];
 
 export function getTmdbNativeSources(type: "movie" | "tv"): TmdbNativeSource[] {

@@ -109,6 +109,24 @@ function fetchPlaySubtitlesTv(tmdbId, season, episode) {
   );
 }
 
+function listGenres(type) {
+  return config.apiGet("/browse/genres?type=" + encodeURIComponent(type || "movie"));
+}
+
+function browseGenre(genreId, type, page) {
+  var q = "?type=" + encodeURIComponent(type || "movie");
+  if (page) q += "&page=" + encodeURIComponent(page);
+  return config.apiGet("/browse/genre/" + encodeURIComponent(genreId) + q);
+}
+
+function getStreamflixProviders() {
+  return config.apiGet("/providers/streamflix");
+}
+
+function toggleStreamflixProvider(id, enabled) {
+  return config.apiPost("/providers/streamflix/toggle", { id: id, enabled: enabled });
+}
+
 module.exports = {
   getBase: getBase,
   setBase: config.setApiBase,
@@ -131,4 +149,8 @@ module.exports = {
   warmStreamUrl: warmStreamUrl,
   fetchPlaySubtitlesMovie: fetchPlaySubtitlesMovie,
   fetchPlaySubtitlesTv: fetchPlaySubtitlesTv,
+  listGenres: listGenres,
+  browseGenre: browseGenre,
+  getStreamflixProviders: getStreamflixProviders,
+  toggleStreamflixProvider: toggleStreamflixProvider,
 };

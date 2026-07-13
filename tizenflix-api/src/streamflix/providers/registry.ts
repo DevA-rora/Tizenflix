@@ -65,7 +65,7 @@ import { vavooFrProvider } from "./vavoo-fr.js";
 import { vavooEsProvider } from "./vavoo-es.js";
 import { vavooPlProvider } from "./vavoo-pl.js";
 import type { ContentProvider } from "./types.js";
-import { readFileSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -168,4 +168,29 @@ export function getEnabledProviders(type: "movie" | "tv"): ContentProvider[] {
 
 export function findProviderById(id: string): ContentProvider | undefined {
   return getAllProviders().find((p) => p.id === id);
+}
+
+export function getProviderConfig(): { disabled: string[] } {
+  if (!existsSync(CONFIG_PATH)) return { disabled: [] };
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as { disabled: string[] };
+  } catch {
+    return { disabled: [] };
+  }
+}
+
+export function setProviderEnabled(id: string, enabled: boolean): void {
+  const cfg = getProviderConfig();
+  const disabled = new Set(cfg.disabled ?? []);
+  if (enabled) disabled.delete(id);
+  else disabled.add(id);
+  const dir = dirname(CONFIG_PATH);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify({ disabled: [...disabled] }, null, 2));
+}
+
+export function setProviderConfig(disabled: string[]): void {
+  const dir = dirname(CONFIG_PATH);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify({ disabled }, null, 2));
 }

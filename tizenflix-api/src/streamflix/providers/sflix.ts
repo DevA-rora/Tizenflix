@@ -1,15 +1,15 @@
 import * as cheerio from "cheerio";
 import type { StreamServer, ExtractedVideo } from "../types.js";
 import type { ContentProvider } from "./types.js";
-import { BROWSER_UA, fetchJson, fetchText } from "../http.js";
+import { fetchJson, fetchText } from "../network/client.js";
 import { extractVideo } from "../extractors/registry.js";
 
 const BASE_URL = "https://sflix.to/";
 
-const SFLIX_HEADERS = {
-  Referer: BASE_URL,
-  Origin: "https://sflix.to",
-  "X-Requested-With": "XMLHttpRequest",
+const SFLIX_OPTS = {
+  referer: BASE_URL,
+  origin: "https://sflix.to",
+  headers: { "X-Requested-With": "XMLHttpRequest" },
 };
 
 interface SflixLinkResponse {
@@ -19,7 +19,7 @@ interface SflixLinkResponse {
 export async function findSflixMovieId(tmdbId: string, title: string): Promise<string | null> {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const searchUrl = `${BASE_URL}search/${slug}`;
-  const html = await fetchText(searchUrl, { headers: SFLIX_HEADERS });
+  const html = await fetchText(searchUrl, { ...SFLIX_OPTS, mode: "document" });
 
   const $ = cheerio.load(html);
   let found: string | null = null;
@@ -37,9 +37,8 @@ export async function findSflixMovieId(tmdbId: string, title: string): Promise<s
     return movieId;
   }
 
-  // Fallback: try ajax list directly with tmdb id (works for many titles)
   try {
-    await fetchText(`${BASE_URL}ajax/episode/list/${tmdbId}`, { headers: SFLIX_HEADERS });
+    await fetchText(`${BASE_URL}ajax/episode/list/${tmdbId}`, { ...SFLIX_OPTS, mode: "xhr" });
     return tmdbId;
   } catch {
     return null;
@@ -54,7 +53,7 @@ export async function findSflixEpisodeId(
 ): Promise<string | null> {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const searchUrl = `${BASE_URL}search/${slug}`;
-  const html = await fetchText(searchUrl, { headers: SFLIX_HEADERS });
+  const html = await fetchText(searchUrl, { ...SFLIX_OPTS, mode: "document" });
   const $ = cheerio.load(html);
 
   let showHref: string | null = null;
@@ -69,14 +68,11 @@ export async function findSflixEpisodeId(
   if (!showHref) return null;
   const href = showHref as string;
 
-  const showHtml = await fetchText(`${BASE_URL}${href.replace(/^\//, "")}`, {
-    headers: SFLIX_HEADERS,
-  });
-  const show$ = cheerio.load(showHtml);
+  await fetchText(`${BASE_URL}${href.replace(/^\//, "")}`, { ...SFLIX_OPTS, mode: "document" });
 
   const seasonLinks = await fetchText(
     `${BASE_URL}ajax/season/list/${href.split("-").pop()}`,
-    { headers: SFLIX_HEADERS }
+    { ...SFLIX_OPTS, mode: "xhr" }
   );
   const season$ = cheerio.load(seasonLinks);
   const seasonNum = parseInt(season, 10);
@@ -91,7 +87,8 @@ export async function findSflixEpisodeId(
   if (!seasonId) return null;
 
   const epHtml = await fetchText(`${BASE_URL}ajax/season/episodes/${seasonId}`, {
-    headers: SFLIX_HEADERS,
+    ...SFLIX_OPTS,
+    mode: "xhr",
   });
   const ep$ = cheerio.load(epHtml);
   const epNum = parseInt(episode, 10);
@@ -113,7 +110,7 @@ export async function getSflixServers(movieOrEpisodeId: string, type: "movie" | 
       ? `${BASE_URL}ajax/episode/list/${movieOrEpisodeId}`
       : `${BASE_URL}ajax/episode/servers/${movieOrEpisodeId}`;
 
-  const html = await fetchText(path, { headers: SFLIX_HEADERS });
+  const html = await fetchText(path, { ...SFLIX_OPTS, mode: "xhr" });
   const $ = cheerio.load(html);
   const servers: StreamServer[] = [];
 
@@ -130,7 +127,7 @@ export async function getSflixServers(movieOrEpisodeId: string, type: "movie" | 
 export async function getSflixLink(serverId: string): Promise<string> {
   const data = await fetchJson<SflixLinkResponse>(
     `${BASE_URL}ajax/episode/sources/${serverId}`,
-    { headers: SFLIX_HEADERS }
+    { ...SFLIX_OPTS, mode: "json" }
   );
   if (!data.link) throw new Error("SFlix: empty embed link");
   return data.link;
