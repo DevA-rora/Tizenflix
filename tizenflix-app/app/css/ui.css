@@ -125,11 +125,7 @@ body.sidebar-expanded .nav-item .nav-label {
   color: #ffffff;
 }
 
-.nav-item.nav-bottom {
-  margin-top: auto;
-}
-
-.nav-item.nav-profile {
+.sidebar-footer {
   margin-top: auto;
 }
 

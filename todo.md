@@ -1,14 +1,14 @@
 # Todo
-- [ ] Revamp the UI using /frontend-design skill.
 - [ ] Add animations when moving between shows/movies (like Netflix)
-- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see how much code we can steal.
-- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see if we can use OR reverse engineer the servers present so that we should have literally no issues with streaming / API
+- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see how much code we can "steal".
+- [ ] Using this repository: https://github.com/streamflix-reborn/streamflix , see if we can use OR reverse engineer the servers present so that we should have literally no issues with streaming / API.
 
 # Doing
-- [ ] Be able to preview the application on laptop so I can make changes without having to be at the TV.
 - [ ] Copy Netflix sidebar.
 
 # Done
+- [x] Revamp the UI using /frontend-design skill.
+- [x] Be able to preview the application on laptop so I can make changes without having to be at the TV.
 - [x] Netflix-style UI (sidebar, hero, browse rows) — browser testable at `:3010/app/index.html`
 - [x] Movie/TV detail screens + Play → `app/js/screens/detail-*.js`
 - [x] Organize app directory for UI development → `tizenflix-app/STRUCTURE.md`
