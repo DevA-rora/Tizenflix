@@ -274,6 +274,7 @@ function createCard(item, onSelect, options) {
   el.type = "button";
   el.className = "card focusable";
   if (layout === "spotlight") el.classList.add("card-spotlight");
+  if (layout === "landscape") el.classList.add("card-landscape");
   if (isCw) el.classList.add("card-continue-watching");
   el.setAttribute("data-tmdb-id", String(item.id));
   el.setAttribute("data-media-type", type);
@@ -295,6 +296,16 @@ function createCard(item, onSelect, options) {
       (isCw ? "" : buildPillsHtml(item)) +
       (isCw ? buildProgressHtml(item) : "") +
       "</div>" +
+      "</div>" +
+      '<span class="card-title">' +
+      escapeHtml(title) +
+      "</span>";
+  } else if (layout === "landscape") {
+    el.innerHTML =
+      '<div class="card-poster card-poster-landscape" style="background-image:url(\'' +
+      escapeHtml(poster) +
+      "')\">" +
+      (isCw ? buildProgressHtml(item) : "") +
       "</div>" +
       '<span class="card-title">' +
       escapeHtml(title) +

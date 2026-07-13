@@ -32,10 +32,16 @@ function createKeyButton(keyDef, rowIdx, colIdx, isLastInRow, crossRight) {
     el.innerHTML = BACKSPACE_SVG;
     el.setAttribute("aria-label", "Backspace");
     el.setAttribute("data-osk-action", "backspace");
+    el.setAttribute("data-cross-down", "osk-1");
+    el.setAttribute("data-cross-down-col", "last");
   } else {
     el.textContent = keyDef;
     el.setAttribute("aria-label", keyDef);
     el.setAttribute("data-osk-char", keyDef);
+    if (rowIdx === 1) {
+      el.setAttribute("data-cross-up", "osk-0");
+      el.setAttribute("data-cross-up-col", isLastInRow ? "last" : "0");
+    }
   }
 
   if (isLastInRow && crossRight) {

@@ -184,10 +184,42 @@ function animateDetailContentIn(root) {
   }, profile.screenEnterMs + 80);
 }
 
+function revealDetailEpisodes(sectionEl, onComplete) {
+  if (!sectionEl) {
+    if (onComplete) onComplete();
+    return Promise.resolve();
+  }
+
+  if (motion.prefersReducedMotion() || !motion.animationsEnabled()) {
+    sectionEl.classList.remove("is-collapsed");
+    sectionEl.classList.add("is-revealed");
+    focus.scrollDetailSectionToAnchor(sectionEl);
+    if (onComplete) onComplete();
+    return Promise.resolve();
+  }
+
+  sectionEl.classList.remove("is-collapsed");
+  sectionEl.classList.add("is-revealing");
+
+  var profile = motion.getMotionProfile();
+  return new Promise(function (resolve) {
+    requestAnimationFrame(function () {
+      sectionEl.classList.add("is-revealed");
+      focus.scrollDetailSectionToAnchor(sectionEl);
+      waitMs(profile.mainScrollMs).then(function () {
+        sectionEl.classList.remove("is-revealing");
+        if (onComplete) onComplete();
+        resolve();
+      });
+    });
+  });
+}
+
 module.exports = {
   pulseZoneCross: pulseZoneCross,
   runScreenTransition: runScreenTransition,
   playDetailHandoff: playDetailHandoff,
   openDetail: openDetail,
   animateDetailContentIn: animateDetailContentIn,
+  revealDetailEpisodes: revealDetailEpisodes,
 };

@@ -19,6 +19,7 @@ var cachedRowAnchorY = null;
 var verticalAnchorTimer = null;
 var resizeHandler = null;
 var resizeTimer = null;
+var detailEpisodesRevealHandler = null;
 
 var MISALIGN_THRESHOLD_PX = 32;
 
@@ -63,6 +64,7 @@ function labelFor(el) {
   if (el.id === "devModeBtn") return "Dev mode";
   if (el.id === "detailPlayBtn") return "Play";
   if (el.id === "detailMyListBtn") return "My List";
+  if (el.id === "detailEpisodesBtn") return "Episodes";
   if (el.id === "detailBackBtn") return "Back";
   if (el.id === "btnStop") return "Stop";
   if (el.getAttribute("aria-label")) return el.getAttribute("aria-label");
@@ -267,6 +269,20 @@ function isFirstContentRow(el) {
   if (!rowEl) return false;
   var rows = main.querySelectorAll(".content-row");
   return rows.length > 0 && rows[0] === rowEl;
+}
+
+function isHomeHeroPreviewVisible() {
+  if (document.body && document.body.classList.contains("home-spotlight-focus")) {
+    return false;
+  }
+  var main = getMainRoot();
+  if (!main || !main.querySelector(".screen-home")) return false;
+  var hero = main.querySelector(".hero");
+  return !!(hero && hero.offsetHeight > 0);
+}
+
+function shouldSkipRowAnchorScroll(el) {
+  return isFirstContentRow(el) && isHomeHeroPreviewVisible();
 }
 
 function clearNeighborDepth() {
@@ -478,6 +494,7 @@ function isContentRowMisaligned(el) {
   if (!el || !el.classList || !el.classList.contains("card")) return false;
   if (!el.closest(".content-row")) return false;
   if (isInSpotlightRow(el)) return false;
+  if (shouldSkipRowAnchorScroll(el)) return false;
 
   var main = getMainRoot();
   if (!main) return false;
@@ -506,6 +523,13 @@ function scrollFocusRowToAnchor(el, anchorYOverride) {
     return;
   }
 
+  if (shouldSkipRowAnchorScroll(el)) {
+    if (main.scrollTop > 2) {
+      animateMainScroll(main, 0, null, { forceAnimate: true });
+    }
+    return;
+  }
+
   var mainRect = main.getBoundingClientRect();
   var title = rowEl.querySelector(".row-title");
   var rowRect = title ? title.getBoundingClientRect() : rowEl.getBoundingClientRect();
@@ -530,6 +554,27 @@ function scrollFocusRowToAnchor(el, anchorYOverride) {
   animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
 }
 
+function scrollDetailSectionToAnchor(sectionEl) {
+  var main = getMainRoot();
+  if (!main || !sectionEl) return;
+
+  var heading =
+    sectionEl.querySelector(".episode-list-heading") ||
+    sectionEl.querySelector(".season-tabs") ||
+    sectionEl;
+  var mainRect = main.getBoundingClientRect();
+  var headingRect = heading.getBoundingClientRect();
+  var headingTop = headingRect.top - mainRect.top + main.scrollTop;
+  var anchorY = motion.computeBrowseLaneAnchorY(main);
+  var targetScrollTop = Math.max(0, headingTop - anchorY);
+  var profile = motion.getMotionProfile();
+  animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
+}
+
+function setDetailEpisodesRevealHandler(fn) {
+  detailEpisodesRevealHandler = fn || null;
+}
+
 function scheduleVerticalAnchor(el, options) {
   options = options || {};
   cancelVerticalAnchorTimer();
@@ -548,7 +593,12 @@ function scheduleVerticalAnchor(el, options) {
       if (gen !== scrollAnimGen || currentEl !== el) return;
       requestAnimationFrame(function () {
         if (gen !== scrollAnimGen || currentEl !== el) return;
-        scrollFocusRowToAnchor(el, capturedAnchorY);
+        var detailSection = el.closest(".detail-episodes-section");
+        if (detailSection) {
+          scrollDetailSectionToAnchor(detailSection);
+        } else {
+          scrollFocusRowToAnchor(el, capturedAnchorY);
+        }
         scheduleSpotlightLayoutSync(el);
       });
     });
@@ -632,7 +682,11 @@ function scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, scrollOptions
       afterHorizontalScroll();
     }
     if (needsVerticalAnchor) {
-      if (el.closest(".content-row") || isHeroFocus(el)) {
+      if (
+        el.closest(".content-row") ||
+        isHeroFocus(el) ||
+        el.closest(".detail-episodes-section")
+      ) {
         scheduleVerticalAnchor(el, scrollOptions);
       } else {
         scrollIntoView(el);
@@ -662,8 +716,16 @@ function focusElement(el) {
   var spotlightToggled = updateSpotlightMode(el);
   var browseFocusToggled = updateBrowseFocusMode(el);
   updateNeighborDepth(el);
+  var skipRowAnchor = shouldSkipRowAnchorScroll(el);
   var needsVerticalAnchor =
-    rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el);
+    !skipRowAnchor &&
+    (rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el));
+  if (skipRowAnchor && rowChanged) {
+    var mainRoot = getMainRoot();
+    if (mainRoot && mainRoot.scrollTop > 2) {
+      needsVerticalAnchor = true;
+    }
+  }
   scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, {
     capturedAnchorY: capturedAnchorY,
     spotlightToggled: spotlightToggled,
@@ -813,9 +875,29 @@ function handleMainVerticalLinear(el, dir) {
   return el;
 }
 
+function resolveCrossCol(colAttr, fallbackCol, itemsLength) {
+  if (colAttr === "last") return itemsLength - 1;
+  if (colAttr != null && colAttr !== "") {
+    var parsed = parseInt(colAttr, 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return fallbackCol;
+}
+
 function handleMainVertical(el, dir) {
   var rowId = getFocusRowId(el);
   if (!rowId) return handleMainVerticalLinear(el, dir);
+
+  var crossAttr = dir === "down" ? "data-cross-down" : "data-cross-up";
+  var crossRow = el.getAttribute(crossAttr);
+  if (crossRow) {
+    var colAttr = el.getAttribute(crossAttr + "-col");
+    var targetItems = getRowFocusables(crossRow);
+    if (targetItems.length) {
+      var crossCol = resolveCrossCol(colAttr, indexInRow(el), targetItems.length);
+      return targetItems[Math.min(crossCol, targetItems.length - 1)];
+    }
+  }
 
   var rows = getOrderedRowIds();
   var rowIdx = rows.indexOf(rowId);
@@ -974,6 +1056,14 @@ function onKeyDown(e) {
       return;
     }
   } else {
+    if (isDown && currentEl.id === "detailEpisodesBtn" && detailEpisodesRevealHandler) {
+      var collapsedSection = document.querySelector(".detail-episodes-section.is-collapsed");
+      if (collapsedSection || !document.querySelector(".detail-episodes-section.is-revealed")) {
+        detailEpisodesRevealHandler();
+        e.preventDefault();
+        return;
+      }
+    }
     if (isLeft) next = handleMainLeft(currentEl);
     else if (isRight) next = handleMainRight(currentEl);
     else if (isUp) next = handleMainVertical(currentEl, "up");
@@ -1071,6 +1161,8 @@ module.exports = {
   isInMainArea: isInMainArea,
   resetMainScroll: resetMainScroll,
   afterScreenRender: afterScreenRender,
+  scrollDetailSectionToAnchor: scrollDetailSectionToAnchor,
+  setDetailEpisodesRevealHandler: setDetailEpisodesRevealHandler,
   getFocusables: getFocusables,
   getCurrentElement: getCurrentElement,
   setupFocus: setupFocus,

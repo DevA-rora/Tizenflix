@@ -966,6 +966,10 @@ body.immersive-detail.sidebar-expanded .main {
 .detail-hero {
   position: relative;
   min-height: 100vh;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-direction: column;
+  flex-direction: column;
 }
 
 .detail-video-bg {
@@ -1067,7 +1071,9 @@ body.immersive-detail.sidebar-expanded .main {
 .detail-content {
   position: relative;
   z-index: 3;
-  padding: 80px 48px 48px;
+  -webkit-flex: 1;
+  flex: 1;
+  padding: 80px 48px 32px;
   max-width: 640px;
 }
 
@@ -1197,6 +1203,73 @@ body.immersive-detail.sidebar-expanded .main {
   box-shadow: 0 0 0 4px #e50914;
   padding: 12px 16px;
   border-radius: 4px;
+}
+
+.detail-episodes-btn-row {
+  position: relative;
+  z-index: 4;
+  -webkit-flex-shrink: 0;
+  flex-shrink: 0;
+  margin-top: auto;
+  margin-bottom: 0;
+  padding: 0 48px 48px;
+  max-width: 640px;
+}
+
+.detail-episodes-btn {
+  min-height: 52px;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  color: #e5e5e5;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: left;
+}
+
+.detail-episodes-btn.tv-focus {
+  color: #ffffff;
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 0 4px #e50914;
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+.detail-episodes-section.is-collapsed {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+  pointer-events: none;
+}
+
+.detail-episodes-section.is-revealing,
+.detail-episodes-section.is-revealed {
+  opacity: 1;
+  pointer-events: auto;
+  -webkit-transition: opacity 280ms ease-out, -webkit-transform 280ms ease-out, transform 280ms ease-out;
+  transition: opacity 280ms ease-out, transform 280ms ease-out;
+}
+
+.detail-episodes-section.is-revealing {
+  -webkit-transform: translateY(24px);
+  transform: translateY(24px);
+}
+
+.detail-episodes-section.is-revealed {
+  -webkit-transform: translateY(0);
+  transform: translateY(0);
+}
+
+body.animations-off .detail-episodes-section.is-revealing,
+body.animations-off .detail-episodes-section.is-revealed {
+  -webkit-transition: none;
+  transition: none;
+  -webkit-transform: none;
+  transform: none;
 }
 
 .detail-episodes-section {
@@ -1355,7 +1428,8 @@ body.immersive-detail.sidebar-expanded .main {
   -webkit-flex: 1;
   flex: 1;
   padding: 40px 48px 40px 32px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .search-query-display {
@@ -1371,11 +1445,13 @@ body.immersive-detail.sidebar-expanded .main {
 }
 
 .search-results-grid {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .search-results-row {
   margin-bottom: 16px;
+  padding: 32px 4px 0;
+  overflow: visible;
 }
 
 .search-results-track {
@@ -1383,6 +1459,10 @@ body.immersive-detail.sidebar-expanded .main {
   display: flex;
   -webkit-flex-wrap: nowrap;
   flex-wrap: nowrap;
+  overflow: visible;
+  padding-bottom: 12px;
+  -webkit-align-items: flex-end;
+  align-items: flex-end;
 }
 
 .search-results-track .card-landscape {
@@ -1507,6 +1587,11 @@ body.immersive-detail.sidebar-expanded .main {
   background-position: center;
 }
 
+.card-landscape .card-poster {
+  -webkit-transform-origin: center bottom;
+  transform-origin: center bottom;
+}
+
 .card-landscape .card-title {
   opacity: 0;
   max-height: 0;
@@ -1521,9 +1606,9 @@ body.immersive-detail.sidebar-expanded .main {
 
 .card-landscape.tv-focus .card-poster {
   border-color: #ffffff;
-  box-shadow: 0 0 0 2px #e50914;
-  -webkit-transform: translateY(-4px);
-  transform: translateY(-4px);
+  box-shadow: 0 0 0 1px #ffffff, 0 0 16px rgba(255, 255, 255, 0.4);
+  -webkit-transform: scale(1.12);
+  transform: scale(1.12);
 }
 
 /* --- Settings --- */

@@ -194,28 +194,42 @@ function create(options) {
     loadEpisodes();
   }
 
-  seasonsRow.innerHTML = '<div class="loading-msg">Loading seasons…</div>';
-  episodesRow.innerHTML = '<div class="loading-msg">Loading episodes…</div>';
+  function startLoading() {
+    seasonsRow.innerHTML = '<div class="loading-msg">Loading seasons…</div>';
+    episodesRow.innerHTML = '<div class="loading-msg">Loading episodes…</div>';
 
-  if (options.seasons && options.seasons.length) {
-    initWithSeasons(options.seasons);
-  } else {
-    api
-      .getSeasons(tmdbId)
-      .then(function (data) {
-        initWithSeasons(data.seasons || []);
-      })
-      .catch(function () {
-        seasonsRow.innerHTML = "";
-        seasonsRow.style.display = "none";
-        loadEpisodes();
-      });
+    if (options.seasons && options.seasons.length) {
+      initWithSeasons(options.seasons);
+    } else {
+      api
+        .getSeasons(tmdbId)
+        .then(function (data) {
+          initWithSeasons(data.seasons || []);
+        })
+        .catch(function () {
+          seasonsRow.innerHTML = "";
+          seasonsRow.style.display = "none";
+          loadEpisodes();
+        });
+    }
   }
 
   section.selectSeason = selectSeason;
   section.getSelectedSeason = function () {
     return selectedSeason;
   };
+  section.load = function () {
+    if (section._loaded) return;
+    section._loaded = true;
+    startLoading();
+  };
+
+  if (options.lazy) {
+    seasonsRow.innerHTML = "";
+    episodesRow.innerHTML = "";
+  } else {
+    startLoading();
+  }
 
   return section;
 }

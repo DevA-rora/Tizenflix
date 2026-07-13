@@ -244,6 +244,20 @@ function render(title, options) {
 
   var el = document.createElement("div");
   el.className = "detail-hero";
+
+  var episodesBtnHtml = "";
+  if (options.showEpisodesBtn) {
+    var episodesLabel = options.episodesLabel || "Episodes";
+    episodesBtnHtml =
+      '<div class="detail-episodes-btn-row" data-focus-row="detail-episodes-btn">' +
+      '<button type="button" class="detail-episodes-btn focusable" id="detailEpisodesBtn" aria-label="' +
+      escapeHtml(episodesLabel) +
+      '">' +
+      escapeHtml(episodesLabel) +
+      "</button>" +
+      "</div>";
+  }
+
   el.innerHTML =
     videoLayer +
     '<div class="detail-backdrop" style="background-image:url(\'' +
@@ -292,10 +306,12 @@ function render(title, options) {
     (inList ? "✓ In My List" : "+ Add to My List") +
     "</button>" +
     "</div>" +
-    "</div>";
+    "</div>" +
+    episodesBtnHtml;
 
   var playBtn = el.querySelector("#detailPlayBtn");
   var myListBtn = el.querySelector("#detailMyListBtn");
+  var episodesBtn = el.querySelector("#detailEpisodesBtn");
   var backBtn = el.querySelector("#detailBackBtn");
   var reactionBtns = el.querySelectorAll(".detail-reaction");
 
@@ -321,6 +337,10 @@ function render(title, options) {
       }
       updateMyListBtn(myListBtn, title);
     });
+  }
+
+  if (episodesBtn && options.onViewEpisodes) {
+    episodesBtn.addEventListener("click", options.onViewEpisodes);
   }
 
   for (var i = 0; i < reactionBtns.length; i++) {

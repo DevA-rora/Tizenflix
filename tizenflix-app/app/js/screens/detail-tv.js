@@ -12,6 +12,8 @@ var choreography = require("../core/choreography.js");
 
 var params = {};
 var selectedSeason = 1;
+var episodesRevealed = false;
+var episodesSection = null;
 
 function escapeHtml(text) {
   if (!text) return "";
@@ -24,10 +26,16 @@ function escapeHtml(text) {
 function onEnter(p) {
   params = p || {};
   selectedSeason = (p && p.season) || 1;
+  episodesRevealed = false;
+  episodesSection = null;
 }
 
 function onLeave() {
   detailHero.stopBackgroundVideo();
+  focus.setDetailEpisodesRevealHandler(null);
+  if (document.body) document.body.classList.remove("detail-episodes-open");
+  episodesRevealed = false;
+  episodesSection = null;
 }
 
 function buildMetaLine(title, season) {
@@ -73,6 +81,15 @@ function findResumeEntry(items, tmdbId) {
   return null;
 }
 
+function focusFirstEpisodePickerItem(section) {
+  if (!section) return;
+  var target =
+    section.querySelector(".season-tab") ||
+    section.querySelector(".episode-item") ||
+    section.querySelector(".focusable");
+  if (target) focus.focusElement(target);
+}
+
 function renderHeroAndEpisodes(el, title, onStatus, resumeEntry) {
   var playSeason = 1;
   var playEpisodeNum = 1;
@@ -89,9 +106,50 @@ function renderHeroAndEpisodes(el, title, onStatus, resumeEntry) {
     selectedSeason = playSeason;
   }
 
+  function ensureEpisodesSection() {
+    if (episodesSection) return episodesSection;
+
+    episodesSection = episodeList.create({
+      tmdbId: title.id,
+      showTitle: title.title,
+      titleMeta: title,
+      initialSeason: initialSeason,
+      lazy: true,
+      onEpisodeSelect: function (season, episode, ep) {
+        playEpisode(title.id, season, episode, title.title, ep, title, onStatus);
+      },
+      onSeasonChange: function (season) {
+        selectedSeason = season;
+      },
+    });
+    episodesSection.classList.add("is-collapsed");
+    el.appendChild(episodesSection);
+    return episodesSection;
+  }
+
+  function revealEpisodes() {
+    if (episodesRevealed) {
+      focusFirstEpisodePickerItem(episodesSection);
+      return;
+    }
+
+    var section = ensureEpisodesSection();
+    section.load();
+
+    choreography.revealDetailEpisodes(section, function () {
+      episodesRevealed = true;
+      if (document.body) document.body.classList.add("detail-episodes-open");
+      focusFirstEpisodePickerItem(section);
+    });
+  }
+
+  focus.setDetailEpisodesRevealHandler(revealEpisodes);
+
   function mountHero(firstEp) {
     var hero = detailHero.render(title, {
       playLabel: playLabel,
+      showEpisodesBtn: true,
+      episodesLabel: "Episodes",
       onBack: function () {
         router.back();
       },
@@ -107,24 +165,11 @@ function renderHeroAndEpisodes(el, title, onStatus, resumeEntry) {
           startSeconds > 0 ? { startSeconds: startSeconds } : null
         );
       },
+      onViewEpisodes: revealEpisodes,
     });
     el.appendChild(hero);
     choreography.animateDetailContentIn(el);
     playback.prefetchTvEpisode(title.id, playSeason, playEpisodeNum);
-
-    var listSection = episodeList.create({
-      tmdbId: title.id,
-      showTitle: title.title,
-      titleMeta: title,
-      initialSeason: initialSeason,
-      onEpisodeSelect: function (season, episode, ep) {
-        playEpisode(title.id, season, episode, title.title, ep, title, onStatus);
-      },
-      onSeasonChange: function (season) {
-        selectedSeason = season;
-      },
-    });
-    el.appendChild(listSection);
 
     var playBtn = el.querySelector("#detailPlayBtn");
     if (playBtn) focus.focusElement(playBtn);
