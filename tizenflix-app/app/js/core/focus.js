@@ -193,6 +193,8 @@ function updateSpotlightMode(el) {
   var rows = document.querySelectorAll(".row-spotlight");
   for (var i = 0; i < rows.length; i++) {
     rows[i].classList.remove("is-active");
+    var detailPanel = rows[i].querySelector(".row-spotlight-detail");
+    if (detailPanel) detailPanel.style.paddingLeft = "";
     var cards = rows[i].querySelectorAll(".card-spotlight");
     for (var c = 0; c < cards.length; c++) {
       if (cards[c] === el) continue;
@@ -543,6 +545,7 @@ function scheduleVerticalAnchor(el, options) {
       requestAnimationFrame(function () {
         if (gen !== scrollAnimGen || currentEl !== el) return;
         scrollFocusRowToAnchor(el, capturedAnchorY);
+        scheduleSpotlightLayoutSync(el);
       });
     });
   }
@@ -599,6 +602,17 @@ function syncSpotlightLayout(el) {
   }
 }
 
+function scheduleSpotlightLayoutSync(el) {
+  if (!el || !isInSpotlightRow(el)) return;
+  requestAnimationFrame(function () {
+    if (currentEl !== el) return;
+    requestAnimationFrame(function () {
+      if (currentEl !== el) return;
+      syncSpotlightLayout(el);
+    });
+  });
+}
+
 function scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, scrollOptions) {
   scrollOptions = scrollOptions || {};
   scrollAnimGen += 1;
@@ -607,7 +621,7 @@ function scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, scrollOptions
 
   function afterHorizontalScroll() {
     if (gen !== scrollAnimGen || currentEl !== el) return;
-    if (isSpotlight) syncSpotlightLayout(el);
+    if (isSpotlight) scheduleSpotlightLayoutSync(el);
   }
 
   function runScroll() {
@@ -731,6 +745,10 @@ function handleSidebarNav(el, dir) {
   return el;
 }
 
+function isSearchResultsRow(rowId) {
+  return !!(rowId && rowId.indexOf("search-results-") === 0);
+}
+
 function getCrossTargetRow(rowId, col) {
   var main = getMainRoot();
   if (!main || !rowId) return null;
@@ -773,7 +791,8 @@ function handleMainRight(el) {
     if (el.classList.contains("osk-key") || el.classList.contains("search-suggestion")) {
       lastSearchLeftEl = el;
     }
-    var target = getCrossTargetRow(crossRight, idx);
+    var targetCol = isSearchResultsRow(crossRight) ? 0 : idx;
+    var target = getCrossTargetRow(crossRight, targetCol);
     if (target) return target;
   }
 
@@ -986,6 +1005,7 @@ function handleWindowResize() {
     if (!el.classList.contains("card")) return;
     if (!el.closest(".content-row")) return;
     scrollFocusRowToAnchor(el, null);
+    scheduleSpotlightLayoutSync(el);
   }, 150);
 }
 

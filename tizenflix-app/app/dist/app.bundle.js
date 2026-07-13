@@ -869,6 +869,8 @@ var TizenflixApp = (() => {
         var rows = document.querySelectorAll(".row-spotlight");
         for (var i = 0; i < rows.length; i++) {
           rows[i].classList.remove("is-active");
+          var detailPanel = rows[i].querySelector(".row-spotlight-detail");
+          if (detailPanel) detailPanel.style.paddingLeft = "";
           var cards = rows[i].querySelectorAll(".card-spotlight");
           for (var c = 0; c < cards.length; c++) {
             if (cards[c] === el) continue;
@@ -1174,6 +1176,7 @@ var TizenflixApp = (() => {
             requestAnimationFrame(function() {
               if (gen !== scrollAnimGen || currentEl !== el) return;
               scrollFocusRowToAnchor(el, capturedAnchorY);
+              scheduleSpotlightLayoutSync(el);
             });
           });
         }
@@ -1222,6 +1225,16 @@ var TizenflixApp = (() => {
           row._syncSpotlightLayout();
         }
       }
+      function scheduleSpotlightLayoutSync(el) {
+        if (!el || !isInSpotlightRow(el)) return;
+        requestAnimationFrame(function() {
+          if (currentEl !== el) return;
+          requestAnimationFrame(function() {
+            if (currentEl !== el) return;
+            syncSpotlightLayout(el);
+          });
+        });
+      }
       function scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, scrollOptions) {
         scrollOptions = scrollOptions || {};
         scrollAnimGen += 1;
@@ -1229,7 +1242,7 @@ var TizenflixApp = (() => {
         var isSpotlight = isInSpotlightRow(el);
         function afterHorizontalScroll() {
           if (gen !== scrollAnimGen || currentEl !== el) return;
-          if (isSpotlight) syncSpotlightLayout(el);
+          if (isSpotlight) scheduleSpotlightLayoutSync(el);
         }
         function runScroll() {
           if (gen !== scrollAnimGen || currentEl !== el) return;
@@ -1336,6 +1349,9 @@ var TizenflixApp = (() => {
         if (dir === "down") return nav[(idx + 1) % nav.length];
         return el;
       }
+      function isSearchResultsRow(rowId) {
+        return !!(rowId && rowId.indexOf("search-results-") === 0);
+      }
       function getCrossTargetRow(rowId, col) {
         var main = getMainRoot();
         if (!main || !rowId) return null;
@@ -1373,7 +1389,8 @@ var TizenflixApp = (() => {
           if (el.classList.contains("osk-key") || el.classList.contains("search-suggestion")) {
             lastSearchLeftEl = el;
           }
-          var target = getCrossTargetRow(crossRight, idx);
+          var targetCol = isSearchResultsRow(crossRight) ? 0 : idx;
+          var target = getCrossTargetRow(crossRight, targetCol);
           if (target) return target;
         }
         return el;
@@ -1559,6 +1576,7 @@ var TizenflixApp = (() => {
           if (!el.classList.contains("card")) return;
           if (!el.closest(".content-row")) return;
           scrollFocusRowToAnchor(el, null);
+          scheduleSpotlightLayoutSync(el);
         }, 150);
       }
       function init(cb) {
@@ -3343,7 +3361,7 @@ var TizenflixApp = (() => {
         playerFocus.init(handlers.onFocusChange);
         playerFocus.focusDefault();
         chromeEl.querySelector("#playerBack").addEventListener("click", function() {
-          if (handlers.onBack) handlers.onBack();
+          handleUiBack();
         });
         chromeEl.querySelector("#playerServer").addEventListener("click", function() {
           openPanel("server");
@@ -3417,6 +3435,17 @@ var TizenflixApp = (() => {
           return true;
         }
         return false;
+      }
+      function handleUiBack() {
+        if (panelOpen) {
+          closePanel();
+          return;
+        }
+        if (railOpen) {
+          closeRail();
+          return;
+        }
+        if (handlers.onStop) handlers.onStop();
       }
       function destroy() {
         document.removeEventListener("keydown", onActivity, true);
@@ -3513,8 +3542,7 @@ var TizenflixApp = (() => {
         var duration = video && video.duration && isFinite(video.duration) ? video.duration : 0;
         var position = video && video.currentTime ? video.currentTime : 0;
         if (duration <= 0 || position <= 0) return null;
-        var poster = null;
-        if (session.play && session.play.poster) poster = session.play.poster;
+        var poster = session.poster || session.play && session.play.poster || null;
         return {
           tmdbId: String(session.tmdbId),
           type: session.type || "movie",
@@ -3591,9 +3619,6 @@ var TizenflixApp = (() => {
             if (window.TizenflixApp && window.TizenflixApp.updateFocusHint) {
               window.TizenflixApp.updateFocusHint(label);
             }
-          },
-          onBack: function() {
-            handleBackKey();
           },
           onStop: function() {
             stop();
@@ -4665,14 +4690,38 @@ var TizenflixApp = (() => {
         var panelId = panel.id;
         if (panelId) focused.setAttribute("aria-describedby", panelId);
       }
+      var SPOTLIGHT_MIN_TEXT_WIDTH = 360;
+      var SPOTLIGHT_PANEL_PADDING_RIGHT = 48;
+      var SPOTLIGHT_TRACK_OUTER_PADDING = 4;
+      function clearSpotlightDetailPadding(row) {
+        var panel = row ? row.querySelector(".row-spotlight-detail") : null;
+        if (panel) panel.style.paddingLeft = "";
+      }
       function syncSpotlightDetailPosition(row) {
         var focused = row.querySelector(".card.tv-focus");
         var panel = row.querySelector(".row-spotlight-detail");
         var body = row.querySelector(".row-spotlight-body");
-        if (!focused || !panel || !body) return;
-        var bodyRect = body.getBoundingClientRect();
-        var cardRect = focused.getBoundingClientRect();
-        panel.style.paddingLeft = Math.max(0, Math.round(cardRect.left - bodyRect.left)) + "px";
+        if (!panel || !body) return;
+        if (!row.classList.contains("is-active") || !focused) {
+          clearSpotlightDetailPadding(row);
+          return;
+        }
+        var track = row.querySelector(".row-track");
+        var scrollX = track && typeof track._scrollX === "number" ? track._scrollX : 0;
+        var offset = focused.offsetLeft - scrollX + SPOTLIGHT_TRACK_OUTER_PADDING;
+        var bodyWidth = body.clientWidth;
+        if (bodyWidth < 1) {
+          var bodyRect = body.getBoundingClientRect();
+          bodyWidth = bodyRect.width;
+        }
+        var maxPadding = Math.max(0, bodyWidth - SPOTLIGHT_MIN_TEXT_WIDTH - SPOTLIGHT_PANEL_PADDING_RIGHT);
+        offset = Math.max(0, Math.min(Math.round(offset), maxPadding));
+        if (offset < 1 && focused.getBoundingClientRect) {
+          var cardRect = focused.getBoundingClientRect();
+          var measured = Math.round(cardRect.left - body.getBoundingClientRect().left);
+          offset = Math.max(0, Math.min(measured, maxPadding));
+        }
+        panel.style.paddingLeft = offset + "px";
       }
       function syncSpotlightLayout(row) {
         syncSpotlightDescribedBy(row);
@@ -4718,7 +4767,7 @@ var TizenflixApp = (() => {
           card.updateSpotlightCard(focused, item, extras, cardOptions);
           card.updateSpotlightDetailPanel(panel, item, extras, cardOptions);
           panel.classList.remove("is-fading");
-          syncSpotlightDescribedBy(row);
+          syncSpotlightLayout(row);
         }, fadeMs);
         if (variant === "continue-watching") {
           if (!item.episodeTitle && item.type === "tv") {
@@ -4916,19 +4965,37 @@ var TizenflixApp = (() => {
       }
       function enrichContinueWatching(items) {
         var tasks = items.map(function(item) {
-          if (item.type !== "tv" || item.episodeTitle || item.season == null || item.episode == null) {
-            return Promise.resolve(item);
+          var promises = [];
+          if (!item.poster) {
+            var fetcher = item.type === "tv" ? api.getTv(item.id) : api.getMovie(item.id);
+            promises.push(
+              fetcher.then(function(detail) {
+                item.poster = detail.poster || item.poster;
+                item.backdrop = detail.backdrop || detail.poster || item.backdrop;
+                return item;
+              }).catch(function() {
+                return item;
+              })
+            );
           }
-          return api.getEpisodes(item.id, item.season).then(function(data) {
-            var episodes = data.episodes || data.items || [];
-            for (var i = 0; i < episodes.length; i++) {
-              if (Number(episodes[i].episode) === Number(item.episode)) {
-                item.episodeTitle = episodes[i].title || episodes[i].name || "";
-                break;
-              }
-            }
-            return item;
-          }).catch(function() {
+          if (item.type === "tv" && !item.episodeTitle && item.season != null && item.episode != null) {
+            promises.push(
+              api.getEpisodes(item.id, item.season).then(function(data) {
+                var episodes = data.episodes || data.items || [];
+                for (var i = 0; i < episodes.length; i++) {
+                  if (Number(episodes[i].episode) === Number(item.episode)) {
+                    item.episodeTitle = episodes[i].title || episodes[i].name || "";
+                    break;
+                  }
+                }
+                return item;
+              }).catch(function() {
+                return item;
+              })
+            );
+          }
+          if (!promises.length) return Promise.resolve(item);
+          return Promise.all(promises).then(function() {
             return item;
           });
         });
@@ -4947,12 +5014,18 @@ var TizenflixApp = (() => {
           return playback.playTvEpisode(item.id, season, episode, label, onStatus, {
             showTitle: item.title,
             episodeTitle: item.episodeTitle || "",
+            poster: item.poster || null,
+            backdrop: item.backdrop || item.poster || null,
             startSeconds
           }).catch(function(err) {
             if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
           });
         }
-        return playback.playMovie(item.id, item.title, onStatus, { startSeconds }).catch(function(err) {
+        return playback.playMovie(item.id, item.title, onStatus, {
+          poster: item.poster || null,
+          backdrop: item.backdrop || item.poster || null,
+          startSeconds
+        }).catch(function(err) {
           if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
         });
       }
@@ -4981,9 +5054,6 @@ var TizenflixApp = (() => {
             if (rowSection && rowSection.getAttribute("data-row-layout") === "spotlight") {
               if (typeof rowSection._updateSpotlightMeta === "function") {
                 rowSection._updateSpotlightMeta(item);
-              }
-              if (typeof rowSection._syncSpotlightLayout === "function") {
-                rowSection._syncSpotlightLayout();
               }
               return;
             }
@@ -6134,7 +6204,10 @@ var TizenflixApp = (() => {
               router.back();
             },
             onPlay: function() {
-              playback.playMovie(title.id, title.title, status).catch(function(err) {
+              playback.playMovie(title.id, title.title, status, {
+                poster: title.poster || null,
+                backdrop: title.backdrop || title.poster || null
+              }).catch(function(err) {
                 if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
               });
             }
@@ -6159,6 +6232,172 @@ var TizenflixApp = (() => {
     }
   });
 
+  // app/js/components/episode-list.js
+  var require_episode_list = __commonJS({
+    "app/js/components/episode-list.js"(exports, module) {
+      var api = require_api();
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+      function truncate(text, max) {
+        if (!text) return "";
+        if (text.length <= max) return text;
+        return text.slice(0, max - 1).trim() + "\u2026";
+      }
+      function formatRuntime(minutes) {
+        if (!minutes || minutes <= 0) return "";
+        var h = Math.floor(minutes / 60);
+        var m = minutes % 60;
+        if (h > 0 && m > 0) return h + "h " + m + "m";
+        if (h > 0) return h + "h";
+        return m + "m";
+      }
+      function create(options) {
+        options = options || {};
+        var tmdbId = options.tmdbId;
+        var showTitle = options.showTitle || "";
+        var titleMeta = options.titleMeta || {};
+        var onEpisodeSelect = options.onEpisodeSelect;
+        var onSeasonChange = options.onSeasonChange;
+        var selectedSeason = options.initialSeason || 1;
+        var section = document.createElement("section");
+        section.className = "detail-episodes-section";
+        var seasonsRow = document.createElement("div");
+        seasonsRow.className = "season-tabs";
+        seasonsRow.setAttribute("data-focus-row", "detail-seasons");
+        var episodesRow = document.createElement("div");
+        episodesRow.className = "episode-list";
+        episodesRow.setAttribute("data-focus-row", "detail-episodes");
+        section.appendChild(seasonsRow);
+        section.appendChild(episodesRow);
+        function renderSeasonTabs(seasons) {
+          seasonsRow.innerHTML = "";
+          if (!seasons.length) {
+            seasonsRow.style.display = "none";
+            return;
+          }
+          seasonsRow.style.display = "";
+          for (var i = 0; i < seasons.length; i++) {
+            (function(season) {
+              var tab = document.createElement("button");
+              tab.type = "button";
+              tab.className = "season-tab focusable" + (season.season === selectedSeason ? " is-active" : "");
+              tab.setAttribute("data-season", String(season.season));
+              tab.setAttribute("aria-label", "Season " + season.season);
+              tab.textContent = "Season " + season.season;
+              tab.addEventListener("click", function() {
+                selectSeason(season.season);
+              });
+              seasonsRow.appendChild(tab);
+            })(seasons[i]);
+          }
+        }
+        function updateSeasonTabStates() {
+          var tabs = seasonsRow.querySelectorAll(".season-tab");
+          for (var i = 0; i < tabs.length; i++) {
+            var season = parseInt(tabs[i].getAttribute("data-season"), 10);
+            if (season === selectedSeason) {
+              tabs[i].classList.add("is-active");
+            } else {
+              tabs[i].classList.remove("is-active");
+            }
+          }
+        }
+        function selectSeason(season) {
+          if (season === selectedSeason) return;
+          selectedSeason = season;
+          updateSeasonTabStates();
+          if (onSeasonChange) onSeasonChange(season);
+          loadEpisodes();
+        }
+        function renderEpisodes(episodes) {
+          episodesRow.innerHTML = "";
+          var heading = document.createElement("h3");
+          heading.className = "episode-list-heading";
+          heading.textContent = "Episodes";
+          episodesRow.appendChild(heading);
+          if (!episodes.length) {
+            var empty = document.createElement("p");
+            empty.className = "loading-msg";
+            empty.textContent = "No episodes found.";
+            episodesRow.appendChild(empty);
+            return;
+          }
+          var list = document.createElement("div");
+          list.className = "episode-list-items";
+          for (var i = 0; i < episodes.length; i++) {
+            (function(ep) {
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "episode-item focusable";
+              btn.setAttribute(
+                "aria-label",
+                "Episode " + ep.episode + ": " + (ep.title || "Episode")
+              );
+              var still = ep.still ? ` style="background-image:url('` + escapeHtml(ep.still) + `')"` : "";
+              var runtime = formatRuntime(ep.runtime);
+              btn.innerHTML = '<div class="episode-thumb"' + still + '></div><div class="episode-meta"><div class="episode-meta-top"><strong>' + ep.episode + ". " + escapeHtml(ep.title || "Episode") + "</strong>" + (runtime ? '<span class="episode-runtime">' + escapeHtml(runtime) + "</span>" : "") + '</div><span class="episode-overview">' + escapeHtml(truncate(ep.overview || "", 160)) + "</span></div>";
+              btn.addEventListener("click", function() {
+                if (onEpisodeSelect) {
+                  onEpisodeSelect(ep.season, ep.episode, ep);
+                }
+              });
+              list.appendChild(btn);
+            })(episodes[i]);
+          }
+          episodesRow.appendChild(list);
+        }
+        function loadEpisodes() {
+          episodesRow.innerHTML = '<div class="loading-msg">Loading episodes\u2026</div>';
+          api.getEpisodes(tmdbId, selectedSeason).then(function(data) {
+            renderEpisodes(data.episodes || []);
+          }).catch(function(err) {
+            episodesRow.innerHTML = '<div class="error-banner">' + escapeHtml(err.message) + "</div>";
+          });
+        }
+        function initWithSeasons(seasons) {
+          var filtered = (seasons || []).filter(function(s) {
+            return s.episodeCount > 0;
+          });
+          if (filtered.length) {
+            var hasSeason = false;
+            for (var i = 0; i < filtered.length; i++) {
+              if (filtered[i].season === selectedSeason) {
+                hasSeason = true;
+                break;
+              }
+            }
+            if (!hasSeason) selectedSeason = filtered[0].season;
+          }
+          renderSeasonTabs(filtered);
+          loadEpisodes();
+        }
+        seasonsRow.innerHTML = '<div class="loading-msg">Loading seasons\u2026</div>';
+        episodesRow.innerHTML = '<div class="loading-msg">Loading episodes\u2026</div>';
+        if (options.seasons && options.seasons.length) {
+          initWithSeasons(options.seasons);
+        } else {
+          api.getSeasons(tmdbId).then(function(data) {
+            initWithSeasons(data.seasons || []);
+          }).catch(function() {
+            seasonsRow.innerHTML = "";
+            seasonsRow.style.display = "none";
+            loadEpisodes();
+          });
+        }
+        section.selectSeason = selectSeason;
+        section.getSelectedSeason = function() {
+          return selectedSeason;
+        };
+        return section;
+      }
+      module.exports = {
+        create
+      };
+    }
+  });
+
   // app/js/screens/detail-tv.js
   var require_detail_tv = __commonJS({
     "app/js/screens/detail-tv.js"(exports, module) {
@@ -6167,6 +6406,7 @@ var TizenflixApp = (() => {
       var focus = require_focus();
       var playback = require_playback();
       var detailHero = require_detail_hero();
+      var episodeList = require_episode_list();
       var choreography = require_choreography();
       var params = {};
       var selectedSeason = 1;
@@ -6189,44 +6429,100 @@ var TizenflixApp = (() => {
         if (title.certification) parts.push(title.certification);
         return parts.join(" \xB7 ");
       }
-      function playEpisode(tmdbId, season, episode, showTitle, ep, titleMeta, onStatus) {
+      function playEpisode(tmdbId, season, episode, showTitle, ep, titleMeta, onStatus, extraMeta) {
         var label = showTitle + " S" + season + "E" + episode;
         var meta = {
           showTitle,
           episodeTitle: ep && ep.title ? ep.title : "",
           overview: ep && ep.overview ? ep.overview : "",
-          metaLine: titleMeta ? buildMetaLine(titleMeta, season) : ""
+          metaLine: titleMeta ? buildMetaLine(titleMeta, season) : "",
+          poster: titleMeta && titleMeta.poster ? titleMeta.poster : null,
+          backdrop: titleMeta && (titleMeta.backdrop || titleMeta.poster) ? titleMeta.backdrop || titleMeta.poster : null
         };
+        if (extraMeta) {
+          for (var k in extraMeta) {
+            if (Object.prototype.hasOwnProperty.call(extraMeta, k)) meta[k] = extraMeta[k];
+          }
+        }
         playback.playTvEpisode(tmdbId, season, episode, label, onStatus, meta).catch(function(err) {
           if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
         });
       }
-      function renderEpisodes(el, tmdbId, showTitle, titleMeta, onStatus) {
-        var listEl = el.querySelector(".episode-list");
-        if (!listEl) return;
-        listEl.innerHTML = "<h3>Season " + selectedSeason + '</h3><div class="loading-msg">Loading episodes\u2026</div>';
-        api.getEpisodes(tmdbId, selectedSeason).then(function(data) {
-          var episodes = data.episodes || [];
-          listEl.innerHTML = "<h3>Season " + selectedSeason + "</h3>";
-          if (!episodes.length) {
-            listEl.innerHTML += '<p class="loading-msg">No episodes found.</p>';
-            return;
+      function findResumeEntry(items, tmdbId) {
+        var id = String(tmdbId);
+        for (var i = 0; i < items.length; i++) {
+          var entry = items[i];
+          if (String(entry.tmdbId) === id && entry.type === "tv" && entry.season && entry.episode) {
+            return entry;
           }
+        }
+        return null;
+      }
+      function renderHeroAndEpisodes(el, title, onStatus, resumeEntry) {
+        var playSeason = 1;
+        var playEpisodeNum = 1;
+        var playLabel = "\u25B6 Play S1E1";
+        var startSeconds = 0;
+        var initialSeason = selectedSeason;
+        if (resumeEntry) {
+          playSeason = resumeEntry.season;
+          playEpisodeNum = resumeEntry.episode;
+          playLabel = "\u25B6 Resume S" + playSeason + "E" + playEpisodeNum;
+          startSeconds = resumeEntry.positionSeconds || 0;
+          initialSeason = playSeason;
+          selectedSeason = playSeason;
+        }
+        function mountHero(firstEp) {
+          var hero = detailHero.render(title, {
+            playLabel,
+            onBack: function() {
+              router.back();
+            },
+            onPlay: function() {
+              playEpisode(
+                title.id,
+                playSeason,
+                playEpisodeNum,
+                title.title,
+                firstEp,
+                title,
+                onStatus,
+                startSeconds > 0 ? { startSeconds } : null
+              );
+            }
+          });
+          el.appendChild(hero);
+          choreography.animateDetailContentIn(el);
+          playback.prefetchTvEpisode(title.id, playSeason, playEpisodeNum);
+          var listSection = episodeList.create({
+            tmdbId: title.id,
+            showTitle: title.title,
+            titleMeta: title,
+            initialSeason,
+            onEpisodeSelect: function(season, episode, ep) {
+              playEpisode(title.id, season, episode, title.title, ep, title, onStatus);
+            },
+            onSeasonChange: function(season) {
+              selectedSeason = season;
+            }
+          });
+          el.appendChild(listSection);
+          var playBtn = el.querySelector("#detailPlayBtn");
+          if (playBtn) focus.focusElement(playBtn);
+        }
+        api.getEpisodes(title.id, playSeason).then(function(epData) {
+          var episodes = epData.episodes || [];
+          var targetEp = null;
           for (var i = 0; i < episodes.length; i++) {
-            (function(ep) {
-              var btn = document.createElement("button");
-              btn.type = "button";
-              btn.className = "episode-item focusable";
-              btn.setAttribute("data-focus-row", "detail-episodes");
-              btn.innerHTML = "<strong>E" + ep.episode + ": " + escapeHtml(ep.title) + "</strong><span>" + escapeHtml(ep.overview || "") + "</span>";
-              btn.addEventListener("click", function() {
-                playEpisode(tmdbId, ep.season, ep.episode, showTitle, ep, titleMeta, onStatus);
-              });
-              listEl.appendChild(btn);
-            })(episodes[i]);
+            if (episodes[i].episode === playEpisodeNum) {
+              targetEp = episodes[i];
+              break;
+            }
           }
-        }).catch(function(err) {
-          listEl.innerHTML = "<h3>Season " + selectedSeason + '</h3><div class="error-banner">' + escapeHtml(err.message) + "</div>";
+          if (!targetEp && episodes.length) targetEp = episodes[0];
+          mountHero(targetEp);
+        }).catch(function() {
+          mountHero(null);
         });
       }
       function render(container) {
@@ -6241,46 +6537,17 @@ var TizenflixApp = (() => {
         function status(msg) {
           if (window.TizenflixApp) window.TizenflixApp.showStatus(msg, false);
         }
-        api.getTv(params.tmdbId).then(function(title) {
+        Promise.all([
+          api.getTv(params.tmdbId),
+          api.continueWatching(20).catch(function() {
+            return [];
+          })
+        ]).then(function(results) {
+          var title = results[0];
+          var cwItems = results[1] || [];
           el.innerHTML = "";
-          api.getEpisodes(title.id, 1).then(function(epData) {
-            var firstEp = epData.episodes && epData.episodes[0] || null;
-            var hero = detailHero.render(title, {
-              playLabel: "\u25B6 Play S1E1",
-              onBack: function() {
-                router.back();
-              },
-              onPlay: function() {
-                playEpisode(title.id, 1, 1, title.title, firstEp, title, status);
-              }
-            });
-            el.appendChild(hero);
-            choreography.animateDetailContentIn(el);
-            playback.prefetchTvEpisode(title.id, 1, 1);
-            var episodeList = document.createElement("div");
-            episodeList.className = "episode-list";
-            el.appendChild(episodeList);
-            var playBtn = el.querySelector("#detailPlayBtn");
-            if (playBtn) focus.focusElement(playBtn);
-            renderEpisodes(el, title.id, title.title, title, status);
-          }).catch(function() {
-            var hero = detailHero.render(title, {
-              playLabel: "\u25B6 Play S1E1",
-              onBack: function() {
-                router.back();
-              },
-              onPlay: function() {
-                playEpisode(title.id, 1, 1, title.title, null, title, status);
-              }
-            });
-            el.appendChild(hero);
-            choreography.animateDetailContentIn(el);
-            playback.prefetchTvEpisode(title.id, 1, 1);
-            var episodeList = document.createElement("div");
-            episodeList.className = "episode-list";
-            el.appendChild(episodeList);
-            renderEpisodes(el, title.id, title.title, title, status);
-          });
+          var resumeEntry = findResumeEntry(cwItems, params.tmdbId);
+          renderHeroAndEpisodes(el, title, status, resumeEntry);
         }).catch(function(err) {
           el.innerHTML = '<div class="error-banner">Failed to load series: ' + escapeHtml(err.message) + "</div>";
         });

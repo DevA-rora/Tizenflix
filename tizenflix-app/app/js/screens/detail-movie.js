@@ -49,7 +49,12 @@ function render(container) {
           router.back();
         },
         onPlay: function () {
-          playback.playMovie(title.id, title.title, status).catch(function (err) {
+          playback
+            .playMovie(title.id, title.title, status, {
+              poster: title.poster || null,
+              backdrop: title.backdrop || title.poster || null,
+            })
+            .catch(function (err) {
             if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
           });
         },

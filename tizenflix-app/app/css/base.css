@@ -1,5 +1,18 @@
 /* Tizen-safe shared base — no custom properties, no gap, no aspect-ratio */
 
+/*
+ * Palette (literal hex — no var() on Tizen)
+ * bg-jet #000000       page shell, player, hero fade base
+ * bg-charcoal #141414  cards, inputs, elevated panels, image placeholders
+ * bg-charcoal-2 #1f1f1f secondary surfaces (OSK keys, episode tiles)
+ * brand-red #e50914    actions, nav accent, focus ring
+ * brand-red-dark #b20710 red gradient stop
+ * text-primary #ffffff titles, active nav
+ * text-body #e5e5e5    row titles, body copy
+ * text-muted #b3b3b3   meta, descriptions, inactive nav
+ * text-dim #808080     tertiary labels
+ */
+
 * {
   box-sizing: border-box;
 }
@@ -17,7 +30,7 @@ body {
   font-size: 28px;
   line-height: 1.45;
   color: #ffffff;
-  background-color: #141414;
+  background-color: #000000;
 }
 
 .noscript-warn {

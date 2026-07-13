@@ -2258,7 +2258,7 @@ var TizenflixGate = (() => {
         playerFocus.init(handlers.onFocusChange);
         playerFocus.focusDefault();
         chromeEl.querySelector("#playerBack").addEventListener("click", function() {
-          if (handlers.onBack) handlers.onBack();
+          handleUiBack();
         });
         chromeEl.querySelector("#playerServer").addEventListener("click", function() {
           openPanel("server");
@@ -2332,6 +2332,17 @@ var TizenflixGate = (() => {
           return true;
         }
         return false;
+      }
+      function handleUiBack() {
+        if (panelOpen) {
+          closePanel();
+          return;
+        }
+        if (railOpen) {
+          closeRail();
+          return;
+        }
+        if (handlers.onStop) handlers.onStop();
       }
       function destroy() {
         document.removeEventListener("keydown", onActivity, true);
@@ -2428,8 +2439,7 @@ var TizenflixGate = (() => {
         var duration = video && video.duration && isFinite(video.duration) ? video.duration : 0;
         var position = video && video.currentTime ? video.currentTime : 0;
         if (duration <= 0 || position <= 0) return null;
-        var poster = null;
-        if (session.play && session.play.poster) poster = session.play.poster;
+        var poster = session.poster || session.play && session.play.poster || null;
         return {
           tmdbId: String(session.tmdbId),
           type: session.type || "movie",
@@ -2506,9 +2516,6 @@ var TizenflixGate = (() => {
             if (window.TizenflixApp && window.TizenflixApp.updateFocusHint) {
               window.TizenflixApp.updateFocusHint(label);
             }
-          },
-          onBack: function() {
-            handleBackKey();
           },
           onStop: function() {
             stop();
@@ -3444,6 +3451,8 @@ var TizenflixGate = (() => {
         var rows = document.querySelectorAll(".row-spotlight");
         for (var i = 0; i < rows.length; i++) {
           rows[i].classList.remove("is-active");
+          var detailPanel = rows[i].querySelector(".row-spotlight-detail");
+          if (detailPanel) detailPanel.style.paddingLeft = "";
           var cards = rows[i].querySelectorAll(".card-spotlight");
           for (var c = 0; c < cards.length; c++) {
             if (cards[c] === el) continue;
@@ -3749,6 +3758,7 @@ var TizenflixGate = (() => {
             requestAnimationFrame(function() {
               if (gen !== scrollAnimGen || currentEl !== el) return;
               scrollFocusRowToAnchor(el, capturedAnchorY);
+              scheduleSpotlightLayoutSync(el);
             });
           });
         }
@@ -3797,6 +3807,16 @@ var TizenflixGate = (() => {
           row._syncSpotlightLayout();
         }
       }
+      function scheduleSpotlightLayoutSync(el) {
+        if (!el || !isInSpotlightRow(el)) return;
+        requestAnimationFrame(function() {
+          if (currentEl !== el) return;
+          requestAnimationFrame(function() {
+            if (currentEl !== el) return;
+            syncSpotlightLayout(el);
+          });
+        });
+      }
       function scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, scrollOptions) {
         scrollOptions = scrollOptions || {};
         scrollAnimGen += 1;
@@ -3804,7 +3824,7 @@ var TizenflixGate = (() => {
         var isSpotlight = isInSpotlightRow(el);
         function afterHorizontalScroll() {
           if (gen !== scrollAnimGen || currentEl !== el) return;
-          if (isSpotlight) syncSpotlightLayout(el);
+          if (isSpotlight) scheduleSpotlightLayoutSync(el);
         }
         function runScroll() {
           if (gen !== scrollAnimGen || currentEl !== el) return;
@@ -4134,6 +4154,7 @@ var TizenflixGate = (() => {
           if (!el.classList.contains("card")) return;
           if (!el.closest(".content-row")) return;
           scrollFocusRowToAnchor(el, null);
+          scheduleSpotlightLayoutSync(el);
         }, 150);
       }
       function init2(cb) {

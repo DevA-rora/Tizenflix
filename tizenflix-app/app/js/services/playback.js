@@ -71,8 +71,7 @@ function buildProgressPayload(video) {
   var position = video && video.currentTime ? video.currentTime : 0;
   if (duration <= 0 || position <= 0) return null;
 
-  var poster = null;
-  if (session.play && session.play.poster) poster = session.play.poster;
+  var poster = session.poster || (session.play && session.play.poster) || null;
 
   return {
     tmdbId: String(session.tmdbId),
@@ -165,9 +164,6 @@ function buildChromeHandlers(onStatus) {
       if (window.TizenflixApp && window.TizenflixApp.updateFocusHint) {
         window.TizenflixApp.updateFocusHint(label);
       }
-    },
-    onBack: function () {
-      handleBackKey();
     },
     onStop: function () {
       stop();

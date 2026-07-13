@@ -564,7 +564,7 @@ function mount(session, h) {
   playerFocus.focusDefault();
 
   chromeEl.querySelector("#playerBack").addEventListener("click", function () {
-    if (handlers.onBack) handlers.onBack();
+    handleUiBack();
   });
   chromeEl.querySelector("#playerServer").addEventListener("click", function () {
     openPanel("server");
@@ -643,6 +643,18 @@ function handleBack() {
     return true;
   }
   return false;
+}
+
+function handleUiBack() {
+  if (panelOpen) {
+    closePanel();
+    return;
+  }
+  if (railOpen) {
+    closeRail();
+    return;
+  }
+  if (handlers.onStop) handlers.onStop();
 }
 
 function destroy() {

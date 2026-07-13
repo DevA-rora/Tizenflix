@@ -12,7 +12,7 @@ Every UI change in `tizenflix-app` must pass this list before testing on hardwar
 
 ## CSS — prefer
 
-- Literal hex colors (`#141414`, `#ffffff`, `#e50914`)
+- Literal hex colors (`#000000`, `#141414`, `#ffffff`, `#e50914`)
 - `display: -webkit-flex` **and** `display: flex`
 - `transform` and `opacity` only for animations
 - `.tv-focus` class with `border: 4px solid #fff` + `box-shadow: 0 0 0 4px #e50914`

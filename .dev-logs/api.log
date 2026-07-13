@@ -1,9 +1,1 @@
-
-> tizenflix-api@0.2.0 api
-> tsx scripts/server.mjs
-
-Streamflix CF bypass: Chromium ready
-Tizenflix API http://192.168.86.178:8790
-  GET  /browse/rows
-  GET  /play/movie/27205
-  POST /download/movie/27205
+(eval):7: command not found: setsid

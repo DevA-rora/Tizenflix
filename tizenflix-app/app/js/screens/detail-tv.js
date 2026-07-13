@@ -7,6 +7,7 @@ var router = require("../core/router.js");
 var focus = require("../core/focus.js");
 var playback = require("../services/playback.js");
 var detailHero = require("../components/detail-hero.js");
+var episodeList = require("../components/episode-list.js");
 var choreography = require("../core/choreography.js");
 
 var params = {};
@@ -38,62 +39,113 @@ function buildMetaLine(title, season) {
   return parts.join(" · ");
 }
 
-function playEpisode(tmdbId, season, episode, showTitle, ep, titleMeta, onStatus) {
+function playEpisode(tmdbId, season, episode, showTitle, ep, titleMeta, onStatus, extraMeta) {
   var label = showTitle + " S" + season + "E" + episode;
   var meta = {
     showTitle: showTitle,
     episodeTitle: ep && ep.title ? ep.title : "",
     overview: ep && ep.overview ? ep.overview : "",
     metaLine: titleMeta ? buildMetaLine(titleMeta, season) : "",
+    poster: titleMeta && titleMeta.poster ? titleMeta.poster : null,
+    backdrop:
+      titleMeta && (titleMeta.backdrop || titleMeta.poster)
+        ? titleMeta.backdrop || titleMeta.poster
+        : null,
   };
+  if (extraMeta) {
+    for (var k in extraMeta) {
+      if (Object.prototype.hasOwnProperty.call(extraMeta, k)) meta[k] = extraMeta[k];
+    }
+  }
   playback.playTvEpisode(tmdbId, season, episode, label, onStatus, meta).catch(function (err) {
     if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
   });
 }
 
-function renderEpisodes(el, tmdbId, showTitle, titleMeta, onStatus) {
-  var listEl = el.querySelector(".episode-list");
-  if (!listEl) return;
-  listEl.innerHTML = "<h3>Season " + selectedSeason + "</h3><div class=\"loading-msg\">Loading episodes…</div>";
+function findResumeEntry(items, tmdbId) {
+  var id = String(tmdbId);
+  for (var i = 0; i < items.length; i++) {
+    var entry = items[i];
+    if (String(entry.tmdbId) === id && entry.type === "tv" && entry.season && entry.episode) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function renderHeroAndEpisodes(el, title, onStatus, resumeEntry) {
+  var playSeason = 1;
+  var playEpisodeNum = 1;
+  var playLabel = "▶ Play S1E1";
+  var startSeconds = 0;
+  var initialSeason = selectedSeason;
+
+  if (resumeEntry) {
+    playSeason = resumeEntry.season;
+    playEpisodeNum = resumeEntry.episode;
+    playLabel = "▶ Resume S" + playSeason + "E" + playEpisodeNum;
+    startSeconds = resumeEntry.positionSeconds || 0;
+    initialSeason = playSeason;
+    selectedSeason = playSeason;
+  }
+
+  function mountHero(firstEp) {
+    var hero = detailHero.render(title, {
+      playLabel: playLabel,
+      onBack: function () {
+        router.back();
+      },
+      onPlay: function () {
+        playEpisode(
+          title.id,
+          playSeason,
+          playEpisodeNum,
+          title.title,
+          firstEp,
+          title,
+          onStatus,
+          startSeconds > 0 ? { startSeconds: startSeconds } : null
+        );
+      },
+    });
+    el.appendChild(hero);
+    choreography.animateDetailContentIn(el);
+    playback.prefetchTvEpisode(title.id, playSeason, playEpisodeNum);
+
+    var listSection = episodeList.create({
+      tmdbId: title.id,
+      showTitle: title.title,
+      titleMeta: title,
+      initialSeason: initialSeason,
+      onEpisodeSelect: function (season, episode, ep) {
+        playEpisode(title.id, season, episode, title.title, ep, title, onStatus);
+      },
+      onSeasonChange: function (season) {
+        selectedSeason = season;
+      },
+    });
+    el.appendChild(listSection);
+
+    var playBtn = el.querySelector("#detailPlayBtn");
+    if (playBtn) focus.focusElement(playBtn);
+  }
 
   api
-    .getEpisodes(tmdbId, selectedSeason)
-    .then(function (data) {
-      var episodes = data.episodes || [];
-      listEl.innerHTML = "<h3>Season " + selectedSeason + "</h3>";
-      if (!episodes.length) {
-        listEl.innerHTML += '<p class="loading-msg">No episodes found.</p>';
-        return;
-      }
-
+    .getEpisodes(title.id, playSeason)
+    .then(function (epData) {
+      var episodes = epData.episodes || [];
+      var targetEp = null;
       for (var i = 0; i < episodes.length; i++) {
-        (function (ep) {
-          var btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "episode-item focusable";
-          btn.setAttribute("data-focus-row", "detail-episodes");
-          btn.innerHTML =
-            "<strong>E" +
-            ep.episode +
-            ": " +
-            escapeHtml(ep.title) +
-            "</strong><span>" +
-            escapeHtml(ep.overview || "") +
-            "</span>";
-          btn.addEventListener("click", function () {
-            playEpisode(tmdbId, ep.season, ep.episode, showTitle, ep, titleMeta, onStatus);
-          });
-          listEl.appendChild(btn);
-        })(episodes[i]);
+        if (episodes[i].episode === playEpisodeNum) {
+          targetEp = episodes[i];
+          break;
+        }
       }
+      if (!targetEp && episodes.length) targetEp = episodes[0];
+      mountHero(targetEp);
     })
-    .catch(function (err) {
-      listEl.innerHTML =
-        "<h3>Season " +
-        selectedSeason +
-        '</h3><div class="error-banner">' +
-        escapeHtml(err.message) +
-        "</div>";
+    .catch(function () {
+      mountHero(null);
     });
 }
 
@@ -112,53 +164,18 @@ function render(container) {
     if (window.TizenflixApp) window.TizenflixApp.showStatus(msg, false);
   }
 
-  api
-    .getTv(params.tmdbId)
-    .then(function (title) {
+  Promise.all([
+    api.getTv(params.tmdbId),
+    api.continueWatching(20).catch(function () {
+      return [];
+    }),
+  ])
+    .then(function (results) {
+      var title = results[0];
+      var cwItems = results[1] || [];
       el.innerHTML = "";
-
-      api.getEpisodes(title.id, 1).then(function (epData) {
-        var firstEp = (epData.episodes && epData.episodes[0]) || null;
-        var hero = detailHero.render(title, {
-          playLabel: "▶ Play S1E1",
-          onBack: function () {
-            router.back();
-          },
-          onPlay: function () {
-            playEpisode(title.id, 1, 1, title.title, firstEp, title, status);
-          },
-        });
-        el.appendChild(hero);
-        choreography.animateDetailContentIn(el);
-
-        playback.prefetchTvEpisode(title.id, 1, 1);
-
-        var episodeList = document.createElement("div");
-        episodeList.className = "episode-list";
-        el.appendChild(episodeList);
-
-        var playBtn = el.querySelector("#detailPlayBtn");
-        if (playBtn) focus.focusElement(playBtn);
-
-        renderEpisodes(el, title.id, title.title, title, status);
-      }).catch(function () {
-        var hero = detailHero.render(title, {
-          playLabel: "▶ Play S1E1",
-          onBack: function () {
-            router.back();
-          },
-          onPlay: function () {
-            playEpisode(title.id, 1, 1, title.title, null, title, status);
-          },
-        });
-        el.appendChild(hero);
-        choreography.animateDetailContentIn(el);
-        playback.prefetchTvEpisode(title.id, 1, 1);
-        var episodeList = document.createElement("div");
-        episodeList.className = "episode-list";
-        el.appendChild(episodeList);
-        renderEpisodes(el, title.id, title.title, title, status);
-      });
+      var resumeEntry = findResumeEntry(cwItems, params.tmdbId);
+      renderHeroAndEpisodes(el, title, status, resumeEntry);
     })
     .catch(function (err) {
       el.innerHTML =

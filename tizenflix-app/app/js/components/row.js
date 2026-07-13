@@ -22,14 +22,46 @@ function syncSpotlightDescribedBy(row) {
   if (panelId) focused.setAttribute("aria-describedby", panelId);
 }
 
+var SPOTLIGHT_MIN_TEXT_WIDTH = 360;
+var SPOTLIGHT_PANEL_PADDING_RIGHT = 48;
+var SPOTLIGHT_TRACK_OUTER_PADDING = 4;
+
+function clearSpotlightDetailPadding(row) {
+  var panel = row ? row.querySelector(".row-spotlight-detail") : null;
+  if (panel) panel.style.paddingLeft = "";
+}
+
 function syncSpotlightDetailPosition(row) {
   var focused = row.querySelector(".card.tv-focus");
   var panel = row.querySelector(".row-spotlight-detail");
   var body = row.querySelector(".row-spotlight-body");
-  if (!focused || !panel || !body) return;
-  var bodyRect = body.getBoundingClientRect();
-  var cardRect = focused.getBoundingClientRect();
-  panel.style.paddingLeft = Math.max(0, Math.round(cardRect.left - bodyRect.left)) + "px";
+  if (!panel || !body) return;
+
+  if (!row.classList.contains("is-active") || !focused) {
+    clearSpotlightDetailPadding(row);
+    return;
+  }
+
+  var track = row.querySelector(".row-track");
+  var scrollX = track && typeof track._scrollX === "number" ? track._scrollX : 0;
+  var offset = focused.offsetLeft - scrollX + SPOTLIGHT_TRACK_OUTER_PADDING;
+
+  var bodyWidth = body.clientWidth;
+  if (bodyWidth < 1) {
+    var bodyRect = body.getBoundingClientRect();
+    bodyWidth = bodyRect.width;
+  }
+
+  var maxPadding = Math.max(0, bodyWidth - SPOTLIGHT_MIN_TEXT_WIDTH - SPOTLIGHT_PANEL_PADDING_RIGHT);
+  offset = Math.max(0, Math.min(Math.round(offset), maxPadding));
+
+  if (offset < 1 && focused.getBoundingClientRect) {
+    var cardRect = focused.getBoundingClientRect();
+    var measured = Math.round(cardRect.left - body.getBoundingClientRect().left);
+    offset = Math.max(0, Math.min(measured, maxPadding));
+  }
+
+  panel.style.paddingLeft = offset + "px";
 }
 
 function syncSpotlightLayout(row) {
@@ -84,7 +116,7 @@ function updateSpotlightMeta(row, item) {
     card.updateSpotlightCard(focused, item, extras, cardOptions);
     card.updateSpotlightDetailPanel(panel, item, extras, cardOptions);
     panel.classList.remove("is-fading");
-    syncSpotlightDescribedBy(row);
+    syncSpotlightLayout(row);
   }, fadeMs);
 
   if (variant === "continue-watching") {

@@ -72,24 +72,52 @@ function mapProgressEntry(entry) {
 
 function enrichContinueWatching(items) {
   var tasks = items.map(function (item) {
-    if (item.type !== "tv" || item.episodeTitle || item.season == null || item.episode == null) {
-      return Promise.resolve(item);
+    var promises = [];
+
+    if (!item.poster) {
+      var fetcher = item.type === "tv" ? api.getTv(item.id) : api.getMovie(item.id);
+      promises.push(
+        fetcher
+          .then(function (detail) {
+            item.poster = detail.poster || item.poster;
+            item.backdrop = detail.backdrop || detail.poster || item.backdrop;
+            return item;
+          })
+          .catch(function () {
+            return item;
+          })
+      );
     }
-    return api
-      .getEpisodes(item.id, item.season)
-      .then(function (data) {
-        var episodes = data.episodes || data.items || [];
-        for (var i = 0; i < episodes.length; i++) {
-          if (Number(episodes[i].episode) === Number(item.episode)) {
-            item.episodeTitle = episodes[i].title || episodes[i].name || "";
-            break;
-          }
-        }
-        return item;
-      })
-      .catch(function () {
-        return item;
-      });
+
+    if (
+      item.type === "tv" &&
+      !item.episodeTitle &&
+      item.season != null &&
+      item.episode != null
+    ) {
+      promises.push(
+        api
+          .getEpisodes(item.id, item.season)
+          .then(function (data) {
+            var episodes = data.episodes || data.items || [];
+            for (var i = 0; i < episodes.length; i++) {
+              if (Number(episodes[i].episode) === Number(item.episode)) {
+                item.episodeTitle = episodes[i].title || episodes[i].name || "";
+                break;
+              }
+            }
+            return item;
+          })
+          .catch(function () {
+            return item;
+          })
+      );
+    }
+
+    if (!promises.length) return Promise.resolve(item);
+    return Promise.all(promises).then(function () {
+      return item;
+    });
   });
   return Promise.all(tasks);
 }
@@ -109,6 +137,8 @@ function resumeItem(item) {
       .playTvEpisode(item.id, season, episode, label, onStatus, {
         showTitle: item.title,
         episodeTitle: item.episodeTitle || "",
+        poster: item.poster || null,
+        backdrop: item.backdrop || item.poster || null,
         startSeconds: startSeconds,
       })
       .catch(function (err) {
@@ -116,7 +146,11 @@ function resumeItem(item) {
       });
   }
   return playback
-    .playMovie(item.id, item.title, onStatus, { startSeconds: startSeconds })
+    .playMovie(item.id, item.title, onStatus, {
+      poster: item.poster || null,
+      backdrop: item.backdrop || item.poster || null,
+      startSeconds: startSeconds,
+    })
     .catch(function (err) {
       if (window.TizenflixApp) window.TizenflixApp.showStatus(err.message, true);
     });
@@ -151,9 +185,6 @@ function handleFocusChange(meta) {
       if (rowSection && rowSection.getAttribute("data-row-layout") === "spotlight") {
         if (typeof rowSection._updateSpotlightMeta === "function") {
           rowSection._updateSpotlightMeta(item);
-        }
-        if (typeof rowSection._syncSpotlightLayout === "function") {
-          rowSection._syncSpotlightLayout();
         }
         return;
       }
