@@ -2,12 +2,20 @@
 export function buildProxyUrl(
   publicBase: string,
   targetUrl: string,
-  referer?: string
+  referer?: string,
+  audioLang?: string,
+  maxHeight?: number
 ): string {
   const base = publicBase.replace(/\/$/, "");
   let url = `${base}/proxy/stream?url=${encodeURIComponent(targetUrl)}`;
   if (referer) {
     url += `&referer=${encodeURIComponent(referer)}`;
+  }
+  if (audioLang) {
+    url += `&audioLang=${encodeURIComponent(audioLang)}`;
+  }
+  if (maxHeight && maxHeight > 0) {
+    url += `&maxHeight=${encodeURIComponent(String(maxHeight))}`;
   }
   return url;
 }

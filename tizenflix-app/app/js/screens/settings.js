@@ -88,7 +88,9 @@ function render(container) {
   var bufferSec = config.getAutoplayBufferSec();
   var extraBuf = config.getExtraBuffering();
   var catalogLang = config.getCatalogLang();
+  var audioPref = config.getAudioPref();
   var uiAnimations = config.getUiAnimations();
+  var targetRes = config.getTargetResolution();
 
   var el = document.createElement("div");
   el.className = "screen screen-settings";
@@ -141,6 +143,38 @@ function render(container) {
     (catalogLang === "es" ? " selected" : "") +
     ">Spanish</option>" +
     "</select></div>" +
+    '<div class="settings-field" data-focus-row="settings-audio">' +
+    '<label for="audioPrefInput">Audio / dubbing</label>' +
+    '<select id="audioPrefInput" class="focusable">' +
+    '<option value="original"' +
+    (audioPref === "original" ? " selected" : "") +
+    ">Original voice acting</option>" +
+    '<option value="en"' +
+    (audioPref === "en" ? " selected" : "") +
+    ">English</option>" +
+    '<option value="de"' +
+    (audioPref === "de" ? " selected" : "") +
+    ">German</option>" +
+    '<option value="fr"' +
+    (audioPref === "fr" ? " selected" : "") +
+    ">French</option>" +
+    '<option value="it"' +
+    (audioPref === "it" ? " selected" : "") +
+    ">Italian</option>" +
+    '<option value="es"' +
+    (audioPref === "es" ? " selected" : "") +
+    ">Spanish</option>" +
+    '<option value="ja"' +
+    (audioPref === "ja" ? " selected" : "") +
+    ">Japanese</option>" +
+    '<option value="ko"' +
+    (audioPref === "ko" ? " selected" : "") +
+    ">Korean</option>" +
+    '<option value="zh"' +
+    (audioPref === "zh" ? " selected" : "") +
+    ">Chinese</option>" +
+    "</select>" +
+    '<p class="settings-hint">Original uses each title\'s native language. Some sources may not report audio language and will play with a warning.</p></div>' +
     '<div class="settings-field" data-focus-row="settings-autoplay">' +
     '<button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ' +
     (autoplay ? "ON" : "OFF") +
@@ -156,6 +190,23 @@ function render(container) {
     '<button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' +
     (extraBuf ? "ON" : "OFF") +
     "</button></div>" +
+    '<div class="settings-field" data-focus-row="settings-resolution">' +
+    '<label for="targetResolutionInput">Default stream quality</label>' +
+    '<select id="targetResolutionInput" class="focusable">' +
+    '<option value="auto"' +
+    (targetRes === "auto" ? " selected" : "") +
+    ">Auto</option>" +
+    '<option value="720"' +
+    (targetRes === "720" ? " selected" : "") +
+    ">720p</option>" +
+    '<option value="1080"' +
+    (targetRes === "1080" ? " selected" : "") +
+    ">1080p</option>" +
+    '<option value="2160"' +
+    (targetRes === "2160" ? " selected" : "") +
+    ">4K</option>" +
+    "</select>" +
+    '<p class="settings-hint">Auto starts on the lowest rung and ramps up. Locked modes prefer matching sources. Quality depends on what each server offers; 4K may buffer heavily on some TVs.</p></div>' +
     '<p class="settings-hint">Play backend: <strong>' +
     config.getPlayBackend() +
     '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p>' +
@@ -170,9 +221,11 @@ function render(container) {
   var backendBtn = el.querySelector("#backendCycleBtn");
   var gridInput = el.querySelector("#gridScaleInput");
   var langInput = el.querySelector("#catalogLangInput");
+  var audioPrefInput = el.querySelector("#audioPrefInput");
   var autoplayBtn = el.querySelector("#autoplayBtn");
   var bufferInput = el.querySelector("#autoplayBufferInput");
   var extraBtn = el.querySelector("#extraBufferBtn");
+  var targetResInput = el.querySelector("#targetResolutionInput");
   var providersBtn = el.querySelector("#providersBtn");
   var status = el.querySelector("#settingsStatus");
 
@@ -186,6 +239,12 @@ function render(container) {
   if (langInput) {
     langInput.addEventListener("change", function () {
       config.setCatalogLang(langInput.value);
+    });
+  }
+
+  if (audioPrefInput) {
+    audioPrefInput.addEventListener("change", function () {
+      config.setAudioPref(audioPrefInput.value);
     });
   }
 
@@ -209,6 +268,12 @@ function render(container) {
       var next = !config.getExtraBuffering();
       config.setExtraBuffering(next);
       extraBtn.textContent = "Extra buffering: " + (next ? "ON" : "OFF");
+    });
+  }
+
+  if (targetResInput) {
+    targetResInput.addEventListener("change", function () {
+      config.setTargetResolution(targetResInput.value);
     });
   }
 

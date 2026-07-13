@@ -152,3 +152,11 @@ export function parseLangParam(raw: unknown): string | undefined {
   if (typeof raw !== "string" || !raw.trim()) return undefined;
   return raw.trim().toLowerCase().split("-")[0];
 }
+
+export function parseAudioLangParam(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const value = raw.trim().toLowerCase().split("-")[0]!;
+  if (value === "original") return "original";
+  if (/^[a-z]{2}$/.test(value)) return value;
+  return undefined;
+}

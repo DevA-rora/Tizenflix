@@ -28,8 +28,47 @@ function parseResolutionHeight(inf: string): number {
   return match ? parseInt(match[1], 10) : 0;
 }
 
-/** One English audio + up to 3 video rungs ≤1080p for ABR and future quality settings. */
-export function simplifyMasterForTv(content: string, maxRungs = 3): string {
+/** One preferred audio track + up to 3 video rungs for ABR and quality settings. */
+export interface SimplifyMasterOptions {
+  maxRungs?: number;
+  preferredAudioLang?: string;
+  /** Max manifest rung height (default 1080; use 2160 for 4K). */
+  maxHeight?: number;
+}
+
+function pickAudioLine(mediaLines: string[], preferredAudioLang?: string): string | undefined {
+  const lang = preferredAudioLang?.toLowerCase().split("-")[0];
+  if (lang) {
+    const exact =
+      mediaLines.find((l) => l.includes(`LANGUAGE="${lang}"`) && l.includes("DEFAULT=YES")) ??
+      mediaLines.find((l) => l.includes(`LANGUAGE="${lang}"`)) ??
+      mediaLines.find(
+        (l) =>
+          l.includes(`LANGUAGE="${lang}"`) ||
+          new RegExp(`NAME="[^"]*${lang}[^"]*"`, "i").test(l)
+      );
+    if (exact) return exact;
+  }
+
+  return (
+    mediaLines.find((l) => l.includes('LANGUAGE="en"') && l.includes("DEFAULT=YES")) ??
+    mediaLines.find((l) => l.includes('LANGUAGE="en"')) ??
+    mediaLines.find((l) => l.includes("DEFAULT=YES")) ??
+    mediaLines[0]
+  );
+}
+
+export function simplifyMasterForTv(
+  content: string,
+  maxRungsOrOptions: number | SimplifyMasterOptions = 3
+): string {
+  const options: SimplifyMasterOptions =
+    typeof maxRungsOrOptions === "number"
+      ? { maxRungs: maxRungsOrOptions }
+      : maxRungsOrOptions;
+  const maxRungs = options.maxRungs ?? 3;
+  const preferredAudioLang = options.preferredAudioLang;
+  const maxHeight = options.maxHeight ?? 1080;
   if (!isMasterPlaylist(content)) return content;
 
   const lines = content.split(/\r?\n/);
@@ -57,11 +96,7 @@ export function simplifyMasterForTv(content: string, maxRungs = 3): string {
 
   if (!variants.length) return content;
 
-  let audioLine =
-    mediaLines.find((l) => l.includes('LANGUAGE="en"') && l.includes("DEFAULT=YES")) ??
-    mediaLines.find((l) => l.includes('LANGUAGE="en"')) ??
-    mediaLines.find((l) => l.includes("DEFAULT=YES")) ??
-    mediaLines[0];
+  let audioLine = pickAudioLine(mediaLines, preferredAudioLang);
 
   const audioGroup = audioLine?.match(/GROUP-ID="([^"]+)"/)?.[1] ?? "audio0";
 
@@ -76,7 +111,7 @@ export function simplifyMasterForTv(content: string, maxRungs = 3): string {
   pool.sort((a, b) => b.bandwidth - a.bandwidth);
   const capped = pool.filter((v) => {
     const h = parseResolutionHeight(v.inf);
-    return h === 0 || h <= 1080;
+    return h === 0 || h <= maxHeight;
   });
   const ladder = (capped.length ? capped : pool).slice(0, maxRungs);
   if (!ladder.length) return content;
@@ -94,9 +129,11 @@ export function rewriteM3u8(
   content: string,
   manifestUrl: string,
   publicBase: string,
-  referer?: string
+  referer?: string,
+  options?: SimplifyMasterOptions
 ): string {
-  const simplified = simplifyMasterForTv(content);
+  const simplified = simplifyMasterForTv(content, options ?? { maxRungs: 3 });
+  const maxHeight = options?.maxHeight;
   const lines = simplified.split(/\r?\n/);
   const out: string[] = [];
 
@@ -111,14 +148,14 @@ export function rewriteM3u8(
     if (trimmed.startsWith("#")) {
       const rewritten = trimmed.replace(URI_ATTR_RE, (_match, uri: string) => {
         const absolute = resolvePlaylistUrl(manifestUrl, uri);
-        return `URI="${buildProxyUrl(publicBase, absolute, referer)}"`;
+        return `URI="${buildProxyUrl(publicBase, absolute, referer, options?.preferredAudioLang, maxHeight)}"`;
       });
       out.push(rewritten);
       continue;
     }
 
     const absolute = resolvePlaylistUrl(manifestUrl, trimmed);
-    out.push(buildProxyUrl(publicBase, absolute, referer));
+    out.push(buildProxyUrl(publicBase, absolute, referer, options?.preferredAudioLang, maxHeight));
   }
 
   return out.join("\n");

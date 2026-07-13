@@ -96,9 +96,9 @@ function bindSubtitleButton(video) {
   });
 }
 
-var READY_TIMEOUT_MS = 12000;
+var READY_TIMEOUT_MS = 5000;
 var HLS_PRIME_BUFFER_SEC = 4;
-var HLS_PRIME_TIMEOUT_MS = 8000;
+var HLS_PRIME_TIMEOUT_MS = 3000;
 var HLS_EARLY_START_BUFFER_SEC = 2;
 var MAX_NON_FATAL_RECOVERIES = 8;
 
@@ -363,20 +363,22 @@ function isProxiedHls(url) {
 }
 
 function prefersHlsJsFirst(url) {
+  if (isProxiedHls(url)) return true;
   if (prefersNativeHls()) {
     var pref = config.getQualityPreference();
     if (pref.mode === "manual") return true;
     return false;
   }
-  return isProxiedHls(url);
+  return false;
 }
 
 function createHlsInstance() {
   var extra = config.getExtraBuffering();
+  var baseMax = extra ? 120 : isTizenTv() ? 90 : 60;
   return new Hls({
     enableWorker: false,
-    maxBufferLength: extra ? 120 : 60,
-    maxMaxBufferLength: extra ? 300 : 180,
+    maxBufferLength: baseMax,
+    maxMaxBufferLength: extra ? 300 : isTizenTv() ? 240 : 180,
     maxBufferSize: 120 * 1000 * 1000,
     maxBufferHole: 2.0,
     highBufferWatchdogPeriod: 3,
@@ -398,6 +400,8 @@ function createHlsInstance() {
     abrEwmaDefaultEstimate: 8000000,
     startFragPrefetch: true,
     backBufferLength: 45,
+    maxStarvationDelay: 4,
+    maxLoadingDelay: 4,
   });
 }
 
@@ -447,16 +451,21 @@ function getQualityOptions(hls) {
 function getCurrentQuality(hls, video) {
   if (hls && hls.levels && hls.levels.length) {
     var pref = config.getQualityPreference();
-    var isAuto = pref.mode === "auto" || hls.currentLevel === -1;
+    var targetAuto = config.getTargetResolution() === "auto";
+    var isAuto = (pref.mode === "auto" || hls.currentLevel === -1) && targetAuto;
     var activeIndex = isAuto ? hls.loadLevel : hls.currentLevel;
     if (activeIndex == null || activeIndex < 0) activeIndex = hls.loadLevel;
     if (activeIndex == null || activeIndex < 0) activeIndex = 0;
     var activeLevel = hls.levels[activeIndex];
-    var label = activeLevel ? formatQualityLabel(activeLevel) : "—";
-    if (label === "Level") label = "—";
+    var height = activeLevel && activeLevel.height ? activeLevel.height : 0;
+    var label = height ? formatQualityLabelFromHeight(height) : "—";
+    if (!height && activeLevel) {
+      label = formatQualityLabel(activeLevel);
+      if (label === "Level") label = "—";
+    }
     return {
       label: label,
-      height: activeLevel && activeLevel.height ? activeLevel.height : 0,
+      height: height,
       isAuto: isAuto,
       badge: isAuto && label !== "—" ? "Auto · " + label : label,
     };
@@ -468,17 +477,56 @@ function getCurrentQuality(hls, video) {
   return { label: "—", height: 0, isAuto: true, badge: "—" };
 }
 
-function applyQualityPreference(hls) {
+function logTargetQualityWarning(hls, onLog) {
+  var target = config.getTargetResolution();
+  if (target === "auto" || !hls || !hls.levels || !hls.levels.length) return;
+  var targetPx = config.targetResolutionPixels(target);
+  if (!targetPx) return;
+  var info = getCurrentQuality(hls, hls.media);
+  if (!info.height || info.height >= targetPx) return;
+  var want = config.preferredQualityForTarget(target) || target + "p";
+  var msg = "Playing " + info.label + " (" + want + " requested)";
+  debug.debugLog(msg);
+  if (onLog) onLog(msg);
+}
+
+function applyQualityPreference(hls, onLog) {
   if (!hls) return;
-  var pref = config.resolveLegacyQualityLevel(hls);
-  if (pref.mode === "auto") {
-    hls.currentLevel = -1;
+  var pref = config.getQualityPreference();
+  if (pref.mode === "manual" && pref.level >= 0) {
+    hls.currentLevel = pref.level;
+    logTargetQualityWarning(hls, onLog);
     return;
   }
-  var levels = hls.levels ? hls.levels.length : 0;
-  if (!levels) return;
-  var level = pref.level;
-  if (level < 0 || level >= levels) level = 0;
+
+  var target = config.getTargetResolution();
+  if (target === "auto") {
+    hls.currentLevel = -1;
+    if (typeof hls.minAutoBitrate === "number") hls.minAutoBitrate = 0;
+    var lowIdx = config.levelIndexForTargetHeight(hls, 0);
+    if (lowIdx >= 0) hls.startLevel = lowIdx;
+    return;
+  }
+
+  var targetPx = config.targetResolutionPixels(target);
+  var level = config.levelIndexForTargetHeight(hls, targetPx);
+  if (level < 0) return;
+  hls.currentLevel = level;
+  var locked = hls.levels[level];
+  if (locked && locked.bitrate) {
+    hls.minAutoBitrate = locked.bitrate;
+  }
+  logTargetQualityWarning(hls, onLog);
+}
+
+function applyQualityMode(hls, mode) {
+  if (!hls) return;
+  if (mode === "auto") {
+    applyQualityPreference(hls);
+    return;
+  }
+  var level = config.levelIndexForLegacyMode(hls, mode);
+  if (level < 0) return;
   hls.currentLevel = level;
 }
 
@@ -487,6 +535,9 @@ function setQualityLevel(hls, level) {
   if (level < 0) {
     config.setQualityAuto();
     hls.currentLevel = -1;
+    if (typeof hls.minAutoBitrate === "number") hls.minAutoBitrate = 0;
+    var lowIdx = config.levelIndexForTargetHeight(hls, 0);
+    if (lowIdx >= 0) hls.startLevel = lowIdx;
     notifyQualityChange(getCurrentQuality(hls, hls.media));
     return true;
   }
@@ -496,28 +547,6 @@ function setQualityLevel(hls, level) {
   hls.currentLevel = level;
   notifyQualityChange(getCurrentQuality(hls, hls.media));
   return true;
-}
-
-function applyQualityMode(hls, mode) {
-  if (!hls) return;
-  var m = mode || config.getQualityMode();
-  if (m === "auto") {
-    hls.currentLevel = -1;
-    return;
-  }
-  var levels = hls.levels ? hls.levels.length : 0;
-  if (!levels) return;
-  if (m === "high") {
-    hls.currentLevel = 0;
-    return;
-  }
-  if (m === "medium") {
-    hls.currentLevel = levels > 1 ? 1 : 0;
-    return;
-  }
-  if (m === "low") {
-    hls.currentLevel = levels - 1;
-  }
 }
 
 function reportPlaybackHealth(success) {
@@ -603,6 +632,34 @@ function startHlsPlaybackWhenBuffered(video, videoWrap, title, onLog, session, h
   }, HLS_PRIME_TIMEOUT_MS);
 }
 
+function setupBufferWatchdog(video, hls, session, onLog) {
+  var lowSince = 0;
+
+  function checkBuffer() {
+    if (!isActiveSession(session) || !hls || video.paused) return;
+    var ahead = bufferedAheadSec(video);
+    if (ahead >= 8) {
+      lowSince = 0;
+      return;
+    }
+    if (ahead < 3) {
+      var now = Date.now();
+      if (!lowSince) lowSince = now;
+      else if (now - lowSince > 3000) {
+        lowSince = 0;
+        recoverNonFatalHlsError(hls, video, { details: "bufferStalledError" }, onLog);
+      }
+    } else {
+      lowSince = 0;
+    }
+  }
+
+  video.addEventListener("timeupdate", checkBuffer);
+  trackCleanup(function () {
+    video.removeEventListener("timeupdate", checkBuffer);
+  });
+}
+
 function setupHlsStallRecovery(video, hls, session, onLog) {
   var stallTimer = null;
 
@@ -653,6 +710,7 @@ function recoverNonFatalHlsError(hls, video, data, onLog) {
     try {
       if (video.currentTime > 0) video.currentTime += 0.05;
       hls.startLoad(-1);
+      applyQualityPreference(hls, onLog);
       safePlay(video);
     } catch (e) {
       /* ignore */
@@ -663,6 +721,7 @@ function recoverNonFatalHlsError(hls, video, data, onLog) {
   if (details === "fragLoadTimeOut" || details === "fragLoadError") {
     try {
       hls.startLoad(-1);
+      applyQualityPreference(hls, onLog);
     } catch (e) {
       /* ignore */
     }
@@ -695,11 +754,12 @@ function playHlsJs(video, url, onLog, videoWrap, title, session, onFatal) {
   hlsInstance.loadSource(url);
   hlsInstance.attachMedia(video);
   setupHlsStallRecovery(video, hlsInstance, session, onLog);
+  setupBufferWatchdog(video, hlsInstance, session, onLog);
   hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
     if (!isActiveSession(session)) return;
     debug.debugLog("HLS.js manifest parsed");
     if (onLog) onLog("HLS.js manifest parsed — buffering ahead");
-    applyQualityPreference(hlsInstance);
+    applyQualityPreference(hlsInstance, onLog);
     notifyQualityChange(getCurrentQuality(hlsInstance, video));
     setupPlaybackHealthReport(video, session);
     startHlsPlaybackWhenBuffered(video, videoWrap, title, onLog, session, hlsInstance);
@@ -788,7 +848,7 @@ function setupNativeQualityTracking(video, session) {
 
 function playNativeHls(video, url, onLog, videoWrap, title, session, onStallFallback, onFatal) {
   debug.debugLog("Player path: native HLS");
-  if (onLog) onLog("Player path: native HLS (wait up to 12s, then HLS.js fallback)");
+  if (onLog) onLog("Player path: native HLS (wait up to 5s, then HLS.js fallback)");
   setCrossOrigin(video, true);
   video.src = url;
   setupNativeQualityTracking(video, session);

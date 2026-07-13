@@ -19,6 +19,11 @@ var TizenflixGate = (() => {
       var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
       var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
       var ANIMATIONS_KEY = "tizenflix.uiAnimations";
+      var CATALOG_LANG_KEY = "tizenflix.catalogLang";
+      var AUDIO_PREF_KEY = "tizenflix.audioPref";
+      var TARGET_RESOLUTION_KEY = "tizenflix.targetResolution";
+      var VALID_AUDIO_PREFS = ["original", "en", "de", "fr", "it", "es", "ja", "ko", "zh"];
+      var VALID_TARGET_RESOLUTIONS = ["auto", "720", "1080", "2160"];
       var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -53,8 +58,95 @@ var TizenflixGate = (() => {
         if (backend) parts.push("backend=" + backend);
         var lang = getCatalogLang();
         if (lang && lang !== "en") parts.push("lang=" + encodeURIComponent(lang));
+        var audioLang = getAudioPref();
+        if (audioLang) parts.push("audioLang=" + encodeURIComponent(audioLang));
+        var targetRes = getTargetResolution();
+        if (targetRes !== "auto") {
+          parts.push("maxHeight=" + encodeURIComponent(targetRes));
+          var pq = preferredQualityForTarget(targetRes);
+          if (pq) parts.push("preferredQuality=" + encodeURIComponent(pq));
+        }
         if (extra) parts.push(extra);
         return parts.length ? parts.join("&") : null;
+      }
+      function preferredQualityForTarget(target) {
+        if (target === "2160") return "4K";
+        if (target === "1080") return "1080p";
+        if (target === "720") return "720p";
+        return null;
+      }
+      function parseHeightFromLabel(label) {
+        if (!label) return 0;
+        var text = String(label).toLowerCase();
+        if (/4k|2160/.test(text)) return 2160;
+        var match = text.match(/(\d+)\s*p/);
+        if (match) return parseInt(match[1], 10);
+        return 0;
+      }
+      function getTargetResolution() {
+        try {
+          var stored = localStorage.getItem(TARGET_RESOLUTION_KEY);
+          if (stored && VALID_TARGET_RESOLUTIONS.indexOf(stored) !== -1) return stored;
+          var legacy = localStorage.getItem(QUALITY_MODE_KEY);
+          if (legacy === "high") return "1080";
+          if (legacy === "medium") return "720";
+          if (legacy === "low") return "720";
+          if (legacy === "auto") return "auto";
+        } catch (err) {
+        }
+        return "1080";
+      }
+      function setTargetResolution(value) {
+        var v = VALID_TARGET_RESOLUTIONS.indexOf(value) !== -1 ? value : "1080";
+        try {
+          localStorage.setItem(TARGET_RESOLUTION_KEY, v);
+          if (v === "auto") {
+            localStorage.setItem(QUALITY_MODE_KEY, "auto");
+          } else {
+            localStorage.setItem(QUALITY_MODE_KEY, "high");
+          }
+        } catch (err) {
+        }
+        return v;
+      }
+      function targetResolutionPixels(target) {
+        var t = target || getTargetResolution();
+        if (t === "auto") return 0;
+        return parseInt(t, 10) || 0;
+      }
+      function orderSourcesForTargetResolution(sources, target) {
+        if (!sources || !sources.length) return sources || [];
+        var targetPx = targetResolutionPixels(target);
+        if (!targetPx) return sources.slice();
+        return sources.slice().sort(function(a, b) {
+          var ha = parseHeightFromLabel(a.label);
+          var hb = parseHeightFromLabel(b.label);
+          function score(h) {
+            if (!h) return -1;
+            if (h === targetPx) return 1e4 + h;
+            if (h < targetPx) return 5e3 + h;
+            return h;
+          }
+          var sa = score(ha);
+          var sb = score(hb);
+          if (sa !== sb) return sb - sa;
+          if (a.priority !== b.priority) return a.priority - b.priority;
+          return hb - ha;
+        });
+      }
+      function maxSourceHeight(play) {
+        var sources = play && play.sources ? play.sources : [];
+        var max = 0;
+        for (var i = 0; i < sources.length; i++) {
+          var h = parseHeightFromLabel(sources[i].label);
+          if (h > max) max = h;
+        }
+        return max;
+      }
+      function isBelowTargetResolution(play, target) {
+        var targetPx = targetResolutionPixels(target);
+        if (!targetPx || !play) return false;
+        return maxSourceHeight(play) < targetPx;
       }
       function getPlayBackend() {
         try {
@@ -146,7 +238,7 @@ var TizenflixGate = (() => {
           if (stored && VALID_QUALITY_MODES.indexOf(stored) !== -1) return stored;
         } catch (err) {
         }
-        return "auto";
+        return "high";
       }
       function setQualityMode(mode) {
         var m = VALID_QUALITY_MODES.indexOf(mode) !== -1 ? mode : "auto";
@@ -178,11 +270,46 @@ var TizenflixGate = (() => {
         } catch (err) {
         }
       }
+      function levelHeightsFromHls(hls) {
+        var out = [];
+        if (!hls || !hls.levels) return out;
+        for (var i = 0; i < hls.levels.length; i++) {
+          out.push({
+            index: i,
+            height: hls.levels[i].height || 0,
+            bitrate: hls.levels[i].bitrate || 0
+          });
+        }
+        return out;
+      }
+      function levelIndexForTargetHeight(hls, targetPixels) {
+        var indexed = levelHeightsFromHls(hls);
+        if (!indexed.length) return -1;
+        indexed.sort(function(a, b) {
+          return a.height - b.height;
+        });
+        if (!targetPixels) {
+          return indexed[0].index;
+        }
+        var best = null;
+        for (var i = 0; i < indexed.length; i++) {
+          var item = indexed[i];
+          if (item.height > 0 && item.height <= targetPixels) best = item;
+        }
+        if (best) return best.index;
+        return indexed[indexed.length - 1].index;
+      }
+      function levelIndexForLegacyMode(hls, mode) {
+        if (mode === "high") return levelIndexForTargetHeight(hls, 1080);
+        if (mode === "medium") return levelIndexForTargetHeight(hls, 720);
+        if (mode === "low") return levelIndexForTargetHeight(hls, 480);
+        return -1;
+      }
       function legacyModeToLevel(mode, levelCount) {
         if (!levelCount || levelCount < 1) return -1;
-        if (mode === "high") return 0;
-        if (mode === "medium") return levelCount > 1 ? 1 : 0;
-        if (mode === "low") return levelCount - 1;
+        if (mode === "high") return levelCount - 1;
+        if (mode === "medium") return levelCount > 1 ? Math.floor(levelCount / 2) : 0;
+        if (mode === "low") return 0;
         return -1;
       }
       function getQualityPreference() {
@@ -215,7 +342,8 @@ var TizenflixGate = (() => {
         if (!pref.legacyMode || !hls || !hls.levels || !hls.levels.length) {
           return { mode: "auto", level: -1 };
         }
-        var level = legacyModeToLevel(pref.legacyMode, hls.levels.length);
+        var level = levelIndexForLegacyMode(hls, pref.legacyMode);
+        if (level < 0) level = legacyModeToLevel(pref.legacyMode, hls.levels.length);
         if (level < 0) return setQualityAuto();
         return setQualityLevel(level);
       }
@@ -278,10 +406,12 @@ var TizenflixGate = (() => {
       }
       function getExtraBuffering() {
         try {
-          return localStorage.getItem(EXTRA_BUFFER_KEY) === "1";
+          var stored = localStorage.getItem(EXTRA_BUFFER_KEY);
+          if (stored === "1") return true;
+          if (stored === "0") return false;
         } catch (err) {
-          return false;
         }
+        return isTizenClient();
       }
       function setExtraBuffering(enabled) {
         try {
@@ -334,6 +464,22 @@ var TizenflixGate = (() => {
         } catch (err) {
         }
         return code;
+      }
+      function getAudioPref() {
+        try {
+          var stored = localStorage.getItem(AUDIO_PREF_KEY);
+          if (stored && VALID_AUDIO_PREFS.indexOf(stored) !== -1) return stored;
+        } catch (err) {
+        }
+        return "original";
+      }
+      function setAudioPref(pref) {
+        var value = VALID_AUDIO_PREFS.indexOf(pref) !== -1 ? pref : "original";
+        try {
+          localStorage.setItem(AUDIO_PREF_KEY, value);
+        } catch (err) {
+        }
+        return value;
       }
       function getUiAnimations() {
         try {
@@ -392,6 +538,7 @@ var TizenflixGate = (() => {
       }
       function orderSourcesForPlay(play) {
         var sources = listM3u8Sources(play);
+        sources = orderSourcesForTargetResolution(sources, getTargetResolution());
         if (!play || !play.recommended) return sources;
         var first = null;
         var rest = [];
@@ -485,6 +632,17 @@ var TizenflixGate = (() => {
         setQualityAuto,
         setQualityLevel,
         resolveLegacyQualityLevel,
+        levelIndexForLegacyMode,
+        levelIndexForTargetHeight,
+        getTargetResolution,
+        setTargetResolution,
+        targetResolutionPixels,
+        preferredQualityForTarget,
+        parseHeightFromLabel,
+        orderSourcesForTargetResolution,
+        maxSourceHeight,
+        isBelowTargetResolution,
+        VALID_TARGET_RESOLUTIONS,
         checkHealth,
         resolveMovie,
         resolveTvEpisode,
@@ -512,6 +670,11 @@ var TizenflixGate = (() => {
         cyclePlaybackSpeed,
         getCatalogLang,
         setCatalogLang,
+        CATALOG_LANG_KEY,
+        AUDIO_PREF_KEY,
+        VALID_AUDIO_PREFS,
+        getAudioPref,
+        setAudioPref,
         getUiAnimations,
         setUiAnimations
       };
@@ -705,9 +868,9 @@ var TizenflixGate = (() => {
           cycleSubtitles(video);
         });
       }
-      var READY_TIMEOUT_MS = 12e3;
+      var READY_TIMEOUT_MS = 5e3;
       var HLS_PRIME_BUFFER_SEC = 4;
-      var HLS_PRIME_TIMEOUT_MS = 8e3;
+      var HLS_PRIME_TIMEOUT_MS = 3e3;
       var HLS_EARLY_START_BUFFER_SEC = 2;
       var MAX_NON_FATAL_RECOVERIES = 8;
       function beginPlaySession() {
@@ -939,19 +1102,21 @@ var TizenflixGate = (() => {
         return url && url.indexOf("/proxy/stream") !== -1;
       }
       function prefersHlsJsFirst(url) {
+        if (isProxiedHls(url)) return true;
         if (prefersNativeHls()) {
           var pref = config2.getQualityPreference();
           if (pref.mode === "manual") return true;
           return false;
         }
-        return isProxiedHls(url);
+        return false;
       }
       function createHlsInstance() {
         var extra = config2.getExtraBuffering();
+        var baseMax = extra ? 120 : isTizenTv() ? 90 : 60;
         return new Hls({
           enableWorker: false,
-          maxBufferLength: extra ? 120 : 60,
-          maxMaxBufferLength: extra ? 300 : 180,
+          maxBufferLength: baseMax,
+          maxMaxBufferLength: extra ? 300 : isTizenTv() ? 240 : 180,
           maxBufferSize: 120 * 1e3 * 1e3,
           maxBufferHole: 2,
           highBufferWatchdogPeriod: 3,
@@ -972,7 +1137,9 @@ var TizenflixGate = (() => {
           testBandwidth: false,
           abrEwmaDefaultEstimate: 8e6,
           startFragPrefetch: true,
-          backBufferLength: 45
+          backBufferLength: 45,
+          maxStarvationDelay: 4,
+          maxLoadingDelay: 4
         });
       }
       function formatQualityLabel(level) {
@@ -1016,16 +1183,21 @@ var TizenflixGate = (() => {
       function getCurrentQuality(hls, video) {
         if (hls && hls.levels && hls.levels.length) {
           var pref = config2.getQualityPreference();
-          var isAuto = pref.mode === "auto" || hls.currentLevel === -1;
+          var targetAuto = config2.getTargetResolution() === "auto";
+          var isAuto = (pref.mode === "auto" || hls.currentLevel === -1) && targetAuto;
           var activeIndex = isAuto ? hls.loadLevel : hls.currentLevel;
           if (activeIndex == null || activeIndex < 0) activeIndex = hls.loadLevel;
           if (activeIndex == null || activeIndex < 0) activeIndex = 0;
           var activeLevel = hls.levels[activeIndex];
-          var label = activeLevel ? formatQualityLabel(activeLevel) : "\u2014";
-          if (label === "Level") label = "\u2014";
+          var height = activeLevel && activeLevel.height ? activeLevel.height : 0;
+          var label = height ? formatQualityLabelFromHeight(height) : "\u2014";
+          if (!height && activeLevel) {
+            label = formatQualityLabel(activeLevel);
+            if (label === "Level") label = "\u2014";
+          }
           return {
             label,
-            height: activeLevel && activeLevel.height ? activeLevel.height : 0,
+            height,
             isAuto,
             badge: isAuto && label !== "\u2014" ? "Auto \xB7 " + label : label
           };
@@ -1036,17 +1208,52 @@ var TizenflixGate = (() => {
         }
         return { label: "\u2014", height: 0, isAuto: true, badge: "\u2014" };
       }
-      function applyQualityPreference(hls) {
+      function logTargetQualityWarning(hls, onLog) {
+        var target = config2.getTargetResolution();
+        if (target === "auto" || !hls || !hls.levels || !hls.levels.length) return;
+        var targetPx = config2.targetResolutionPixels(target);
+        if (!targetPx) return;
+        var info = getCurrentQuality(hls, hls.media);
+        if (!info.height || info.height >= targetPx) return;
+        var want = config2.preferredQualityForTarget(target) || target + "p";
+        var msg = "Playing " + info.label + " (" + want + " requested)";
+        debug2.debugLog(msg);
+        if (onLog) onLog(msg);
+      }
+      function applyQualityPreference(hls, onLog) {
         if (!hls) return;
-        var pref = config2.resolveLegacyQualityLevel(hls);
-        if (pref.mode === "auto") {
-          hls.currentLevel = -1;
+        var pref = config2.getQualityPreference();
+        if (pref.mode === "manual" && pref.level >= 0) {
+          hls.currentLevel = pref.level;
+          logTargetQualityWarning(hls, onLog);
           return;
         }
-        var levels = hls.levels ? hls.levels.length : 0;
-        if (!levels) return;
-        var level = pref.level;
-        if (level < 0 || level >= levels) level = 0;
+        var target = config2.getTargetResolution();
+        if (target === "auto") {
+          hls.currentLevel = -1;
+          if (typeof hls.minAutoBitrate === "number") hls.minAutoBitrate = 0;
+          var lowIdx = config2.levelIndexForTargetHeight(hls, 0);
+          if (lowIdx >= 0) hls.startLevel = lowIdx;
+          return;
+        }
+        var targetPx = config2.targetResolutionPixels(target);
+        var level = config2.levelIndexForTargetHeight(hls, targetPx);
+        if (level < 0) return;
+        hls.currentLevel = level;
+        var locked = hls.levels[level];
+        if (locked && locked.bitrate) {
+          hls.minAutoBitrate = locked.bitrate;
+        }
+        logTargetQualityWarning(hls, onLog);
+      }
+      function applyQualityMode(hls, mode) {
+        if (!hls) return;
+        if (mode === "auto") {
+          applyQualityPreference(hls);
+          return;
+        }
+        var level = config2.levelIndexForLegacyMode(hls, mode);
+        if (level < 0) return;
         hls.currentLevel = level;
       }
       function setQualityLevel(hls, level) {
@@ -1054,6 +1261,9 @@ var TizenflixGate = (() => {
         if (level < 0) {
           config2.setQualityAuto();
           hls.currentLevel = -1;
+          if (typeof hls.minAutoBitrate === "number") hls.minAutoBitrate = 0;
+          var lowIdx = config2.levelIndexForTargetHeight(hls, 0);
+          if (lowIdx >= 0) hls.startLevel = lowIdx;
           notifyQualityChange(getCurrentQuality(hls, hls.media));
           return true;
         }
@@ -1063,27 +1273,6 @@ var TizenflixGate = (() => {
         hls.currentLevel = level;
         notifyQualityChange(getCurrentQuality(hls, hls.media));
         return true;
-      }
-      function applyQualityMode(hls, mode) {
-        if (!hls) return;
-        var m = mode || config2.getQualityMode();
-        if (m === "auto") {
-          hls.currentLevel = -1;
-          return;
-        }
-        var levels = hls.levels ? hls.levels.length : 0;
-        if (!levels) return;
-        if (m === "high") {
-          hls.currentLevel = 0;
-          return;
-        }
-        if (m === "medium") {
-          hls.currentLevel = levels > 1 ? 1 : 0;
-          return;
-        }
-        if (m === "low") {
-          hls.currentLevel = levels - 1;
-        }
       }
       function reportPlaybackHealth(success) {
         if (playbackReported || !currentProvider) return;
@@ -1157,6 +1346,31 @@ var TizenflixGate = (() => {
           attemptPlay(video, onLog);
         }, HLS_PRIME_TIMEOUT_MS);
       }
+      function setupBufferWatchdog(video, hls, session, onLog) {
+        var lowSince = 0;
+        function checkBuffer() {
+          if (!isActiveSession(session) || !hls || video.paused) return;
+          var ahead = bufferedAheadSec(video);
+          if (ahead >= 8) {
+            lowSince = 0;
+            return;
+          }
+          if (ahead < 3) {
+            var now = Date.now();
+            if (!lowSince) lowSince = now;
+            else if (now - lowSince > 3e3) {
+              lowSince = 0;
+              recoverNonFatalHlsError(hls, video, { details: "bufferStalledError" }, onLog);
+            }
+          } else {
+            lowSince = 0;
+          }
+        }
+        video.addEventListener("timeupdate", checkBuffer);
+        trackCleanup(function() {
+          video.removeEventListener("timeupdate", checkBuffer);
+        });
+      }
       function setupHlsStallRecovery(video, hls, session, onLog) {
         var stallTimer = null;
         function clearStall() {
@@ -1200,6 +1414,7 @@ var TizenflixGate = (() => {
           try {
             if (video.currentTime > 0) video.currentTime += 0.05;
             hls.startLoad(-1);
+            applyQualityPreference(hls, onLog);
             safePlay(video);
           } catch (e) {
           }
@@ -1208,6 +1423,7 @@ var TizenflixGate = (() => {
         if (details === "fragLoadTimeOut" || details === "fragLoadError") {
           try {
             hls.startLoad(-1);
+            applyQualityPreference(hls, onLog);
           } catch (e) {
           }
           return true;
@@ -1235,11 +1451,12 @@ var TizenflixGate = (() => {
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
         setupHlsStallRecovery(video, hlsInstance, session, onLog);
+        setupBufferWatchdog(video, hlsInstance, session, onLog);
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
           if (!isActiveSession(session)) return;
           debug2.debugLog("HLS.js manifest parsed");
           if (onLog) onLog("HLS.js manifest parsed \u2014 buffering ahead");
-          applyQualityPreference(hlsInstance);
+          applyQualityPreference(hlsInstance, onLog);
           notifyQualityChange(getCurrentQuality(hlsInstance, video));
           setupPlaybackHealthReport(video, session);
           startHlsPlaybackWhenBuffered(video, videoWrap, title, onLog, session, hlsInstance);
@@ -1319,7 +1536,7 @@ var TizenflixGate = (() => {
       }
       function playNativeHls(video, url, onLog, videoWrap, title, session, onStallFallback, onFatal) {
         debug2.debugLog("Player path: native HLS");
-        if (onLog) onLog("Player path: native HLS (wait up to 12s, then HLS.js fallback)");
+        if (onLog) onLog("Player path: native HLS (wait up to 5s, then HLS.js fallback)");
         setCrossOrigin(video, true);
         video.src = url;
         setupNativeQualityTracking(video, session);
@@ -2302,6 +2519,22 @@ var TizenflixGate = (() => {
           closePanel();
         });
       }
+      function formatSourceLabel(src) {
+        var label = src.label || src.provider || src.sourceId || "Source";
+        if (!src.audioLanguage && src.audioVariant !== "original" && src.audioVariant !== "dubbed") {
+          return label;
+        }
+        var hint = "";
+        if (src.audioVariant === "original") {
+          hint = (src.audioLanguage ? src.audioLanguage.toUpperCase() + " " : "") + "original";
+        } else if (src.audioVariant === "dubbed") {
+          hint = (src.audioLanguage ? src.audioLanguage.toUpperCase() + " " : "") + "dub";
+        } else if (src.audioLanguage) {
+          hint = src.audioLanguage.toUpperCase();
+        }
+        if (hint) return label + " \xB7 " + hint;
+        return label;
+      }
       function renderServerPanel(panel) {
         var session = playbackSession.get();
         panel.innerHTML = '<h3 class="player-panel-title">Server</h3><div class="player-panel-loading">Loading\u2026</div>';
@@ -2310,7 +2543,7 @@ var TizenflixGate = (() => {
         var sources = session && session.sources || [];
         for (var i = 0; i < sources.length; i++) {
           var src = sources[i];
-          var label = src.label || src.provider || src.sourceId || "Source " + (i + 1);
+          var label = formatSourceLabel(src);
           var active = session && session.currentSourceIndex === i ? " is-active" : "";
           html += '<button type="button" class="player-panel-item focusable' + active + '" data-source-index="' + i + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
         }
@@ -2640,7 +2873,7 @@ var TizenflixGate = (() => {
       ];
       var AUTO_RESOLVE_QUERY = "backend=auto";
       var TMDB_BACKUP_QUERY = "backend=tmdb-native&sources=twoembed,vidrock,vidsrcnet,vidzee";
-      var PRIMARY_RESOLVE_TIMEOUT_MS = 2e4;
+      var FAST_RESOLVE_TIMEOUT_MS = 5e3;
       var playSession = 0;
       var progressSaveTimer = null;
       var lastProgressSaveAt = 0;
@@ -2995,6 +3228,7 @@ var TizenflixGate = (() => {
                     tierIndex,
                     count: countPlayableSources(play)
                   });
+                  finish();
                 }
               }).catch(function(err) {
                 debug2.debugLog("Resolve failed (" + entry.label + "): " + err.message);
@@ -3075,6 +3309,12 @@ var TizenflixGate = (() => {
         video.playbackRate = config2.getPlaybackSpeed();
         bindAutoplayHandler(video, onStatus);
         debug2.debugLog("Playing: " + (title || play.title || ""));
+        if (play.warnings && play.warnings.length) {
+          for (var w = 0; w < play.warnings.length; w++) {
+            if (onStatus) onStatus(play.warnings[w]);
+            else debug2.debugLog(play.warnings[w]);
+          }
+        }
         function log(msg) {
           if (onStatus) onStatus(msg);
           else debug2.debugLog(msg);
@@ -3124,15 +3364,15 @@ var TizenflixGate = (() => {
       function buildMoviePrimaryAttempts(tmdbId) {
         return [
           {
-            label: "TMDB-native backups",
+            label: "Auto (fast)",
             run: function() {
-              return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+              return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
             }
           },
           {
-            label: "Auto",
+            label: "TMDB-native backups",
             run: function() {
-              return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+              return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, FAST_RESOLVE_TIMEOUT_MS);
             }
           }
         ];
@@ -3154,6 +3394,18 @@ var TizenflixGate = (() => {
       function buildTvPrimaryAttempts(tmdbId, season, episode) {
         return [
           {
+            label: "Auto (fast)",
+            run: function() {
+              return api.resolveTvEpisode(
+                tmdbId,
+                season,
+                episode,
+                AUTO_RESOLVE_QUERY,
+                FAST_RESOLVE_TIMEOUT_MS
+              );
+            }
+          },
+          {
             label: "TMDB-native backups",
             run: function() {
               return api.resolveTvEpisode(
@@ -3161,19 +3413,7 @@ var TizenflixGate = (() => {
                 season,
                 episode,
                 TMDB_BACKUP_QUERY,
-                PRIMARY_RESOLVE_TIMEOUT_MS
-              );
-            }
-          },
-          {
-            label: "Auto",
-            run: function() {
-              return api.resolveTvEpisode(
-                tmdbId,
-                season,
-                episode,
-                AUTO_RESOLVE_QUERY,
-                PRIMARY_RESOLVE_TIMEOUT_MS
+                FAST_RESOLVE_TIMEOUT_MS
               );
             }
           }
@@ -3238,6 +3478,23 @@ var TizenflixGate = (() => {
         return ensureApiReachable().then(function() {
           return raceResolveAttempts(primary, onStatus, session).then(function(result) {
             if (result.play && api.hasPlayableSources(result.play)) {
+              var target = config2.getTargetResolution();
+              if (target !== "auto" && config2.isBelowTargetResolution(result.play, target)) {
+                var want = config2.preferredQualityForTarget(target) || target + "p";
+                if (onStatus) onStatus("No " + want + " source \u2014 trying alternate server\u2026");
+                return resolveWithTizenFallback(vidking, onStatus, session).then(function(vkResult) {
+                  if (vkResult.play && api.hasPlayableSources(vkResult.play)) {
+                    var vkMax = config2.maxSourceHeight(vkResult.play);
+                    var primaryMax = config2.maxSourceHeight(result.play);
+                    if (vkMax > primaryMax) {
+                      vkResult.fallbacks = [];
+                      return vkResult;
+                    }
+                  }
+                  result.fallbacks = vidking;
+                  return result;
+                });
+              }
               result.fallbacks = vidking;
               return result;
             }
@@ -3256,22 +3513,22 @@ var TizenflixGate = (() => {
         });
       }
       function prefetchMovie(tmdbId) {
-        raceResolveAttempts(buildMoviePrimaryAttempts(tmdbId), null, playSession).then(function(result) {
-          if (result.play && api.hasPlayableSources(result.play)) {
-            playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), result.play);
-            warmManifestFromPlay(result.play);
+        api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
+            playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
+            warmManifestFromPlay(play);
           }
         }).catch(function() {
         });
       }
       function prefetchTvEpisode(tmdbId, season, episode) {
-        raceResolveAttempts(buildTvPrimaryAttempts(tmdbId, season, episode), null, playSession).then(function(result) {
-          if (result.play && api.hasPlayableSources(result.play)) {
+        api.resolveTvEpisode(tmdbId, season, episode, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
             playbackSession.setPrefetch(
               playbackSession.prefetchKey("tv", tmdbId, season, episode),
-              result.play
+              play
             );
-            warmManifestFromPlay(result.play);
+            warmManifestFromPlay(play);
           }
         }).catch(function() {
         });
@@ -4269,6 +4526,17 @@ var TizenflixGate = (() => {
         var profile = motion.getMotionProfile();
         animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
       }
+      function scrollEpisodeItemToAnchor(el) {
+        var main = getMainRoot();
+        if (!main || !el) return;
+        var mainRect = main.getBoundingClientRect();
+        var itemRect = el.getBoundingClientRect();
+        var itemTop = itemRect.top - mainRect.top + main.scrollTop;
+        var anchorY = motion.computeBrowseLaneAnchorY(main);
+        var targetScrollTop = Math.max(0, itemTop - anchorY);
+        var profile = motion.getMotionProfile();
+        animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
+      }
       function setDetailEpisodesRevealHandler(fn) {
         detailEpisodesRevealHandler = fn || null;
       }
@@ -4292,7 +4560,7 @@ var TizenflixGate = (() => {
               var detailSection = el.closest(".detail-episodes-section");
               if (detailSection) {
                 if (isEpisodeItem(el)) {
-                  scrollIntoView(el);
+                  scrollEpisodeItemToAnchor(el);
                 } else {
                   scrollDetailSectionToAnchor(detailSection);
                 }
@@ -4396,7 +4664,7 @@ var TizenflixGate = (() => {
         var browseFocusToggled = updateBrowseFocusMode(el);
         updateNeighborDepth(el);
         var skipRowAnchor = shouldSkipRowAnchorScroll(el);
-        var needsVerticalAnchor = !skipRowAnchor && (rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el));
+        var needsVerticalAnchor = !skipRowAnchor && (rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el) || isEpisodeItem(el));
         if (skipRowAnchor && rowChanged) {
           var mainRoot = getMainRoot();
           if (mainRoot && mainRoot.scrollTop > 2) {

@@ -1,6 +1,8 @@
 import { detectStreamType, slugify } from "../../normalize/detect-type.js";
+import { tagPlayableSource } from "../../normalize/audio-metadata.js";
 import type { PlayResponse } from "../../types.js";
 import { extractVideo } from "../extractors/registry.js";
+import { runWithExtractLang } from "../extract-context.js";
 import { getCfBypassUsedInContext, runWithCfContext } from "../network/client.js";
 import type { ExtractedVideo } from "../types.js";
 import { AUTO_TMDB_SOURCE_IDS } from "./auto-sources.js";
@@ -15,6 +17,7 @@ export interface TmdbNativeResolveOptions extends TmdbNativeResolveOpts {
   onePerSource?: boolean;
   /** Explicit priority order for merge (auto source ids). */
   mergeOrder?: string[];
+  targetAudioLang?: string;
 }
 
 type ResolvedEntry = {
@@ -51,16 +54,21 @@ function toPlayResponse(
 
   for (const entry of entries) {
     const type = detectStreamType(entry.video.source);
-    sources.push({
-      id: `tmdb-${slugify(entry.sourceId)}-${slugify(entry.serverName)}-${sources.length}`,
-      provider: `${entry.sourceName}/${entry.serverName}`,
-      label: entry.serverName,
-      type,
-      url: entry.video.source,
-      priority: priorityOffset + sources.length,
-      sourceId: entry.sourceId,
-      upstreamHeaders: entry.video.headers,
-    });
+    sources.push(
+      tagPlayableSource(
+        {
+          id: `tmdb-${slugify(entry.sourceId)}-${slugify(entry.serverName)}-${sources.length}`,
+          provider: `${entry.sourceName}/${entry.serverName}`,
+          label: entry.serverName,
+          type,
+          url: entry.video.source,
+          priority: priorityOffset + sources.length,
+          sourceId: entry.sourceId,
+          upstreamHeaders: entry.video.headers,
+        },
+        entry.video
+      )
+    );
     for (const sub of entry.video.subtitles) {
       if (!sub.file) continue;
       const key = `${sub.label}::${sub.file}`;
@@ -172,34 +180,36 @@ async function resolveOneSource(
 
   try {
     const result = await Promise.race([
-      runWithCfContext(async () => {
-        const entries = await source.buildEntries(opts);
-        if (!entries.length) throw new Error("api_hop: no server entries");
+      runWithExtractLang(opts.targetAudioLang ?? opts.lang, () =>
+        runWithCfContext(async () => {
+          const entries = await source.buildEntries(opts);
+          if (!entries.length) throw new Error("api_hop: no server entries");
 
-        const resolved: Array<Omit<ResolvedEntry, "sourceId" | "ms">> = [];
-        const errors: string[] = [];
+          const resolved: Array<Omit<ResolvedEntry, "sourceId" | "ms">> = [];
+          const errors: string[] = [];
 
-        for (const entry of entries.slice(0, 8)) {
-          try {
-            const video = await extractVideo(entry.url, entry.name);
-            if (!video.source) continue;
-            resolved.push({
-              serverName: entry.name,
-              sourceName: source.name,
-              video,
-            });
-            if (opts.onePerSource) break;
-          } catch (err) {
-            errors.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+          for (const entry of entries.slice(0, 8)) {
+            try {
+              const video = await extractVideo(entry.url, entry.name);
+              if (!video.source) continue;
+              resolved.push({
+                serverName: entry.name,
+                sourceName: source.name,
+                video,
+              });
+              if (opts.onePerSource) break;
+            } catch (err) {
+              errors.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+            }
           }
-        }
 
-        if (!resolved.length) {
-          throw new Error(errors.join("; ") || "extract: no playable sources");
-        }
+          if (!resolved.length) {
+            throw new Error(errors.join("; ") || "extract: no playable sources");
+          }
 
-        return { resolved, cfBypassUsed: getCfBypassUsedInContext() };
-      }),
+          return { resolved, cfBypassUsed: getCfBypassUsedInContext() };
+        })
+      ),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("network: source timeout")), perSourceTimeout)
       ),

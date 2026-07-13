@@ -20,12 +20,23 @@ const MANIFEST_CACHE_TTL_MS = 60_000;
 interface ManifestCacheEntry {
   body: string;
   expiresAt: number;
+  audioLang?: string;
 }
 
 const manifestCache = new Map<string, ManifestCacheEntry>();
 
+function manifestCacheKey(
+  targetUrl: string,
+  preferredAudioLang?: string,
+  maxHeight?: number
+): string {
+  return `${targetUrl}::${preferredAudioLang ?? ""}::${maxHeight ?? 1080}`;
+}
+
 export interface UpstreamHeaderOptions {
   referer?: string;
+  preferredAudioLang?: string;
+  maxHeight?: number;
 }
 
 export function buildUpstreamHeaders(options?: UpstreamHeaderOptions): HeadersInit {
@@ -103,7 +114,12 @@ export async function fetchProxiedStream(
     looksLikeM3u8Url(targetUrl) || looksLikeM3u8ContentType(contentType);
 
   if (mightBeM3u8) {
-    const cached = manifestCache.get(targetUrl);
+    const cacheKey = manifestCacheKey(
+      targetUrl,
+      headerOptions?.preferredAudioLang,
+      headerOptions?.maxHeight
+    );
+    const cached = manifestCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return {
         status: 200,
@@ -115,10 +131,14 @@ export async function fetchProxiedStream(
 
     const text = await upstream.text();
     if (upstream.ok && shouldRewriteAsM3u8(targetUrl, contentType, text)) {
-      const rewritten = rewriteM3u8(text, targetUrl, publicBase, headerOptions?.referer);
-      manifestCache.set(targetUrl, {
+      const rewritten = rewriteM3u8(text, targetUrl, publicBase, headerOptions?.referer, {
+        preferredAudioLang: headerOptions?.preferredAudioLang,
+        maxHeight: headerOptions?.maxHeight,
+      });
+      manifestCache.set(cacheKey, {
         body: rewritten,
         expiresAt: Date.now() + MANIFEST_CACHE_TTL_MS,
+        audioLang: headerOptions?.preferredAudioLang,
       });
       return {
         status: upstream.status,

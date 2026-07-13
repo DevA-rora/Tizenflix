@@ -39,6 +39,10 @@ export interface PlayableSource {
   sourceId?: string;
   /** Per-source upstream headers for Streamflix embed hosts */
   upstreamHeaders?: Record<string, string>;
+  /** ISO-ish audio track language when known (en, ja, fr, …) */
+  audioLanguage?: string;
+  /** Original voice acting vs dub when known */
+  audioVariant?: "original" | "dubbed" | "unknown";
 }
 
 export interface PlayResponse {
@@ -61,6 +65,10 @@ export interface PlayResponse {
   nextEpisode: null | { season: string; episode: string };
   backend?: "vidking" | "streamflix" | "tmdb-native" | "auto";
   resolveMs?: number;
+  audioPreference?: {
+    mode: "original" | "specific";
+    targetLanguage: string;
+  };
   onlySourceId?: string;
   sourceResults?: Array<{
     sourceId: string;
@@ -111,6 +119,10 @@ export interface ResolveOptions {
   sourceTimeoutMs?: number;
   /** Catalog / resolve language (e.g. en, de, fr) */
   lang?: string;
+  /** Audio / dubbing preference: original or ISO code (e.g. ja, en) */
+  audioLang?: string;
+  /** Resolved target audio language for extractors and proxy */
+  targetAudioLang?: string;
 }
 
 export interface ServerResult {

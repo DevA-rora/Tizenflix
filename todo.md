@@ -7,14 +7,18 @@
 - [ ] Revamp player UI (it looks like ass rn)
 - [ ] Integrate subDL + opensubtitles so that we can get subtitles with movies! (replace current picker)
 opensubtitles is best for western movies, and subDL for non-western showings.
-- [ ] Add to settings the ability for the user to change the size of the grids. (small medium large)
 - [ ] Add ease in animation when the lefthandside toolbar/drawer is opened up.
 - [ ] Add a loading ring when the source stuff is being loaded.
+- [ ] Add settings for user to change default resolution + resolution while streaming.
+- [ ] Consistent streams
 
 # Doing
-- [ ] Add new row to keyboard.
+- [ ] Apply anchor effect from the homepage to episode selector.
 
 # Done
+- [x] Let the user select which language they want streams to play in (native or specific)
+- [x] Add to settings the ability for the user to change the size of the grids. (small medium large)
+- [x] Add new row to keyboard.
 - [x] When typing in search, make sure that the button press down from the backspace lands on F, not on b
 - [x] Fix weird row UI scrolling bug (skipping rows!?!)
 - [x] When leaving search, make sure that you focus on the first movie, not the last movie in the row.

@@ -277,6 +277,23 @@ function renderSettingsPanel(panel) {
   });
 }
 
+function formatSourceLabel(src) {
+  var label = src.label || src.provider || src.sourceId || "Source";
+  if (!src.audioLanguage && src.audioVariant !== "original" && src.audioVariant !== "dubbed") {
+    return label;
+  }
+  var hint = "";
+  if (src.audioVariant === "original") {
+    hint = (src.audioLanguage ? src.audioLanguage.toUpperCase() + " " : "") + "original";
+  } else if (src.audioVariant === "dubbed") {
+    hint = (src.audioLanguage ? src.audioLanguage.toUpperCase() + " " : "") + "dub";
+  } else if (src.audioLanguage) {
+    hint = src.audioLanguage.toUpperCase();
+  }
+  if (hint) return label + " · " + hint;
+  return label;
+}
+
 function renderServerPanel(panel) {
   var session = playbackSession.get();
   panel.innerHTML = '<h3 class="player-panel-title">Server</h3><div class="player-panel-loading">Loading…</div>';
@@ -286,7 +303,7 @@ function renderServerPanel(panel) {
   var sources = (session && session.sources) || [];
   for (var i = 0; i < sources.length; i++) {
     var src = sources[i];
-    var label = src.label || src.provider || src.sourceId || "Source " + (i + 1);
+    var label = formatSourceLabel(src);
     var active = session && session.currentSourceIndex === i ? " is-active" : "";
     html +=
       '<button type="button" class="player-panel-item focusable' +

@@ -2,6 +2,7 @@ import {
   INLINE_MANIFEST_PREFIX,
   storeInlineManifest,
 } from "../../cache/inline-manifest-cache.js";
+import { getExtractLang } from "../extract-context.js";
 import type { ExtractorDef } from "../types.js";
 import { fetchJson, fetchText } from "../http.js";
 import { BROWSER_UA } from "../http.js";
@@ -106,5 +107,5 @@ export const vixSrcExtractor: ExtractorDef = {
   name: "VixSrc",
   mainUrl: MAIN_URL,
   aliasUrls: ["https://vixsrc.to/"],
-  extract: (link) => extractVixSrc(link),
+  extract: (link) => extractVixSrc(link, getExtractLang()),
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { validatePlaySources } from "../src/proxy/validate-sources.js";
+import { validatePlaySources, parseHeightFromLabel } from "../src/proxy/validate-sources.js";
 import type { PlayResponse } from "../src/types.js";
 
 const PUBLIC_BASE = "http://localhost:8790";
@@ -135,6 +135,52 @@ describe("validatePlaySources tizen profile", () => {
     expect(result.warnings?.some((w) => w.includes("Hydrogen"))).toBe(true);
   });
 
+  it("prefers higher resolution labels over faster lower-resolution probes", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      const manifest = "#EXTM3U\n#EXTINF:8,\nhttps://cdn.example/seg.ts";
+      const slow = url.includes("1080");
+      if (slow) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => (url.includes(".ts") ? "video/mp2t" : "application/vnd.apple.mpegurl") },
+        text: async () => manifest,
+      };
+    }) as unknown as typeof fetch;
+
+    const play: PlayResponse = {
+      ...samplePlay(),
+      sources: [
+        {
+          id: "oxygen-720p-0",
+          provider: "Oxygen",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/oxygen/720p.m3u8",
+          priority: 0,
+        },
+        {
+          id: "oxygen-1080p-0",
+          provider: "Oxygen",
+          label: "1080p",
+          type: "m3u8",
+          url: "https://cdn.example/oxygen/1080p.m3u8",
+          priority: 0,
+        },
+      ],
+      recommended: "oxygen-720p-0",
+    };
+
+    const result = await validatePlaySources(play, PUBLIC_BASE, fetchImpl, {
+      tizenProfile: true,
+    });
+
+    expect(result.recommended).toBe("oxygen-1080p-0");
+    expect(result.sources[0]?.label).toBe("1080p");
+  });
+
   it("probes only probeLimit sources and keeps the rest as fallbacks", async () => {
     const fetchImpl = mockFetch();
     const play: PlayResponse = {
@@ -167,5 +213,62 @@ describe("validatePlaySources tizen profile", () => {
 
     expect(result.sources).toHaveLength(2);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("parseHeightFromLabel", () => {
+  it("parses 4K and 2160p labels as 2160", () => {
+    expect(parseHeightFromLabel("4K")).toBe(2160);
+    expect(parseHeightFromLabel("2160p")).toBe(2160);
+    expect(parseHeightFromLabel("1080p")).toBe(1080);
+  });
+});
+
+describe("validatePlaySources preferredQuality", () => {
+  it("prefers 1080p over faster 720p when preferredQuality is set", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      const manifest = "#EXTM3U\n#EXTINF:8,\nhttps://cdn.example/seg.ts";
+      const slow = url.includes("1080");
+      if (slow) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => (url.includes(".ts") ? "video/mp2t" : "application/vnd.apple.mpegurl") },
+        text: async () => manifest,
+      };
+    }) as unknown as typeof fetch;
+
+    const play: PlayResponse = {
+      ...samplePlay(),
+      sources: [
+        {
+          id: "oxygen-720p-0",
+          provider: "Oxygen",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/oxygen/720p.m3u8",
+          priority: 0,
+        },
+        {
+          id: "oxygen-1080p-0",
+          provider: "Oxygen",
+          label: "1080p",
+          type: "m3u8",
+          url: "https://cdn.example/oxygen/1080p.m3u8",
+          priority: 0,
+        },
+      ],
+      recommended: "oxygen-720p-0",
+    };
+
+    const result = await validatePlaySources(play, PUBLIC_BASE, fetchImpl, {
+      tizenProfile: true,
+      preferredQuality: "1080p",
+    });
+
+    expect(result.recommended).toBe("oxygen-1080p-0");
+    expect(result.sources[0]?.label).toBe("1080p");
   });
 });

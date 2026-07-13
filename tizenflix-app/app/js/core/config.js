@@ -10,6 +10,11 @@ var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
 var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
 var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
 var ANIMATIONS_KEY = "tizenflix.uiAnimations";
+var CATALOG_LANG_KEY = "tizenflix.catalogLang";
+var AUDIO_PREF_KEY = "tizenflix.audioPref";
+var TARGET_RESOLUTION_KEY = "tizenflix.targetResolution";
+var VALID_AUDIO_PREFS = ["original", "en", "de", "fr", "it", "es", "ja", "ko", "zh"];
+var VALID_TARGET_RESOLUTIONS = ["auto", "720", "1080", "2160"];
 var API_PORT = "8790";
 var PLAY_RESOLVE_TIMEOUT_MS = 20000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -50,8 +55,106 @@ function buildPlayQuery(extra) {
   if (backend) parts.push("backend=" + backend);
   var lang = getCatalogLang();
   if (lang && lang !== "en") parts.push("lang=" + encodeURIComponent(lang));
+  var audioLang = getAudioPref();
+  if (audioLang) parts.push("audioLang=" + encodeURIComponent(audioLang));
+  var targetRes = getTargetResolution();
+  if (targetRes !== "auto") {
+    parts.push("maxHeight=" + encodeURIComponent(targetRes));
+    var pq = preferredQualityForTarget(targetRes);
+    if (pq) parts.push("preferredQuality=" + encodeURIComponent(pq));
+  }
   if (extra) parts.push(extra);
   return parts.length ? parts.join("&") : null;
+}
+
+function preferredQualityForTarget(target) {
+  if (target === "2160") return "4K";
+  if (target === "1080") return "1080p";
+  if (target === "720") return "720p";
+  return null;
+}
+
+function parseHeightFromLabel(label) {
+  if (!label) return 0;
+  var text = String(label).toLowerCase();
+  if (/4k|2160/.test(text)) return 2160;
+  var match = text.match(/(\d+)\s*p/);
+  if (match) return parseInt(match[1], 10);
+  return 0;
+}
+
+function getTargetResolution() {
+  try {
+    var stored = localStorage.getItem(TARGET_RESOLUTION_KEY);
+    if (stored && VALID_TARGET_RESOLUTIONS.indexOf(stored) !== -1) return stored;
+    var legacy = localStorage.getItem(QUALITY_MODE_KEY);
+    if (legacy === "high") return "1080";
+    if (legacy === "medium") return "720";
+    if (legacy === "low") return "720";
+    if (legacy === "auto") return "auto";
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return "1080";
+}
+
+function setTargetResolution(value) {
+  var v = VALID_TARGET_RESOLUTIONS.indexOf(value) !== -1 ? value : "1080";
+  try {
+    localStorage.setItem(TARGET_RESOLUTION_KEY, v);
+    if (v === "auto") {
+      localStorage.setItem(QUALITY_MODE_KEY, "auto");
+    } else {
+      localStorage.setItem(QUALITY_MODE_KEY, "high");
+    }
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return v;
+}
+
+function targetResolutionPixels(target) {
+  var t = target || getTargetResolution();
+  if (t === "auto") return 0;
+  return parseInt(t, 10) || 0;
+}
+
+function orderSourcesForTargetResolution(sources, target) {
+  if (!sources || !sources.length) return sources || [];
+  var targetPx = targetResolutionPixels(target);
+  if (!targetPx) return sources.slice();
+
+  return sources.slice().sort(function (a, b) {
+    var ha = parseHeightFromLabel(a.label);
+    var hb = parseHeightFromLabel(b.label);
+    function score(h) {
+      if (!h) return -1;
+      if (h === targetPx) return 10000 + h;
+      if (h < targetPx) return 5000 + h;
+      return h;
+    }
+    var sa = score(ha);
+    var sb = score(hb);
+    if (sa !== sb) return sb - sa;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return hb - ha;
+  });
+}
+
+function maxSourceHeight(play) {
+  var sources = play && play.sources ? play.sources : [];
+  var max = 0;
+  for (var i = 0; i < sources.length; i++) {
+    var h = parseHeightFromLabel(sources[i].label);
+    if (h > max) max = h;
+  }
+  return max;
+}
+
+function isBelowTargetResolution(play, target) {
+  var targetPx = targetResolutionPixels(target);
+  if (!targetPx || !play) return false;
+  return maxSourceHeight(play) < targetPx;
 }
 
 function getPlayBackend() {
@@ -216,23 +319,32 @@ function levelHeightsFromHls(hls) {
   return out;
 }
 
-/** Pick HLS level index by target height (high = best up to 1080p). */
-function levelIndexForLegacyMode(hls, mode) {
+/** Pick HLS level index for a target pixel height (0 = auto). */
+function levelIndexForTargetHeight(hls, targetPixels) {
   var indexed = levelHeightsFromHls(hls);
   if (!indexed.length) return -1;
   indexed.sort(function (a, b) {
     return a.height - b.height;
   });
 
-  if (mode === "low") return indexed[0].index;
-  if (mode === "medium") return indexed[Math.floor(indexed.length / 2)].index;
-  if (mode === "high") {
-    var best = indexed[indexed.length - 1];
-    for (var i = 0; i < indexed.length; i++) {
-      if (indexed[i].height > 0 && indexed[i].height <= 1080) best = indexed[i];
-    }
-    return best.index;
+  if (!targetPixels) {
+    return indexed[0].index;
   }
+
+  var best = null;
+  for (var i = 0; i < indexed.length; i++) {
+    var item = indexed[i];
+    if (item.height > 0 && item.height <= targetPixels) best = item;
+  }
+  if (best) return best.index;
+  return indexed[indexed.length - 1].index;
+}
+
+/** Pick HLS level index by target height (high = best up to 1080p). */
+function levelIndexForLegacyMode(hls, mode) {
+  if (mode === "high") return levelIndexForTargetHeight(hls, 1080);
+  if (mode === "medium") return levelIndexForTargetHeight(hls, 720);
+  if (mode === "low") return levelIndexForTargetHeight(hls, 480);
   return -1;
 }
 
@@ -357,10 +469,13 @@ function setAutoplayBufferSec(sec) {
 
 function getExtraBuffering() {
   try {
-    return localStorage.getItem(EXTRA_BUFFER_KEY) === "1";
+    var stored = localStorage.getItem(EXTRA_BUFFER_KEY);
+    if (stored === "1") return true;
+    if (stored === "0") return false;
   } catch (err) {
-    return false;
+    /* TV may block storage */
   }
+  return isTizenClient();
 }
 
 function setExtraBuffering(enabled) {
@@ -424,6 +539,26 @@ function setCatalogLang(lang) {
     /* */
   }
   return code;
+}
+
+function getAudioPref() {
+  try {
+    var stored = localStorage.getItem(AUDIO_PREF_KEY);
+    if (stored && VALID_AUDIO_PREFS.indexOf(stored) !== -1) return stored;
+  } catch (err) {
+    /* */
+  }
+  return "original";
+}
+
+function setAudioPref(pref) {
+  var value = VALID_AUDIO_PREFS.indexOf(pref) !== -1 ? pref : "original";
+  try {
+    localStorage.setItem(AUDIO_PREF_KEY, value);
+  } catch (err) {
+    /* */
+  }
+  return value;
 }
 
 function getUiAnimations() {
@@ -498,6 +633,7 @@ function listM3u8Sources(play) {
 
 function orderSourcesForPlay(play) {
   var sources = listM3u8Sources(play);
+  sources = orderSourcesForTargetResolution(sources, getTargetResolution());
   if (!play || !play.recommended) return sources;
   var first = null;
   var rest = [];
@@ -598,6 +734,17 @@ module.exports = {
   setQualityAuto: setQualityAuto,
   setQualityLevel: setQualityLevel,
   resolveLegacyQualityLevel: resolveLegacyQualityLevel,
+  levelIndexForLegacyMode: levelIndexForLegacyMode,
+  levelIndexForTargetHeight: levelIndexForTargetHeight,
+  getTargetResolution: getTargetResolution,
+  setTargetResolution: setTargetResolution,
+  targetResolutionPixels: targetResolutionPixels,
+  preferredQualityForTarget: preferredQualityForTarget,
+  parseHeightFromLabel: parseHeightFromLabel,
+  orderSourcesForTargetResolution: orderSourcesForTargetResolution,
+  maxSourceHeight: maxSourceHeight,
+  isBelowTargetResolution: isBelowTargetResolution,
+  VALID_TARGET_RESOLUTIONS: VALID_TARGET_RESOLUTIONS,
   checkHealth: checkHealth,
   resolveMovie: resolveMovie,
   resolveTvEpisode: resolveTvEpisode,
@@ -625,6 +772,11 @@ module.exports = {
   cyclePlaybackSpeed: cyclePlaybackSpeed,
   getCatalogLang: getCatalogLang,
   setCatalogLang: setCatalogLang,
+  CATALOG_LANG_KEY: CATALOG_LANG_KEY,
+  AUDIO_PREF_KEY: AUDIO_PREF_KEY,
+  VALID_AUDIO_PREFS: VALID_AUDIO_PREFS,
+  getAudioPref: getAudioPref,
+  setAudioPref: setAudioPref,
   getUiAnimations: getUiAnimations,
   setUiAnimations: setUiAnimations,
 };

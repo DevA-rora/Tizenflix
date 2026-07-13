@@ -216,6 +216,32 @@ async function getMovieCertification(
   return null;
 }
 
+const originalLangCache = new Map<string, { lang: string | null; expiresAt: number }>();
+const ORIGINAL_LANG_TTL_MS = 60 * 60 * 1000;
+
+export async function getOriginalLanguage(
+  apiKey: string,
+  type: "movie" | "tv",
+  tmdbId: string
+): Promise<string | null> {
+  const cacheKey = `${type}:${tmdbId}`;
+  const cached = originalLangCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.lang;
+  }
+
+  try {
+    const data = await tmdbFetch<Record<string, unknown>>(`/${type}/${tmdbId}`, apiKey);
+    const lang =
+      typeof data.original_language === "string" ? data.original_language.toLowerCase() : null;
+    originalLangCache.set(cacheKey, { lang, expiresAt: Date.now() + ORIGINAL_LANG_TTL_MS });
+    return lang;
+  } catch {
+    originalLangCache.set(cacheKey, { lang: null, expiresAt: Date.now() + ORIGINAL_LANG_TTL_MS });
+    return null;
+  }
+}
+
 export async function getTitle(
   apiKey: string,
   type: "movie" | "tv",

@@ -14,6 +14,24 @@ var viewMode = "home";
 var itemCache = {};
 var heroEl = null;
 var featuredItem = null;
+var prefetchTimer = null;
+var prefetchFocusKey = null;
+
+function schedulePrefetch(item) {
+  if (!item || !item.id) return;
+  var key = (item.type || "movie") + ":" + item.id;
+  if (prefetchFocusKey === key) return;
+  prefetchFocusKey = key;
+  if (prefetchTimer) clearTimeout(prefetchTimer);
+  prefetchTimer = setTimeout(function () {
+    prefetchTimer = null;
+    if (item.type === "tv") {
+      playback.prefetchTvEpisode(item.id, item.season || 1, item.episode || 1);
+    } else {
+      playback.prefetchMovie(item.id);
+    }
+  }, 300);
+}
 
 function setMode(mode) {
   viewMode = mode || "home";
@@ -193,6 +211,7 @@ function handleFocusChange(meta) {
 
   if (!heroEl) return;
   hero.updateHero(heroEl, item);
+  schedulePrefetch(item);
 }
 
 function loadContent(el) {

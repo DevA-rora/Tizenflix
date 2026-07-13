@@ -9,6 +9,8 @@ export interface ExtractedVideo {
   subtitles: ExtractedSubtitle[];
   headers?: Record<string, string>;
   type?: string;
+  audioLanguage?: string;
+  audioVariant?: "original" | "dubbed" | "unknown";
 }
 
 export interface StreamServer {

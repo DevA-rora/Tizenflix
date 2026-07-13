@@ -1,4 +1,5 @@
 import { detectStreamType, slugify } from "../normalize/detect-type.js";
+import { tagPlayableSource } from "../normalize/audio-metadata.js";
 import type { PlayResponse } from "../types.js";
 import { getEnabledProviders } from "./providers/registry.js";
 import type { ContentProvider } from "./providers/types.js";
@@ -48,15 +49,20 @@ function toPlayResponse(opts: StreamflixResolveOptions, servers: ResolvedEntry[]
 
   for (const entry of servers) {
     const type = detectStreamType(entry.video.source);
-    sources.push({
-      id: `streamflix-${slugify(entry.provider)}-${slugify(entry.serverName)}-${sources.length}`,
-      provider: `${entry.provider}/${entry.serverName}`,
-      label: entry.serverName,
-      type,
-      url: entry.video.source,
-      priority: sources.length,
-      upstreamHeaders: entry.video.headers,
-    });
+    sources.push(
+      tagPlayableSource(
+        {
+          id: `streamflix-${slugify(entry.provider)}-${slugify(entry.serverName)}-${sources.length}`,
+          provider: `${entry.provider}/${entry.serverName}`,
+          label: entry.serverName,
+          type,
+          url: entry.video.source,
+          priority: sources.length,
+          upstreamHeaders: entry.video.headers,
+        },
+        entry.video
+      )
+    );
 
     for (const sub of entry.video.subtitles) {
       if (!sub.file) continue;

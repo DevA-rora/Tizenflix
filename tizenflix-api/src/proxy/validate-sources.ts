@@ -14,13 +14,28 @@ export interface ValidatePlayOptions {
   tizenProfile?: boolean;
   /** Max m3u8 sources to probe before respond; rest are unverified fallbacks. */
   probeLimit?: number;
+  /** Prefer sources matching this label (e.g. 1080p, 4K). */
+  preferredQuality?: string;
+}
+
+export function parseHeightFromLabel(label: string): number {
+  const lower = label.toLowerCase();
+  if (/4k|2160/.test(lower)) return 2160;
+  const match = label.match(/(\d+)\s*p/i);
+  if (match) return parseInt(match[1], 10);
+  return 0;
 }
 
 function parseBandwidthFromLabel(label: string): number {
-  const match = label.match(/(\d+)\s*p/i);
-  if (match) return parseInt(match[1], 10) * 1000;
+  const h = parseHeightFromLabel(label);
+  if (h > 0) return h * 1000;
   if (/auto/i.test(label)) return 9999;
   return 0;
+}
+
+function targetHeightFromPreferredQuality(preferred?: string): number {
+  if (!preferred) return 0;
+  return parseHeightFromLabel(preferred);
 }
 
 function firstSegmentUrl(manifestBody: string): string | null {
@@ -103,6 +118,27 @@ interface RankedSource {
   healthScore: number;
 }
 
+function sortSourcesForProbe(sources: PlayableSource[], preferredQuality?: string): PlayableSource[] {
+  const targetPx = targetHeightFromPreferredQuality(preferredQuality);
+  if (!targetPx) return sources;
+
+  return sources.slice().sort((a, b) => {
+    const ha = parseHeightFromLabel(a.label);
+    const hb = parseHeightFromLabel(b.label);
+    const score = (h: number) => {
+      if (!h) return -1;
+      if (h === targetPx) return 10000 + h;
+      if (h < targetPx) return 5000 + h;
+      return h;
+    };
+    const sa = score(ha);
+    const sb = score(hb);
+    if (sa !== sb) return sb - sa;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return hb - ha;
+  });
+}
+
 function isVixSrcProvider(provider: string): boolean {
   return /^vixsrc/i.test(provider);
 }
@@ -117,11 +153,14 @@ function sortPlayableSources(ranked: RankedSource[]): PlayableSource[] {
       const vixA = isVixSrcProvider(a.source.provider);
       const vixB = isVixSrcProvider(b.source.provider);
       if (vixA !== vixB) return vixA ? -1 : 1;
+      const bwA = parseBandwidthFromLabel(a.source.label);
+      const bwB = parseBandwidthFromLabel(b.source.label);
+      if (bwA !== bwB) return bwB - bwA;
       const segA = a.probe.segmentMs ?? 99999;
       const segB = b.probe.segmentMs ?? 99999;
       if (segA !== segB) return segA - segB;
       if (a.healthScore !== b.healthScore) return b.healthScore - a.healthScore;
-      return parseBandwidthFromLabel(b.source.label) - parseBandwidthFromLabel(a.source.label);
+      return 0;
     })
     .map((r) => r.source);
 }
@@ -182,7 +221,10 @@ export async function validatePlaySources(
   const rankedPlayable: RankedSource[] = [];
   const blocked: PlayableSource[] = [];
 
-  const m3u8Sources = play.sources.filter((s) => s.type === "m3u8");
+  const m3u8Sources = sortSourcesForProbe(
+    play.sources.filter((s) => s.type === "m3u8"),
+    options.preferredQuality
+  );
   const nonM3u8 = play.sources.filter((s) => s.type !== "m3u8");
   const probeLimit = options.probeLimit ?? Number.POSITIVE_INFINITY;
   const toProbe = m3u8Sources.slice(0, probeLimit);
@@ -222,6 +264,16 @@ export async function validatePlaySources(
 
   const playable = sortPlayableSources(rankedPlayable);
   const sources = options.tizenProfile ? playable : [...playable, ...blocked];
+
+  const targetPx = targetHeightFromPreferredQuality(options.preferredQuality);
+  if (targetPx && playable.length) {
+    const bestH = parseHeightFromLabel(playable[0]!.label);
+    if (bestH > 0 && bestH < targetPx) {
+      warnings.push(
+        `No ${options.preferredQuality} source available — playing best available (${playable[0]!.label})`
+      );
+    }
+  }
 
   if (!playable.length && play.sources.length) {
     warnings.push(

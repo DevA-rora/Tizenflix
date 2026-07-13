@@ -572,6 +572,19 @@ function scrollDetailSectionToAnchor(sectionEl) {
   animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
 }
 
+function scrollEpisodeItemToAnchor(el) {
+  var main = getMainRoot();
+  if (!main || !el) return;
+
+  var mainRect = main.getBoundingClientRect();
+  var itemRect = el.getBoundingClientRect();
+  var itemTop = itemRect.top - mainRect.top + main.scrollTop;
+  var anchorY = motion.computeBrowseLaneAnchorY(main);
+  var targetScrollTop = Math.max(0, itemTop - anchorY);
+  var profile = motion.getMotionProfile();
+  animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
+}
+
 function setDetailEpisodesRevealHandler(fn) {
   detailEpisodesRevealHandler = fn || null;
 }
@@ -597,7 +610,7 @@ function scheduleVerticalAnchor(el, options) {
         var detailSection = el.closest(".detail-episodes-section");
         if (detailSection) {
           if (isEpisodeItem(el)) {
-            scrollIntoView(el);
+            scrollEpisodeItemToAnchor(el);
           } else {
             scrollDetailSectionToAnchor(detailSection);
           }
@@ -724,7 +737,11 @@ function focusElement(el) {
   var skipRowAnchor = shouldSkipRowAnchorScroll(el);
   var needsVerticalAnchor =
     !skipRowAnchor &&
-    (rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el));
+    (rowChanged ||
+      spotlightToggled ||
+      browseFocusToggled ||
+      isContentRowMisaligned(el) ||
+      isEpisodeItem(el));
   if (skipRowAnchor && rowChanged) {
     var mainRoot = getMainRoot();
     if (mainRoot && mainRoot.scrollTop > 2) {

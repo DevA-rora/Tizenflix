@@ -67,6 +67,39 @@ tiny/index.m3u8`;
     expect(out).toContain("low/index.m3u8");
     expect(out).not.toContain("tiny/index.m3u8");
   });
+
+  it("prefers Japanese audio when requested", () => {
+    const input = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio0",NAME="English",DEFAULT=YES,LANGUAGE="en",URI="audio-en.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio0",NAME="Japanese",DEFAULT=NO,LANGUAGE="ja",URI="audio-ja.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=1280x720,AUDIO="audio0"
+high/index.m3u8`;
+
+    const out = simplifyMasterForTv(input, { preferredAudioLang: "ja" });
+    expect(out).toContain("Japanese");
+    expect(out).not.toContain('LANGUAGE="en"');
+  });
+
+  it("keeps 4K rung when maxHeight is 2160", () => {
+    const input = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio0",NAME="Eng.Original",DEFAULT=YES,LANGUAGE="en",URI="audio-en.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=15000000,RESOLUTION=3840x2160,AUDIO="audio0"
+4k/index.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080,AUDIO="audio0"
+1080p/index.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=1280x720,AUDIO="audio0"
+720p/index.m3u8`;
+
+    const capped = simplifyMasterForTv(input, { maxHeight: 1080 });
+    expect(capped).not.toContain("4k/index.m3u8");
+    expect(capped).toContain("1080p/index.m3u8");
+
+    const full = simplifyMasterForTv(input, { maxHeight: 2160 });
+    expect(full).toContain("4k/index.m3u8");
+    expect(full).toContain("1080p/index.m3u8");
+  });
 });
 
 describe("rewriteM3u8", () => {

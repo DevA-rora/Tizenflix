@@ -19,6 +19,11 @@ var TizenflixApp = (() => {
       var EXTRA_BUFFER_KEY = "tizenflix.extraBuffer";
       var PLAYBACK_SPEED_KEY = "tizenflix.playbackSpeed";
       var ANIMATIONS_KEY = "tizenflix.uiAnimations";
+      var CATALOG_LANG_KEY = "tizenflix.catalogLang";
+      var AUDIO_PREF_KEY = "tizenflix.audioPref";
+      var TARGET_RESOLUTION_KEY = "tizenflix.targetResolution";
+      var VALID_AUDIO_PREFS = ["original", "en", "de", "fr", "it", "es", "ja", "ko", "zh"];
+      var VALID_TARGET_RESOLUTIONS = ["auto", "720", "1080", "2160"];
       var API_PORT = "8790";
       var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
@@ -53,8 +58,95 @@ var TizenflixApp = (() => {
         if (backend) parts.push("backend=" + backend);
         var lang = getCatalogLang();
         if (lang && lang !== "en") parts.push("lang=" + encodeURIComponent(lang));
+        var audioLang = getAudioPref();
+        if (audioLang) parts.push("audioLang=" + encodeURIComponent(audioLang));
+        var targetRes = getTargetResolution();
+        if (targetRes !== "auto") {
+          parts.push("maxHeight=" + encodeURIComponent(targetRes));
+          var pq = preferredQualityForTarget(targetRes);
+          if (pq) parts.push("preferredQuality=" + encodeURIComponent(pq));
+        }
         if (extra) parts.push(extra);
         return parts.length ? parts.join("&") : null;
+      }
+      function preferredQualityForTarget(target) {
+        if (target === "2160") return "4K";
+        if (target === "1080") return "1080p";
+        if (target === "720") return "720p";
+        return null;
+      }
+      function parseHeightFromLabel(label) {
+        if (!label) return 0;
+        var text = String(label).toLowerCase();
+        if (/4k|2160/.test(text)) return 2160;
+        var match = text.match(/(\d+)\s*p/);
+        if (match) return parseInt(match[1], 10);
+        return 0;
+      }
+      function getTargetResolution() {
+        try {
+          var stored = localStorage.getItem(TARGET_RESOLUTION_KEY);
+          if (stored && VALID_TARGET_RESOLUTIONS.indexOf(stored) !== -1) return stored;
+          var legacy = localStorage.getItem(QUALITY_MODE_KEY);
+          if (legacy === "high") return "1080";
+          if (legacy === "medium") return "720";
+          if (legacy === "low") return "720";
+          if (legacy === "auto") return "auto";
+        } catch (err) {
+        }
+        return "1080";
+      }
+      function setTargetResolution(value) {
+        var v = VALID_TARGET_RESOLUTIONS.indexOf(value) !== -1 ? value : "1080";
+        try {
+          localStorage.setItem(TARGET_RESOLUTION_KEY, v);
+          if (v === "auto") {
+            localStorage.setItem(QUALITY_MODE_KEY, "auto");
+          } else {
+            localStorage.setItem(QUALITY_MODE_KEY, "high");
+          }
+        } catch (err) {
+        }
+        return v;
+      }
+      function targetResolutionPixels(target) {
+        var t = target || getTargetResolution();
+        if (t === "auto") return 0;
+        return parseInt(t, 10) || 0;
+      }
+      function orderSourcesForTargetResolution(sources, target) {
+        if (!sources || !sources.length) return sources || [];
+        var targetPx = targetResolutionPixels(target);
+        if (!targetPx) return sources.slice();
+        return sources.slice().sort(function(a, b) {
+          var ha = parseHeightFromLabel(a.label);
+          var hb = parseHeightFromLabel(b.label);
+          function score(h) {
+            if (!h) return -1;
+            if (h === targetPx) return 1e4 + h;
+            if (h < targetPx) return 5e3 + h;
+            return h;
+          }
+          var sa = score(ha);
+          var sb = score(hb);
+          if (sa !== sb) return sb - sa;
+          if (a.priority !== b.priority) return a.priority - b.priority;
+          return hb - ha;
+        });
+      }
+      function maxSourceHeight(play) {
+        var sources = play && play.sources ? play.sources : [];
+        var max = 0;
+        for (var i = 0; i < sources.length; i++) {
+          var h = parseHeightFromLabel(sources[i].label);
+          if (h > max) max = h;
+        }
+        return max;
+      }
+      function isBelowTargetResolution(play, target) {
+        var targetPx = targetResolutionPixels(target);
+        if (!targetPx || !play) return false;
+        return maxSourceHeight(play) < targetPx;
       }
       function getPlayBackend() {
         try {
@@ -146,7 +238,7 @@ var TizenflixApp = (() => {
           if (stored && VALID_QUALITY_MODES.indexOf(stored) !== -1) return stored;
         } catch (err) {
         }
-        return "auto";
+        return "high";
       }
       function setQualityMode(mode) {
         var m = VALID_QUALITY_MODES.indexOf(mode) !== -1 ? mode : "auto";
@@ -178,11 +270,46 @@ var TizenflixApp = (() => {
         } catch (err) {
         }
       }
+      function levelHeightsFromHls(hls) {
+        var out = [];
+        if (!hls || !hls.levels) return out;
+        for (var i = 0; i < hls.levels.length; i++) {
+          out.push({
+            index: i,
+            height: hls.levels[i].height || 0,
+            bitrate: hls.levels[i].bitrate || 0
+          });
+        }
+        return out;
+      }
+      function levelIndexForTargetHeight(hls, targetPixels) {
+        var indexed = levelHeightsFromHls(hls);
+        if (!indexed.length) return -1;
+        indexed.sort(function(a, b) {
+          return a.height - b.height;
+        });
+        if (!targetPixels) {
+          return indexed[0].index;
+        }
+        var best = null;
+        for (var i = 0; i < indexed.length; i++) {
+          var item = indexed[i];
+          if (item.height > 0 && item.height <= targetPixels) best = item;
+        }
+        if (best) return best.index;
+        return indexed[indexed.length - 1].index;
+      }
+      function levelIndexForLegacyMode(hls, mode) {
+        if (mode === "high") return levelIndexForTargetHeight(hls, 1080);
+        if (mode === "medium") return levelIndexForTargetHeight(hls, 720);
+        if (mode === "low") return levelIndexForTargetHeight(hls, 480);
+        return -1;
+      }
       function legacyModeToLevel(mode, levelCount) {
         if (!levelCount || levelCount < 1) return -1;
-        if (mode === "high") return 0;
-        if (mode === "medium") return levelCount > 1 ? 1 : 0;
-        if (mode === "low") return levelCount - 1;
+        if (mode === "high") return levelCount - 1;
+        if (mode === "medium") return levelCount > 1 ? Math.floor(levelCount / 2) : 0;
+        if (mode === "low") return 0;
         return -1;
       }
       function getQualityPreference() {
@@ -215,7 +342,8 @@ var TizenflixApp = (() => {
         if (!pref.legacyMode || !hls || !hls.levels || !hls.levels.length) {
           return { mode: "auto", level: -1 };
         }
-        var level = legacyModeToLevel(pref.legacyMode, hls.levels.length);
+        var level = levelIndexForLegacyMode(hls, pref.legacyMode);
+        if (level < 0) level = legacyModeToLevel(pref.legacyMode, hls.levels.length);
         if (level < 0) return setQualityAuto();
         return setQualityLevel(level);
       }
@@ -278,10 +406,12 @@ var TizenflixApp = (() => {
       }
       function getExtraBuffering() {
         try {
-          return localStorage.getItem(EXTRA_BUFFER_KEY) === "1";
+          var stored = localStorage.getItem(EXTRA_BUFFER_KEY);
+          if (stored === "1") return true;
+          if (stored === "0") return false;
         } catch (err) {
-          return false;
         }
+        return isTizenClient();
       }
       function setExtraBuffering(enabled) {
         try {
@@ -334,6 +464,22 @@ var TizenflixApp = (() => {
         } catch (err) {
         }
         return code;
+      }
+      function getAudioPref() {
+        try {
+          var stored = localStorage.getItem(AUDIO_PREF_KEY);
+          if (stored && VALID_AUDIO_PREFS.indexOf(stored) !== -1) return stored;
+        } catch (err) {
+        }
+        return "original";
+      }
+      function setAudioPref(pref) {
+        var value = VALID_AUDIO_PREFS.indexOf(pref) !== -1 ? pref : "original";
+        try {
+          localStorage.setItem(AUDIO_PREF_KEY, value);
+        } catch (err) {
+        }
+        return value;
       }
       function getUiAnimations() {
         try {
@@ -392,6 +538,7 @@ var TizenflixApp = (() => {
       }
       function orderSourcesForPlay(play) {
         var sources = listM3u8Sources(play);
+        sources = orderSourcesForTargetResolution(sources, getTargetResolution());
         if (!play || !play.recommended) return sources;
         var first = null;
         var rest = [];
@@ -485,6 +632,17 @@ var TizenflixApp = (() => {
         setQualityAuto,
         setQualityLevel,
         resolveLegacyQualityLevel,
+        levelIndexForLegacyMode,
+        levelIndexForTargetHeight,
+        getTargetResolution,
+        setTargetResolution,
+        targetResolutionPixels,
+        preferredQualityForTarget,
+        parseHeightFromLabel,
+        orderSourcesForTargetResolution,
+        maxSourceHeight,
+        isBelowTargetResolution,
+        VALID_TARGET_RESOLUTIONS,
         checkHealth,
         resolveMovie,
         resolveTvEpisode,
@@ -512,6 +670,11 @@ var TizenflixApp = (() => {
         cyclePlaybackSpeed,
         getCatalogLang,
         setCatalogLang,
+        CATALOG_LANG_KEY,
+        AUDIO_PREF_KEY,
+        VALID_AUDIO_PREFS,
+        getAudioPref,
+        setAudioPref,
         getUiAnimations,
         setUiAnimations
       };
@@ -1319,6 +1482,17 @@ var TizenflixApp = (() => {
         var profile = motion.getMotionProfile();
         animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
       }
+      function scrollEpisodeItemToAnchor(el) {
+        var main = getMainRoot();
+        if (!main || !el) return;
+        var mainRect = main.getBoundingClientRect();
+        var itemRect = el.getBoundingClientRect();
+        var itemTop = itemRect.top - mainRect.top + main.scrollTop;
+        var anchorY = motion.computeBrowseLaneAnchorY(main);
+        var targetScrollTop = Math.max(0, itemTop - anchorY);
+        var profile = motion.getMotionProfile();
+        animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
+      }
       function setDetailEpisodesRevealHandler(fn) {
         detailEpisodesRevealHandler = fn || null;
       }
@@ -1342,7 +1516,7 @@ var TizenflixApp = (() => {
               var detailSection = el.closest(".detail-episodes-section");
               if (detailSection) {
                 if (isEpisodeItem(el)) {
-                  scrollIntoView(el);
+                  scrollEpisodeItemToAnchor(el);
                 } else {
                   scrollDetailSectionToAnchor(detailSection);
                 }
@@ -1446,7 +1620,7 @@ var TizenflixApp = (() => {
         var browseFocusToggled = updateBrowseFocusMode(el);
         updateNeighborDepth(el);
         var skipRowAnchor = shouldSkipRowAnchorScroll(el);
-        var needsVerticalAnchor = !skipRowAnchor && (rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el));
+        var needsVerticalAnchor = !skipRowAnchor && (rowChanged || spotlightToggled || browseFocusToggled || isContentRowMisaligned(el) || isEpisodeItem(el));
         if (skipRowAnchor && rowChanged) {
           var mainRoot = getMainRoot();
           if (mainRoot && mainRoot.scrollTop > 2) {
@@ -2191,9 +2365,9 @@ var TizenflixApp = (() => {
           cycleSubtitles(video);
         });
       }
-      var READY_TIMEOUT_MS = 12e3;
+      var READY_TIMEOUT_MS = 5e3;
       var HLS_PRIME_BUFFER_SEC = 4;
-      var HLS_PRIME_TIMEOUT_MS = 8e3;
+      var HLS_PRIME_TIMEOUT_MS = 3e3;
       var HLS_EARLY_START_BUFFER_SEC = 2;
       var MAX_NON_FATAL_RECOVERIES = 8;
       function beginPlaySession() {
@@ -2425,19 +2599,21 @@ var TizenflixApp = (() => {
         return url && url.indexOf("/proxy/stream") !== -1;
       }
       function prefersHlsJsFirst(url) {
+        if (isProxiedHls(url)) return true;
         if (prefersNativeHls()) {
           var pref = config.getQualityPreference();
           if (pref.mode === "manual") return true;
           return false;
         }
-        return isProxiedHls(url);
+        return false;
       }
       function createHlsInstance() {
         var extra = config.getExtraBuffering();
+        var baseMax = extra ? 120 : isTizenTv() ? 90 : 60;
         return new Hls({
           enableWorker: false,
-          maxBufferLength: extra ? 120 : 60,
-          maxMaxBufferLength: extra ? 300 : 180,
+          maxBufferLength: baseMax,
+          maxMaxBufferLength: extra ? 300 : isTizenTv() ? 240 : 180,
           maxBufferSize: 120 * 1e3 * 1e3,
           maxBufferHole: 2,
           highBufferWatchdogPeriod: 3,
@@ -2458,7 +2634,9 @@ var TizenflixApp = (() => {
           testBandwidth: false,
           abrEwmaDefaultEstimate: 8e6,
           startFragPrefetch: true,
-          backBufferLength: 45
+          backBufferLength: 45,
+          maxStarvationDelay: 4,
+          maxLoadingDelay: 4
         });
       }
       function formatQualityLabel(level) {
@@ -2502,16 +2680,21 @@ var TizenflixApp = (() => {
       function getCurrentQuality(hls, video) {
         if (hls && hls.levels && hls.levels.length) {
           var pref = config.getQualityPreference();
-          var isAuto = pref.mode === "auto" || hls.currentLevel === -1;
+          var targetAuto = config.getTargetResolution() === "auto";
+          var isAuto = (pref.mode === "auto" || hls.currentLevel === -1) && targetAuto;
           var activeIndex = isAuto ? hls.loadLevel : hls.currentLevel;
           if (activeIndex == null || activeIndex < 0) activeIndex = hls.loadLevel;
           if (activeIndex == null || activeIndex < 0) activeIndex = 0;
           var activeLevel = hls.levels[activeIndex];
-          var label = activeLevel ? formatQualityLabel(activeLevel) : "\u2014";
-          if (label === "Level") label = "\u2014";
+          var height = activeLevel && activeLevel.height ? activeLevel.height : 0;
+          var label = height ? formatQualityLabelFromHeight(height) : "\u2014";
+          if (!height && activeLevel) {
+            label = formatQualityLabel(activeLevel);
+            if (label === "Level") label = "\u2014";
+          }
           return {
             label,
-            height: activeLevel && activeLevel.height ? activeLevel.height : 0,
+            height,
             isAuto,
             badge: isAuto && label !== "\u2014" ? "Auto \xB7 " + label : label
           };
@@ -2522,17 +2705,52 @@ var TizenflixApp = (() => {
         }
         return { label: "\u2014", height: 0, isAuto: true, badge: "\u2014" };
       }
-      function applyQualityPreference(hls) {
+      function logTargetQualityWarning(hls, onLog) {
+        var target = config.getTargetResolution();
+        if (target === "auto" || !hls || !hls.levels || !hls.levels.length) return;
+        var targetPx = config.targetResolutionPixels(target);
+        if (!targetPx) return;
+        var info = getCurrentQuality(hls, hls.media);
+        if (!info.height || info.height >= targetPx) return;
+        var want = config.preferredQualityForTarget(target) || target + "p";
+        var msg = "Playing " + info.label + " (" + want + " requested)";
+        debug.debugLog(msg);
+        if (onLog) onLog(msg);
+      }
+      function applyQualityPreference(hls, onLog) {
         if (!hls) return;
-        var pref = config.resolveLegacyQualityLevel(hls);
-        if (pref.mode === "auto") {
-          hls.currentLevel = -1;
+        var pref = config.getQualityPreference();
+        if (pref.mode === "manual" && pref.level >= 0) {
+          hls.currentLevel = pref.level;
+          logTargetQualityWarning(hls, onLog);
           return;
         }
-        var levels = hls.levels ? hls.levels.length : 0;
-        if (!levels) return;
-        var level = pref.level;
-        if (level < 0 || level >= levels) level = 0;
+        var target = config.getTargetResolution();
+        if (target === "auto") {
+          hls.currentLevel = -1;
+          if (typeof hls.minAutoBitrate === "number") hls.minAutoBitrate = 0;
+          var lowIdx = config.levelIndexForTargetHeight(hls, 0);
+          if (lowIdx >= 0) hls.startLevel = lowIdx;
+          return;
+        }
+        var targetPx = config.targetResolutionPixels(target);
+        var level = config.levelIndexForTargetHeight(hls, targetPx);
+        if (level < 0) return;
+        hls.currentLevel = level;
+        var locked = hls.levels[level];
+        if (locked && locked.bitrate) {
+          hls.minAutoBitrate = locked.bitrate;
+        }
+        logTargetQualityWarning(hls, onLog);
+      }
+      function applyQualityMode(hls, mode) {
+        if (!hls) return;
+        if (mode === "auto") {
+          applyQualityPreference(hls);
+          return;
+        }
+        var level = config.levelIndexForLegacyMode(hls, mode);
+        if (level < 0) return;
         hls.currentLevel = level;
       }
       function setQualityLevel(hls, level) {
@@ -2540,6 +2758,9 @@ var TizenflixApp = (() => {
         if (level < 0) {
           config.setQualityAuto();
           hls.currentLevel = -1;
+          if (typeof hls.minAutoBitrate === "number") hls.minAutoBitrate = 0;
+          var lowIdx = config.levelIndexForTargetHeight(hls, 0);
+          if (lowIdx >= 0) hls.startLevel = lowIdx;
           notifyQualityChange(getCurrentQuality(hls, hls.media));
           return true;
         }
@@ -2549,27 +2770,6 @@ var TizenflixApp = (() => {
         hls.currentLevel = level;
         notifyQualityChange(getCurrentQuality(hls, hls.media));
         return true;
-      }
-      function applyQualityMode(hls, mode) {
-        if (!hls) return;
-        var m = mode || config.getQualityMode();
-        if (m === "auto") {
-          hls.currentLevel = -1;
-          return;
-        }
-        var levels = hls.levels ? hls.levels.length : 0;
-        if (!levels) return;
-        if (m === "high") {
-          hls.currentLevel = 0;
-          return;
-        }
-        if (m === "medium") {
-          hls.currentLevel = levels > 1 ? 1 : 0;
-          return;
-        }
-        if (m === "low") {
-          hls.currentLevel = levels - 1;
-        }
       }
       function reportPlaybackHealth(success) {
         if (playbackReported || !currentProvider) return;
@@ -2643,6 +2843,31 @@ var TizenflixApp = (() => {
           attemptPlay(video, onLog);
         }, HLS_PRIME_TIMEOUT_MS);
       }
+      function setupBufferWatchdog(video, hls, session, onLog) {
+        var lowSince = 0;
+        function checkBuffer() {
+          if (!isActiveSession(session) || !hls || video.paused) return;
+          var ahead = bufferedAheadSec(video);
+          if (ahead >= 8) {
+            lowSince = 0;
+            return;
+          }
+          if (ahead < 3) {
+            var now = Date.now();
+            if (!lowSince) lowSince = now;
+            else if (now - lowSince > 3e3) {
+              lowSince = 0;
+              recoverNonFatalHlsError(hls, video, { details: "bufferStalledError" }, onLog);
+            }
+          } else {
+            lowSince = 0;
+          }
+        }
+        video.addEventListener("timeupdate", checkBuffer);
+        trackCleanup(function() {
+          video.removeEventListener("timeupdate", checkBuffer);
+        });
+      }
       function setupHlsStallRecovery(video, hls, session, onLog) {
         var stallTimer = null;
         function clearStall() {
@@ -2686,6 +2911,7 @@ var TizenflixApp = (() => {
           try {
             if (video.currentTime > 0) video.currentTime += 0.05;
             hls.startLoad(-1);
+            applyQualityPreference(hls, onLog);
             safePlay(video);
           } catch (e) {
           }
@@ -2694,6 +2920,7 @@ var TizenflixApp = (() => {
         if (details === "fragLoadTimeOut" || details === "fragLoadError") {
           try {
             hls.startLoad(-1);
+            applyQualityPreference(hls, onLog);
           } catch (e) {
           }
           return true;
@@ -2721,11 +2948,12 @@ var TizenflixApp = (() => {
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
         setupHlsStallRecovery(video, hlsInstance, session, onLog);
+        setupBufferWatchdog(video, hlsInstance, session, onLog);
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
           if (!isActiveSession(session)) return;
           debug.debugLog("HLS.js manifest parsed");
           if (onLog) onLog("HLS.js manifest parsed \u2014 buffering ahead");
-          applyQualityPreference(hlsInstance);
+          applyQualityPreference(hlsInstance, onLog);
           notifyQualityChange(getCurrentQuality(hlsInstance, video));
           setupPlaybackHealthReport(video, session);
           startHlsPlaybackWhenBuffered(video, videoWrap, title, onLog, session, hlsInstance);
@@ -2805,7 +3033,7 @@ var TizenflixApp = (() => {
       }
       function playNativeHls(video, url, onLog, videoWrap, title, session, onStallFallback, onFatal) {
         debug.debugLog("Player path: native HLS");
-        if (onLog) onLog("Player path: native HLS (wait up to 12s, then HLS.js fallback)");
+        if (onLog) onLog("Player path: native HLS (wait up to 5s, then HLS.js fallback)");
         setCrossOrigin(video, true);
         video.src = url;
         setupNativeQualityTracking(video, session);
@@ -3543,6 +3771,22 @@ var TizenflixApp = (() => {
           closePanel();
         });
       }
+      function formatSourceLabel(src) {
+        var label = src.label || src.provider || src.sourceId || "Source";
+        if (!src.audioLanguage && src.audioVariant !== "original" && src.audioVariant !== "dubbed") {
+          return label;
+        }
+        var hint = "";
+        if (src.audioVariant === "original") {
+          hint = (src.audioLanguage ? src.audioLanguage.toUpperCase() + " " : "") + "original";
+        } else if (src.audioVariant === "dubbed") {
+          hint = (src.audioLanguage ? src.audioLanguage.toUpperCase() + " " : "") + "dub";
+        } else if (src.audioLanguage) {
+          hint = src.audioLanguage.toUpperCase();
+        }
+        if (hint) return label + " \xB7 " + hint;
+        return label;
+      }
       function renderServerPanel(panel) {
         var session = playbackSession.get();
         panel.innerHTML = '<h3 class="player-panel-title">Server</h3><div class="player-panel-loading">Loading\u2026</div>';
@@ -3551,7 +3795,7 @@ var TizenflixApp = (() => {
         var sources = session && session.sources || [];
         for (var i = 0; i < sources.length; i++) {
           var src = sources[i];
-          var label = src.label || src.provider || src.sourceId || "Source " + (i + 1);
+          var label = formatSourceLabel(src);
           var active = session && session.currentSourceIndex === i ? " is-active" : "";
           html += '<button type="button" class="player-panel-item focusable' + active + '" data-source-index="' + i + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
         }
@@ -3881,7 +4125,7 @@ var TizenflixApp = (() => {
       ];
       var AUTO_RESOLVE_QUERY = "backend=auto";
       var TMDB_BACKUP_QUERY = "backend=tmdb-native&sources=twoembed,vidrock,vidsrcnet,vidzee";
-      var PRIMARY_RESOLVE_TIMEOUT_MS = 2e4;
+      var FAST_RESOLVE_TIMEOUT_MS = 5e3;
       var playSession = 0;
       var progressSaveTimer = null;
       var lastProgressSaveAt = 0;
@@ -4236,6 +4480,7 @@ var TizenflixApp = (() => {
                     tierIndex,
                     count: countPlayableSources(play)
                   });
+                  finish();
                 }
               }).catch(function(err) {
                 debug.debugLog("Resolve failed (" + entry.label + "): " + err.message);
@@ -4316,6 +4561,12 @@ var TizenflixApp = (() => {
         video.playbackRate = config.getPlaybackSpeed();
         bindAutoplayHandler(video, onStatus);
         debug.debugLog("Playing: " + (title || play.title || ""));
+        if (play.warnings && play.warnings.length) {
+          for (var w = 0; w < play.warnings.length; w++) {
+            if (onStatus) onStatus(play.warnings[w]);
+            else debug.debugLog(play.warnings[w]);
+          }
+        }
         function log(msg) {
           if (onStatus) onStatus(msg);
           else debug.debugLog(msg);
@@ -4365,15 +4616,15 @@ var TizenflixApp = (() => {
       function buildMoviePrimaryAttempts(tmdbId) {
         return [
           {
-            label: "TMDB-native backups",
+            label: "Auto (fast)",
             run: function() {
-              return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+              return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
             }
           },
           {
-            label: "Auto",
+            label: "TMDB-native backups",
             run: function() {
-              return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+              return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, FAST_RESOLVE_TIMEOUT_MS);
             }
           }
         ];
@@ -4395,6 +4646,18 @@ var TizenflixApp = (() => {
       function buildTvPrimaryAttempts(tmdbId, season, episode) {
         return [
           {
+            label: "Auto (fast)",
+            run: function() {
+              return api.resolveTvEpisode(
+                tmdbId,
+                season,
+                episode,
+                AUTO_RESOLVE_QUERY,
+                FAST_RESOLVE_TIMEOUT_MS
+              );
+            }
+          },
+          {
             label: "TMDB-native backups",
             run: function() {
               return api.resolveTvEpisode(
@@ -4402,19 +4665,7 @@ var TizenflixApp = (() => {
                 season,
                 episode,
                 TMDB_BACKUP_QUERY,
-                PRIMARY_RESOLVE_TIMEOUT_MS
-              );
-            }
-          },
-          {
-            label: "Auto",
-            run: function() {
-              return api.resolveTvEpisode(
-                tmdbId,
-                season,
-                episode,
-                AUTO_RESOLVE_QUERY,
-                PRIMARY_RESOLVE_TIMEOUT_MS
+                FAST_RESOLVE_TIMEOUT_MS
               );
             }
           }
@@ -4479,6 +4730,23 @@ var TizenflixApp = (() => {
         return ensureApiReachable().then(function() {
           return raceResolveAttempts(primary, onStatus, session).then(function(result) {
             if (result.play && api.hasPlayableSources(result.play)) {
+              var target = config.getTargetResolution();
+              if (target !== "auto" && config.isBelowTargetResolution(result.play, target)) {
+                var want = config.preferredQualityForTarget(target) || target + "p";
+                if (onStatus) onStatus("No " + want + " source \u2014 trying alternate server\u2026");
+                return resolveWithTizenFallback(vidking, onStatus, session).then(function(vkResult) {
+                  if (vkResult.play && api.hasPlayableSources(vkResult.play)) {
+                    var vkMax = config.maxSourceHeight(vkResult.play);
+                    var primaryMax = config.maxSourceHeight(result.play);
+                    if (vkMax > primaryMax) {
+                      vkResult.fallbacks = [];
+                      return vkResult;
+                    }
+                  }
+                  result.fallbacks = vidking;
+                  return result;
+                });
+              }
               result.fallbacks = vidking;
               return result;
             }
@@ -4497,22 +4765,22 @@ var TizenflixApp = (() => {
         });
       }
       function prefetchMovie(tmdbId) {
-        raceResolveAttempts(buildMoviePrimaryAttempts(tmdbId), null, playSession).then(function(result) {
-          if (result.play && api.hasPlayableSources(result.play)) {
-            playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), result.play);
-            warmManifestFromPlay(result.play);
+        api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
+            playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
+            warmManifestFromPlay(play);
           }
         }).catch(function() {
         });
       }
       function prefetchTvEpisode(tmdbId, season, episode) {
-        raceResolveAttempts(buildTvPrimaryAttempts(tmdbId, season, episode), null, playSession).then(function(result) {
-          if (result.play && api.hasPlayableSources(result.play)) {
+        api.resolveTvEpisode(tmdbId, season, episode, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+          if (play && api.hasPlayableSources(play)) {
             playbackSession.setPrefetch(
               playbackSession.prefetchKey("tv", tmdbId, season, episode),
-              result.play
+              play
             );
-            warmManifestFromPlay(result.play);
+            warmManifestFromPlay(play);
           }
         }).catch(function() {
         });
@@ -5699,6 +5967,23 @@ var TizenflixApp = (() => {
       var itemCache = {};
       var heroEl = null;
       var featuredItem = null;
+      var prefetchTimer = null;
+      var prefetchFocusKey = null;
+      function schedulePrefetch(item) {
+        if (!item || !item.id) return;
+        var key = (item.type || "movie") + ":" + item.id;
+        if (prefetchFocusKey === key) return;
+        prefetchFocusKey = key;
+        if (prefetchTimer) clearTimeout(prefetchTimer);
+        prefetchTimer = setTimeout(function() {
+          prefetchTimer = null;
+          if (item.type === "tv") {
+            playback.prefetchTvEpisode(item.id, item.season || 1, item.episode || 1);
+          } else {
+            playback.prefetchMovie(item.id);
+          }
+        }, 300);
+      }
       function setMode(mode) {
         viewMode = mode || "home";
       }
@@ -5846,6 +6131,7 @@ var TizenflixApp = (() => {
         }
         if (!heroEl) return;
         hero.updateHero(heroEl, item);
+        schedulePrefetch(item);
       }
       function loadContent(el) {
         itemCache = {};
@@ -5983,7 +6269,7 @@ var TizenflixApp = (() => {
         ["s", "t", "u", "v", "w", "x"],
         ["y", "z", "1", "2", "3", "4"],
         ["5", "6", "7", "8", "9", "0"],
-        [":", "-", ".", "'", "?", "!"]
+        ["-", ".", "'", "?", "!", ":"]
       ];
       var BACKSPACE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" class="osk-key-icon"><path d="M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 12.59L17.59 17 14 13.41 10.41 17 9 15.59 12.59 12 9 8.41 10.41 7 14 10.59 17.59 7 19 8.41 15.41 12 19 15.59z"/></svg>';
       function createKeyButton(keyDef, rowIdx, colIdx, isLastInRow, crossRight) {
@@ -6400,10 +6686,12 @@ var TizenflixApp = (() => {
         var bufferSec = config.getAutoplayBufferSec();
         var extraBuf = config.getExtraBuffering();
         var catalogLang = config.getCatalogLang();
+        var audioPref = config.getAudioPref();
         var uiAnimations = config.getUiAnimations();
+        var targetRes = config.getTargetResolution();
         var el = document.createElement("div");
         el.className = "screen screen-settings";
-        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button></div><div class="settings-field settings-toggle" data-focus-row="settings-anim"><button type="button" id="uiAnimBtn" class="btn btn-info focusable">TV animation effects: ' + (uiAnimations ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-grid"><label for="gridScaleInput">Grid size: ' + gridScale + '%</label><input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' + gridScale + '" /></div><div class="settings-field" data-focus-row="settings-lang"><label for="catalogLangInput">Catalog language</label><select id="catalogLangInput" class="focusable"><option value="en"' + (catalogLang === "en" ? " selected" : "") + '>English</option><option value="de"' + (catalogLang === "de" ? " selected" : "") + '>German</option><option value="fr"' + (catalogLang === "fr" ? " selected" : "") + '>French</option><option value="it"' + (catalogLang === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (catalogLang === "es" ? " selected" : "") + '>Spanish</option></select></div><div class="settings-field" data-focus-row="settings-autoplay"><button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ' + (autoplay ? "ON" : "OFF") + '</button><label for="autoplayBufferInput">Countdown (sec): ' + bufferSec + '</label><input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' + bufferSec + '" /></div><div class="settings-field" data-focus-row="settings-buffer"><button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' + (extraBuf ? "ON" : "OFF") + '</button></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p><button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
+        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button></div><div class="settings-field settings-toggle" data-focus-row="settings-anim"><button type="button" id="uiAnimBtn" class="btn btn-info focusable">TV animation effects: ' + (uiAnimations ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-grid"><label for="gridScaleInput">Grid size: ' + gridScale + '%</label><input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' + gridScale + '" /></div><div class="settings-field" data-focus-row="settings-lang"><label for="catalogLangInput">Catalog language</label><select id="catalogLangInput" class="focusable"><option value="en"' + (catalogLang === "en" ? " selected" : "") + '>English</option><option value="de"' + (catalogLang === "de" ? " selected" : "") + '>German</option><option value="fr"' + (catalogLang === "fr" ? " selected" : "") + '>French</option><option value="it"' + (catalogLang === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (catalogLang === "es" ? " selected" : "") + '>Spanish</option></select></div><div class="settings-field" data-focus-row="settings-audio"><label for="audioPrefInput">Audio / dubbing</label><select id="audioPrefInput" class="focusable"><option value="original"' + (audioPref === "original" ? " selected" : "") + '>Original voice acting</option><option value="en"' + (audioPref === "en" ? " selected" : "") + '>English</option><option value="de"' + (audioPref === "de" ? " selected" : "") + '>German</option><option value="fr"' + (audioPref === "fr" ? " selected" : "") + '>French</option><option value="it"' + (audioPref === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (audioPref === "es" ? " selected" : "") + '>Spanish</option><option value="ja"' + (audioPref === "ja" ? " selected" : "") + '>Japanese</option><option value="ko"' + (audioPref === "ko" ? " selected" : "") + '>Korean</option><option value="zh"' + (audioPref === "zh" ? " selected" : "") + `>Chinese</option></select><p class="settings-hint">Original uses each title's native language. Some sources may not report audio language and will play with a warning.</p></div><div class="settings-field" data-focus-row="settings-autoplay"><button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ` + (autoplay ? "ON" : "OFF") + '</button><label for="autoplayBufferInput">Countdown (sec): ' + bufferSec + '</label><input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' + bufferSec + '" /></div><div class="settings-field" data-focus-row="settings-buffer"><button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' + (extraBuf ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-resolution"><label for="targetResolutionInput">Default stream quality</label><select id="targetResolutionInput" class="focusable"><option value="auto"' + (targetRes === "auto" ? " selected" : "") + '>Auto</option><option value="720"' + (targetRes === "720" ? " selected" : "") + '>720p</option><option value="1080"' + (targetRes === "1080" ? " selected" : "") + '>1080p</option><option value="2160"' + (targetRes === "2160" ? " selected" : "") + '>4K</option></select><p class="settings-hint">Auto starts on the lowest rung and ramps up. Locked modes prefer matching sources. Quality depends on what each server offers; 4K may buffer heavily on some TVs.</p></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p><button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
         container.appendChild(el);
         var input = el.querySelector("#apiBaseInput");
         var saveBtn = el.querySelector("#saveApiBtn");
@@ -6412,9 +6700,11 @@ var TizenflixApp = (() => {
         var backendBtn = el.querySelector("#backendCycleBtn");
         var gridInput = el.querySelector("#gridScaleInput");
         var langInput = el.querySelector("#catalogLangInput");
+        var audioPrefInput = el.querySelector("#audioPrefInput");
         var autoplayBtn = el.querySelector("#autoplayBtn");
         var bufferInput = el.querySelector("#autoplayBufferInput");
         var extraBtn = el.querySelector("#extraBufferBtn");
+        var targetResInput = el.querySelector("#targetResolutionInput");
         var providersBtn = el.querySelector("#providersBtn");
         var status = el.querySelector("#settingsStatus");
         if (gridInput) {
@@ -6426,6 +6716,11 @@ var TizenflixApp = (() => {
         if (langInput) {
           langInput.addEventListener("change", function() {
             config.setCatalogLang(langInput.value);
+          });
+        }
+        if (audioPrefInput) {
+          audioPrefInput.addEventListener("change", function() {
+            config.setAudioPref(audioPrefInput.value);
           });
         }
         if (autoplayBtn) {
@@ -6446,6 +6741,11 @@ var TizenflixApp = (() => {
             var next = !config.getExtraBuffering();
             config.setExtraBuffering(next);
             extraBtn.textContent = "Extra buffering: " + (next ? "ON" : "OFF");
+          });
+        }
+        if (targetResInput) {
+          targetResInput.addEventListener("change", function() {
+            config.setTargetResolution(targetResInput.value);
           });
         }
         if (providersBtn) {

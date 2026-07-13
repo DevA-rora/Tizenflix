@@ -71,12 +71,16 @@ async function extractVidrock(link: string) {
     ? Object.entries(response).find(([k]) => k.toLowerCase() === serverName.toLowerCase())
     : Object.entries(response).find(([, v]) => v?.url);
 
+  const entryMeta = entry?.[1];
   const actualName = entry?.[0] ?? "";
-  const encUrl = entry?.[1]?.url;
-  const sourceType = entry?.[1]?.type;
+  const encUrl = entryMeta?.url;
+  const sourceType = entryMeta?.type;
   if (!encUrl) throw new Error("Vidrock: no stream URL");
 
   let videoUrl = decryptVidrockUrl(encUrl);
+  const audioLanguage = entryMeta?.language
+    ? String(entryMeta.language).toLowerCase().split("-")[0]
+    : undefined;
 
   if (actualName.toLowerCase() === "atlas" || sourceType === "mp4") {
     try {
@@ -86,6 +90,8 @@ async function extractVidrock(link: string) {
         subtitles: [],
         headers: { Referer: `${MAIN_URL}/`, Origin: MAIN_URL, "User-Agent": BROWSER_UA },
         type: "mp4" as const,
+        audioLanguage,
+        audioVariant: audioLanguage ? "dubbed" : "unknown",
       };
     } catch {
       /* fall through to direct URL */
@@ -97,6 +103,8 @@ async function extractVidrock(link: string) {
     subtitles: [],
     headers: { Referer: `${MAIN_URL}/`, Origin: MAIN_URL, "User-Agent": BROWSER_UA },
     type: videoUrl.includes(".m3u8") || sourceType === "hls" ? ("m3u8" as const) : undefined,
+    audioLanguage,
+    audioVariant: audioLanguage ? "dubbed" : "unknown",
   };
 }
 

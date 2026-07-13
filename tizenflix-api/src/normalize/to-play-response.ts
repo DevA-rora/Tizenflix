@@ -2,6 +2,7 @@ import { SERVER_PRIORITY, TIZEN_SERVER_PRIORITY } from "../constants/servers.js"
 import { fetchMetadata } from "../api/metadata.js";
 import { fetchServerSources, fetchServerSourcesDirect } from "../api/sources.js";
 import { detectStreamType, slugify } from "./detect-type.js";
+import { tagPlayableSource } from "./audio-metadata.js";
 import type {
   DecryptedSourceResponse,
   MediaType,
@@ -50,14 +51,17 @@ function sourcesFromServer(
     const quality = s.quality ?? "Auto";
     const type = detectStreamType(s.url);
     const id = `${slugify(serverName)}-${slugify(quality)}-${out.length}`;
-    out.push({
-      id,
-      provider: serverName,
-      label: quality,
-      type,
-      url: s.url,
-      priority: priorityBase + out.length,
-    });
+    out.push(
+      tagPlayableSource({
+        id,
+        provider: serverName,
+        label: quality,
+        type,
+        url: s.url,
+        priority: priorityBase + out.length,
+        audioVariant: "unknown",
+      })
+    );
   }
   return out;
 }

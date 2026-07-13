@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   getCachedPlay,
+  isCachedPlayValidated,
+  markCachedPlayValidated,
   playResolveCacheKey,
   setCachedPlay,
 } from "../src/cache/play-resolve-cache.js";
@@ -36,6 +38,19 @@ describe("play resolve cache", () => {
     expect(getCachedPlay(key)).toEqual(play);
   });
 
+  it("marks cached plays as validated", () => {
+    const key = playResolveCacheKey({
+      type: "movie",
+      tmdbId: "27205",
+      backend: "auto",
+    });
+    const play = samplePlay();
+    setCachedPlay(key, play);
+    expect(isCachedPlayValidated(key)).toBe(false);
+    markCachedPlayValidated(key);
+    expect(isCachedPlayValidated(key)).toBe(true);
+  });
+
   it("builds distinct keys per title", () => {
     const movieKey = playResolveCacheKey({ type: "movie", tmdbId: "1", backend: "auto" });
     const tvKey = playResolveCacheKey({
@@ -65,5 +80,21 @@ describe("play resolve cache", () => {
       sources: "twoembed,vidrock,vidsrcnet",
     });
     expect(bare).not.toBe(backups);
+  });
+
+  it("builds distinct keys for audio and catalog language", () => {
+    const original = playResolveCacheKey({
+      type: "movie",
+      tmdbId: "27205",
+      backend: "auto",
+      audioLang: "original",
+    });
+    const japanese = playResolveCacheKey({
+      type: "movie",
+      tmdbId: "27205",
+      backend: "auto",
+      audioLang: "ja",
+    });
+    expect(original).not.toBe(japanese);
   });
 });

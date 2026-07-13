@@ -16,6 +16,7 @@ var VIDKING_SERVER_FALLBACKS = [
 ];
 var AUTO_RESOLVE_QUERY = "backend=auto";
 var TMDB_BACKUP_QUERY = "backend=tmdb-native&sources=twoembed,vidrock,vidsrcnet,vidzee";
+var FAST_RESOLVE_TIMEOUT_MS = 5000;
 var PRIMARY_RESOLVE_TIMEOUT_MS = 20000;
 var playSession = 0;
 var progressSaveTimer = null;
@@ -425,6 +426,7 @@ function raceResolveAttempts(resolveAttempts, onStatus, session) {
                 tierIndex: tierIndex,
                 count: countPlayableSources(play),
               });
+              finish();
             }
           })
           .catch(function (err) {
@@ -522,6 +524,13 @@ function playResolved(play, title, onStatus, session, playOptions) {
 
   debug.debugLog("Playing: " + (title || play.title || ""));
 
+  if (play.warnings && play.warnings.length) {
+    for (var w = 0; w < play.warnings.length; w++) {
+      if (onStatus) onStatus(play.warnings[w]);
+      else debug.debugLog(play.warnings[w]);
+    }
+  }
+
   function log(msg) {
     if (onStatus) onStatus(msg);
     else debug.debugLog(msg);
@@ -577,15 +586,15 @@ function loadSubtitlesAsync(play, video) {
 function buildMoviePrimaryAttempts(tmdbId) {
   return [
     {
-      label: "TMDB-native backups",
+      label: "Auto (fast)",
       run: function () {
-        return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+        return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
       },
     },
     {
-      label: "Auto",
+      label: "TMDB-native backups",
       run: function () {
-        return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+        return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, FAST_RESOLVE_TIMEOUT_MS);
       },
     },
   ];
@@ -609,6 +618,18 @@ function buildMovieVidkingFallbacks(tmdbId) {
 function buildTvPrimaryAttempts(tmdbId, season, episode) {
   return [
     {
+      label: "Auto (fast)",
+      run: function () {
+        return api.resolveTvEpisode(
+          tmdbId,
+          season,
+          episode,
+          AUTO_RESOLVE_QUERY,
+          FAST_RESOLVE_TIMEOUT_MS
+        );
+      },
+    },
+    {
       label: "TMDB-native backups",
       run: function () {
         return api.resolveTvEpisode(
@@ -616,19 +637,7 @@ function buildTvPrimaryAttempts(tmdbId, season, episode) {
           season,
           episode,
           TMDB_BACKUP_QUERY,
-          PRIMARY_RESOLVE_TIMEOUT_MS
-        );
-      },
-    },
-    {
-      label: "Auto",
-      run: function () {
-        return api.resolveTvEpisode(
-          tmdbId,
-          season,
-          episode,
-          AUTO_RESOLVE_QUERY,
-          PRIMARY_RESOLVE_TIMEOUT_MS
+          FAST_RESOLVE_TIMEOUT_MS
         );
       },
     },
@@ -707,6 +716,23 @@ function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
   return ensureApiReachable().then(function () {
     return raceResolveAttempts(primary, onStatus, session).then(function (result) {
       if (result.play && api.hasPlayableSources(result.play)) {
+        var target = config.getTargetResolution();
+        if (target !== "auto" && config.isBelowTargetResolution(result.play, target)) {
+          var want = config.preferredQualityForTarget(target) || target + "p";
+          if (onStatus) onStatus("No " + want + " source — trying alternate server…");
+          return resolveWithTizenFallback(vidking, onStatus, session).then(function (vkResult) {
+            if (vkResult.play && api.hasPlayableSources(vkResult.play)) {
+              var vkMax = config.maxSourceHeight(vkResult.play);
+              var primaryMax = config.maxSourceHeight(result.play);
+              if (vkMax > primaryMax) {
+                vkResult.fallbacks = [];
+                return vkResult;
+              }
+            }
+            result.fallbacks = vidking;
+            return result;
+          });
+        }
         result.fallbacks = vidking;
         return result;
       }
@@ -728,11 +754,12 @@ function warmManifestFromPlay(play) {
 }
 
 function prefetchMovie(tmdbId) {
-  raceResolveAttempts(buildMoviePrimaryAttempts(tmdbId), null, playSession)
-    .then(function (result) {
-      if (result.play && api.hasPlayableSources(result.play)) {
-        playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), result.play);
-        warmManifestFromPlay(result.play);
+  api
+    .resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS)
+    .then(function (play) {
+      if (play && api.hasPlayableSources(play)) {
+        playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
+        warmManifestFromPlay(play);
       }
     })
     .catch(function () {
@@ -741,14 +768,15 @@ function prefetchMovie(tmdbId) {
 }
 
 function prefetchTvEpisode(tmdbId, season, episode) {
-  raceResolveAttempts(buildTvPrimaryAttempts(tmdbId, season, episode), null, playSession)
-    .then(function (result) {
-      if (result.play && api.hasPlayableSources(result.play)) {
+  api
+    .resolveTvEpisode(tmdbId, season, episode, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS)
+    .then(function (play) {
+      if (play && api.hasPlayableSources(play)) {
         playbackSession.setPrefetch(
           playbackSession.prefetchKey("tv", tmdbId, season, episode),
-          result.play
+          play
         );
-        warmManifestFromPlay(result.play);
+        warmManifestFromPlay(play);
       }
     })
     .catch(function () {

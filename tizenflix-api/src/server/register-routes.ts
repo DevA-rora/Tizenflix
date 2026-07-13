@@ -6,6 +6,8 @@ import type { AppConfig } from "../config.js";
 import { requireTmdbKey } from "../config.js";
 import {
   getCachedPlay,
+  isCachedPlayValidated,
+  markCachedPlayValidated,
   playResolveCacheKey,
   setCachedPlay,
 } from "../cache/play-resolve-cache.js";
@@ -16,7 +18,9 @@ import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from ".
 import { rewriteM3u8 } from "../proxy/rewrite-m3u8.js";
 import { validatePlaySources } from "../proxy/validate-sources.js";
 import { resolvePlayableSources, listProviders } from "../normalize/to-play-response.js";
-import { parseBackendParam, parseLangParam, parseSourcesParam, resolveWithBackend } from "../normalize/resolve-backend.js";
+import { parseBackendParam, parseLangParam, parseAudioLangParam, parseSourcesParam, resolveWithBackend } from "../normalize/resolve-backend.js";
+import { filterSourcesByAudioLang } from "../normalize/filter-audio-sources.js";
+import { resolveTargetAudioLang } from "../normalize/resolve-audio-lang.js";
 import { fetchMetadata } from "../api/metadata.js";
 import { enrichWithOpenSubtitles } from "../subtitles/opensubtitles.js";
 import type { Metadata, PlayResponse } from "../types.js";
@@ -40,28 +44,62 @@ export interface RouteContext {
   providerHealth: ProviderHealthService;
 }
 
-function proxyWrap(publicBase: string, url: string, referer?: string): string {
+function proxyWrap(
+  publicBase: string,
+  url: string,
+  referer?: string,
+  audioLang?: string,
+  maxHeight?: number
+): string {
   if (isInlineManifestSource(url)) {
     const token = url.slice("tizenflix-inline-manifest:".length);
-    return `${publicBase.replace(/\/$/, "")}/proxy/inline-manifest/${token}`;
+    let inlineUrl = `${publicBase.replace(/\/$/, "")}/proxy/inline-manifest/${token}`;
+    if (audioLang) inlineUrl += `?audioLang=${encodeURIComponent(audioLang)}`;
+    return inlineUrl;
   }
-  return buildProxyUrl(publicBase, url, referer);
+  return buildProxyUrl(publicBase, url, referer, audioLang, maxHeight);
 }
 
 function withProxiedUrls(
   publicBase: string,
-  play: Awaited<ReturnType<typeof resolvePlayableSources>>
+  play: Awaited<ReturnType<typeof resolvePlayableSources>>,
+  preferredAudioLang?: string,
+  maxHeight?: number
 ) {
+  const audioLang =
+    preferredAudioLang ?? play.audioPreference?.targetLanguage ?? undefined;
   return {
     ...play,
     sources: play.sources.map((s) => ({
       ...s,
-      url: proxyWrap(publicBase, s.url, s.upstreamHeaders?.Referer),
+      url: proxyWrap(publicBase, s.url, s.upstreamHeaders?.Referer, audioLang, maxHeight),
     })),
     subtitles: play.subtitles.map((sub) => ({
       ...sub,
-      url: sub.url ? proxyWrap(publicBase, sub.url) : sub.url,
+      url: sub.url ? proxyWrap(publicBase, sub.url, undefined, audioLang, maxHeight) : sub.url,
     })),
+  };
+}
+
+function applyAudioPreference(
+  play: Awaited<ReturnType<typeof resolvePlayableSources>>,
+  audioPref: Awaited<ReturnType<typeof resolveTargetAudioLang>>
+): Awaited<ReturnType<typeof resolvePlayableSources>> {
+  const filtered = filterSourcesByAudioLang(play.sources, audioPref.targetLanguage, {
+    preferOriginal: audioPref.mode === "original",
+    audioLangParam: audioPref.audioLangParam,
+  });
+  const warnings = [...(play.warnings ?? [])];
+  if (filtered.warning) warnings.push(filtered.warning);
+  return {
+    ...play,
+    sources: filtered.sources,
+    recommended: filtered.sources[0]?.id ?? play.recommended,
+    warnings: warnings.length ? warnings : undefined,
+    audioPreference: {
+      mode: audioPref.mode,
+      targetLanguage: audioPref.targetLanguage,
+    },
   };
 }
 
@@ -526,6 +564,8 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       includeSubtitles?: boolean;
       probeLimit?: number;
       skipValidation?: boolean;
+      preferredQuality?: string;
+      maxHeight?: number;
     } = {}
   ) {
     const meta =
@@ -548,7 +588,14 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         ...enriched,
         recommended: enriched.recommended ?? enriched.sources[0]?.id ?? null,
       };
-      res.json(withProxiedUrls(publicBase, fast));
+      res.json(
+        withProxiedUrls(
+          publicBase,
+          fast,
+          play.audioPreference?.targetLanguage,
+          options.maxHeight
+        )
+      );
       return;
     }
 
@@ -556,13 +603,19 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     const providerList = providerHealth.list(baseProviders);
     const validated = await validatePlaySources(enriched, publicBase, fetch, {
       tizenProfile,
-      probeLimit:
-        options.probeLimit ??
-        (Math.min(enriched.sources.filter((s) => s.type === "m3u8").length, 4) || 1),
+      probeLimit: options.probeLimit ?? 1,
+      preferredQuality: options.preferredQuality,
       reportProvider: (provider, success) => providerHealth.report(provider, success),
       providerScore: providerScoreFromList(providerList),
     });
-    res.json(withProxiedUrls(publicBase, validated));
+    res.json(
+      withProxiedUrls(
+        publicBase,
+        validated,
+        play.audioPreference?.targetLanguage,
+        options.maxHeight
+      )
+    );
   }
 
   async function respondWithPlaySubtitles(
@@ -599,6 +652,23 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       typeof req.query.onlySourceId === "string" ? req.query.onlySourceId : undefined;
     const sources = parseSourcesParam(req.query.sources);
     const sourcesKey = sources?.length ? sources.join(",") : undefined;
+    const lang = parseLangParam(req.query.lang);
+    const audioLangParam = parseAudioLangParam(req.query.audioLang) ?? "original";
+    const preferredQuality =
+      typeof req.query.preferredQuality === "string" ? req.query.preferredQuality : undefined;
+    const maxHeightRaw =
+      typeof req.query.maxHeight === "string" ? parseInt(req.query.maxHeight, 10) : undefined;
+    const maxHeight =
+      maxHeightRaw && Number.isFinite(maxHeightRaw) && maxHeightRaw > 0 ? maxHeightRaw : undefined;
+    const tmdbKey = requireTmdbKey(config);
+    const audioPref = await resolveTargetAudioLang(
+      {
+        type: options.type,
+        tmdbId: options.tmdbId,
+        audioLang: audioLangParam,
+      },
+      tmdbKey
+    );
     const cacheKey = playResolveCacheKey({
       type: options.type,
       tmdbId: options.tmdbId,
@@ -608,30 +678,47 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       onlySourceId,
       server: options.server,
       sources: sourcesKey,
+      lang,
+      audioLang: audioLangParam,
     });
     const cached = getCachedPlay(cacheKey);
+    const fastResolve = req.query.fast === "1";
     if (cached) {
-      return validateAndRespond(cached, res, tizenProfile, {
+      await validateAndRespond(cached, res, tizenProfile, {
         includeSubtitles,
-        skipValidation: false,
+        skipValidation: fastResolve || isCachedPlayValidated(cacheKey),
+        preferredQuality,
+        maxHeight,
       });
+      if (!fastResolve && !isCachedPlayValidated(cacheKey)) {
+        markCachedPlayValidated(cacheKey);
+      }
+      return;
     }
 
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
-    const lang = parseLangParam(req.query.lang);
-    const play = await resolveWithBackend({
+    const resolved = await resolveWithBackend({
       ...options,
       sources,
       onlySourceId,
       lang,
+      audioLang: audioLangParam,
+      targetAudioLang: audioPref.targetLanguage,
       providerScore: providerScoreFromList(providerList),
     });
+    const play = applyAudioPreference(resolved, audioPref);
     setCachedPlay(cacheKey, play);
     await validateAndRespond(play, res, tizenProfile, {
       includeSubtitles,
-      skipValidation: onlySourceId === "vixsrc",
+      skipValidation: onlySourceId === "vixsrc" || fastResolve,
+      probeLimit: 1,
+      preferredQuality,
+      maxHeight,
     });
+    if (!fastResolve && onlySourceId !== "vixsrc") {
+      markCachedPlayValidated(cacheKey);
+    }
   }
 
   app.get("/play/movie/:tmdbId", async (req, res) => {
@@ -1021,11 +1108,18 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     if (!entry) {
       return res.status(404).json({ error: "Inline manifest expired or not found" });
     }
+    const preferredAudioLang =
+      typeof req.query.audioLang === "string"
+        ? req.query.audioLang === "original"
+          ? undefined
+          : req.query.audioLang.split("-")[0]
+        : undefined;
     const rewritten = rewriteM3u8(
       entry.body,
       entry.upstreamUrl,
       publicBase,
-      entry.referer
+      entry.referer,
+      { preferredAudioLang }
     );
     res.status(200);
     res.setHeader("content-type", "application/vnd.apple.mpegurl");
@@ -1041,13 +1135,25 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     }
     const referer =
       typeof req.query.referer === "string" ? req.query.referer : undefined;
+    const preferredAudioLang =
+      typeof req.query.audioLang === "string" && req.query.audioLang !== "original"
+        ? req.query.audioLang.split("-")[0]
+        : undefined;
+    const maxHeightRaw =
+      typeof req.query.maxHeight === "string" ? parseInt(req.query.maxHeight, 10) : undefined;
+    const maxHeight =
+      maxHeightRaw && Number.isFinite(maxHeightRaw) && maxHeightRaw > 0 ? maxHeightRaw : undefined;
     try {
       if (looksLikeBinarySegment(target)) {
         await pipeProxiedStream(target, res, fetch, { referer });
         return;
       }
 
-      const result = await fetchProxiedStream(target, publicBase, fetch, { referer });
+      const result = await fetchProxiedStream(target, publicBase, fetch, {
+        referer,
+        preferredAudioLang,
+        maxHeight,
+      });
       res.status(result.status);
       if (result.contentType) res.setHeader("content-type", result.contentType);
       res.setHeader("access-control-allow-origin", "*");
