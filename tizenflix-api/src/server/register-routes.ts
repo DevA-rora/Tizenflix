@@ -556,7 +556,9 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     const providerList = providerHealth.list(baseProviders);
     const validated = await validatePlaySources(enriched, publicBase, fetch, {
       tizenProfile,
-      probeLimit: options.probeLimit ?? 1,
+      probeLimit:
+        options.probeLimit ??
+        (Math.min(enriched.sources.filter((s) => s.type === "m3u8").length, 4) || 1),
       reportProvider: (provider, success) => providerHealth.report(provider, success),
       providerScore: providerScoreFromList(providerList),
     });
@@ -595,6 +597,8 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     const includeSubtitles = req.query.subtitles === "1";
     const onlySourceId =
       typeof req.query.onlySourceId === "string" ? req.query.onlySourceId : undefined;
+    const sources = parseSourcesParam(req.query.sources);
+    const sourcesKey = sources?.length ? sources.join(",") : undefined;
     const cacheKey = playResolveCacheKey({
       type: options.type,
       tmdbId: options.tmdbId,
@@ -603,19 +607,18 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       backend: options.backend,
       onlySourceId,
       server: options.server,
+      sources: sourcesKey,
     });
     const cached = getCachedPlay(cacheKey);
-    const skipValidation = Boolean(cached) || onlySourceId === "vixsrc";
     if (cached) {
       return validateAndRespond(cached, res, tizenProfile, {
         includeSubtitles,
-        skipValidation: true,
+        skipValidation: false,
       });
     }
 
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
-    const sources = parseSourcesParam(req.query.sources);
     const lang = parseLangParam(req.query.lang);
     const play = await resolveWithBackend({
       ...options,
@@ -627,8 +630,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     setCachedPlay(cacheKey, play);
     await validateAndRespond(play, res, tizenProfile, {
       includeSubtitles,
-      skipValidation,
-      probeLimit: 1,
+      skipValidation: onlySourceId === "vixsrc",
     });
   }
 

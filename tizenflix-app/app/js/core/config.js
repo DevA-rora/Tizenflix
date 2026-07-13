@@ -1,5 +1,6 @@
 var STORAGE_KEY = "tizenflix.apiBase";
 var QUALITY_MODE_KEY = "tizenflix.qualityMode";
+var QUALITY_LEVEL_KEY = "tizenflix.qualityLevel";
 var DEV_MODE_KEY = "tizenflix.devMode";
 var BACKEND_KEY = "tizenflix.playBackend";
 var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
@@ -163,7 +164,7 @@ function getQualityMode() {
   } catch (err) {
     /* TV may block storage */
   }
-  return "auto";
+  return "high";
 }
 
 function setQualityMode(mode) {
@@ -174,6 +175,115 @@ function setQualityMode(mode) {
     /* TV may block storage */
   }
   return m;
+}
+
+function readStoredQualityLevel() {
+  try {
+    var stored = localStorage.getItem(QUALITY_LEVEL_KEY);
+    if (stored === "auto") return { mode: "auto", level: -1 };
+    if (stored !== null && stored !== "") {
+      var n = parseInt(stored, 10);
+      if (isFinite(n) && n >= 0) return { mode: "manual", level: n };
+    }
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return null;
+}
+
+function writeQualityLevelPref(pref) {
+  try {
+    if (!pref || pref.mode === "auto") {
+      localStorage.setItem(QUALITY_LEVEL_KEY, "auto");
+      return;
+    }
+    localStorage.setItem(QUALITY_LEVEL_KEY, String(pref.level));
+  } catch (err) {
+    /* TV may block storage */
+  }
+}
+
+function levelHeightsFromHls(hls) {
+  var out = [];
+  if (!hls || !hls.levels) return out;
+  for (var i = 0; i < hls.levels.length; i++) {
+    out.push({
+      index: i,
+      height: hls.levels[i].height || 0,
+      bitrate: hls.levels[i].bitrate || 0,
+    });
+  }
+  return out;
+}
+
+/** Pick HLS level index by target height (high = best up to 1080p). */
+function levelIndexForLegacyMode(hls, mode) {
+  var indexed = levelHeightsFromHls(hls);
+  if (!indexed.length) return -1;
+  indexed.sort(function (a, b) {
+    return a.height - b.height;
+  });
+
+  if (mode === "low") return indexed[0].index;
+  if (mode === "medium") return indexed[Math.floor(indexed.length / 2)].index;
+  if (mode === "high") {
+    var best = indexed[indexed.length - 1];
+    for (var i = 0; i < indexed.length; i++) {
+      if (indexed[i].height > 0 && indexed[i].height <= 1080) best = indexed[i];
+    }
+    return best.index;
+  }
+  return -1;
+}
+
+function legacyModeToLevel(mode, levelCount) {
+  if (!levelCount || levelCount < 1) return -1;
+  if (mode === "high") return levelCount - 1;
+  if (mode === "medium") return levelCount > 1 ? Math.floor(levelCount / 2) : 0;
+  if (mode === "low") return 0;
+  return -1;
+}
+
+function getQualityPreference() {
+  var stored = readStoredQualityLevel();
+  if (stored) return stored;
+
+  var legacy = getQualityMode();
+  if (legacy === "auto") return { mode: "auto", level: -1 };
+  return { mode: "manual", level: -1, legacyMode: legacy };
+}
+
+function setQualityAuto() {
+  writeQualityLevelPref({ mode: "auto", level: -1 });
+  try {
+    localStorage.removeItem(QUALITY_MODE_KEY);
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return { mode: "auto", level: -1 };
+}
+
+function setQualityLevel(index) {
+  var level = typeof index === "number" && isFinite(index) && index >= 0 ? Math.floor(index) : 0;
+  writeQualityLevelPref({ mode: "manual", level: level });
+  try {
+    localStorage.removeItem(QUALITY_MODE_KEY);
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return { mode: "manual", level: level };
+}
+
+function resolveLegacyQualityLevel(hls) {
+  var pref = getQualityPreference();
+  if (pref.mode === "auto" || pref.level >= 0) return pref;
+  if (!pref.legacyMode || !hls || !hls.levels || !hls.levels.length) {
+    return { mode: "auto", level: -1 };
+  }
+  var level = levelIndexForLegacyMode(hls, pref.legacyMode);
+  if (level < 0) level = legacyModeToLevel(pref.legacyMode, hls.levels.length);
+  if (level < 0) return setQualityAuto();
+  return setQualityLevel(level);
 }
 
 function readNumber(key, fallback, min, max) {
@@ -466,6 +576,7 @@ function apiPost(path, body) {
 module.exports = {
   STORAGE_KEY: STORAGE_KEY,
   QUALITY_MODE_KEY: QUALITY_MODE_KEY,
+  QUALITY_LEVEL_KEY: QUALITY_LEVEL_KEY,
   DEV_MODE_KEY: DEV_MODE_KEY,
   PLAY_RESOLVE_TIMEOUT_MS: PLAY_RESOLVE_TIMEOUT_MS,
   deriveDefaultApi: deriveDefaultApi,
@@ -483,6 +594,10 @@ module.exports = {
   setApiBase: setApiBase,
   getQualityMode: getQualityMode,
   setQualityMode: setQualityMode,
+  getQualityPreference: getQualityPreference,
+  setQualityAuto: setQualityAuto,
+  setQualityLevel: setQualityLevel,
+  resolveLegacyQualityLevel: resolveLegacyQualityLevel,
   checkHealth: checkHealth,
   resolveMovie: resolveMovie,
   resolveTvEpisode: resolveTvEpisode,

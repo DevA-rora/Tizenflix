@@ -11,6 +11,8 @@ var playbackReported = false;
 var nonFatalRecoveries = 0;
 var activeSubtitles = [];
 var activeSubtitleIndex = -1;
+var qualityChangeListeners = [];
+var nativeQualityVideo = null;
 
 function clearSubtitleTracks(video) {
   if (!video) return;
@@ -154,6 +156,7 @@ function destroyPlayer(video) {
   playbackReported = false;
   currentProvider = null;
   playbackEntered = false;
+  nativeQualityVideo = null;
   if (hlsInstance) {
     try {
       hlsInstance.stopLoad();
@@ -360,7 +363,11 @@ function isProxiedHls(url) {
 }
 
 function prefersHlsJsFirst(url) {
-  if (prefersNativeHls()) return false;
+  if (prefersNativeHls()) {
+    var pref = config.getQualityPreference();
+    if (pref.mode === "manual") return true;
+    return false;
+  }
   return isProxiedHls(url);
 }
 
@@ -394,15 +401,101 @@ function createHlsInstance() {
   });
 }
 
+function formatQualityLabel(level) {
+  if (!level) return "—";
+  if (level.height) return level.height + "p";
+  if (level.width && level.height) return level.width + "x" + level.height;
+  return "Level";
+}
+
+function formatQualityLabelFromHeight(height) {
+  if (!height || !isFinite(height)) return "—";
+  return Math.round(height) + "p";
+}
+
+function notifyQualityChange(info) {
+  for (var i = 0; i < qualityChangeListeners.length; i++) {
+    try {
+      qualityChangeListeners[i](info);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+}
+
+function onQualityChange(callback) {
+  if (typeof callback !== "function") return function () {};
+  qualityChangeListeners.push(callback);
+  return function () {
+    var idx = qualityChangeListeners.indexOf(callback);
+    if (idx !== -1) qualityChangeListeners.splice(idx, 1);
+  };
+}
+
 function getQualityOptions(hls) {
   if (!hls || !hls.levels || !hls.levels.length) return [];
   var out = [];
   for (var i = 0; i < hls.levels.length; i++) {
     var level = hls.levels[i];
-    var label = level.height ? level.width + "x" + level.height : "Level " + (i + 1);
-    out.push({ level: i, label: label, bitrate: level.bitrate || 0 });
+    var label = formatQualityLabel(level);
+    if (label === "Level") label = "Level " + (i + 1);
+    out.push({ level: i, label: label, bitrate: level.bitrate || 0, height: level.height || 0 });
   }
   return out;
+}
+
+function getCurrentQuality(hls, video) {
+  if (hls && hls.levels && hls.levels.length) {
+    var pref = config.getQualityPreference();
+    var isAuto = pref.mode === "auto" || hls.currentLevel === -1;
+    var activeIndex = isAuto ? hls.loadLevel : hls.currentLevel;
+    if (activeIndex == null || activeIndex < 0) activeIndex = hls.loadLevel;
+    if (activeIndex == null || activeIndex < 0) activeIndex = 0;
+    var activeLevel = hls.levels[activeIndex];
+    var label = activeLevel ? formatQualityLabel(activeLevel) : "—";
+    if (label === "Level") label = "—";
+    return {
+      label: label,
+      height: activeLevel && activeLevel.height ? activeLevel.height : 0,
+      isAuto: isAuto,
+      badge: isAuto && label !== "—" ? "Auto · " + label : label,
+    };
+  }
+  if (video && video.videoHeight) {
+    var nativeLabel = formatQualityLabelFromHeight(video.videoHeight);
+    return { label: nativeLabel, height: video.videoHeight, isAuto: true, badge: nativeLabel };
+  }
+  return { label: "—", height: 0, isAuto: true, badge: "—" };
+}
+
+function applyQualityPreference(hls) {
+  if (!hls) return;
+  var pref = config.resolveLegacyQualityLevel(hls);
+  if (pref.mode === "auto") {
+    hls.currentLevel = -1;
+    return;
+  }
+  var levels = hls.levels ? hls.levels.length : 0;
+  if (!levels) return;
+  var level = pref.level;
+  if (level < 0 || level >= levels) level = 0;
+  hls.currentLevel = level;
+}
+
+function setQualityLevel(hls, level) {
+  if (!hls) return false;
+  if (level < 0) {
+    config.setQualityAuto();
+    hls.currentLevel = -1;
+    notifyQualityChange(getCurrentQuality(hls, hls.media));
+    return true;
+  }
+  var levels = hls.levels ? hls.levels.length : 0;
+  if (!levels || level >= levels) return false;
+  config.setQualityLevel(level);
+  hls.currentLevel = level;
+  notifyQualityChange(getCurrentQuality(hls, hls.media));
+  return true;
 }
 
 function applyQualityMode(hls, mode) {
@@ -606,9 +699,14 @@ function playHlsJs(video, url, onLog, videoWrap, title, session, onFatal) {
     if (!isActiveSession(session)) return;
     debug.debugLog("HLS.js manifest parsed");
     if (onLog) onLog("HLS.js manifest parsed — buffering ahead");
-    applyQualityMode(hlsInstance, config.getQualityMode());
+    applyQualityPreference(hlsInstance);
+    notifyQualityChange(getCurrentQuality(hlsInstance, video));
     setupPlaybackHealthReport(video, session);
     startHlsPlaybackWhenBuffered(video, videoWrap, title, onLog, session, hlsInstance);
+  });
+  hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function () {
+    if (!isActiveSession(session)) return;
+    notifyQualityChange(getCurrentQuality(hlsInstance, video));
   });
   hlsInstance.on(Hls.Events.LEVEL_LOADED, function (event, data) {
     if (!isActiveSession(session) || !data || !data.details) return;
@@ -619,6 +717,7 @@ function playHlsJs(video, url, onLog, videoWrap, title, session, onFatal) {
       debug.debugLog(q);
       if (onLog) onLog(q);
     }
+    notifyQualityChange(getCurrentQuality(hlsInstance, video));
   });
   hlsInstance.on(Hls.Events.ERROR, function (event, data) {
     if (!isActiveSession(session)) return;
@@ -671,11 +770,28 @@ function playHlsJs(video, url, onLog, videoWrap, title, session, onFatal) {
   });
 }
 
+function setupNativeQualityTracking(video, session) {
+  if (!video) return;
+  nativeQualityVideo = video;
+  function reportNativeQuality() {
+    if (!isActiveSession(session) || hlsInstance) return;
+    notifyQualityChange(getCurrentQuality(null, video));
+  }
+  video.addEventListener("loadedmetadata", reportNativeQuality);
+  video.addEventListener("resize", reportNativeQuality);
+  trackCleanup(function () {
+    video.removeEventListener("loadedmetadata", reportNativeQuality);
+    video.removeEventListener("resize", reportNativeQuality);
+    if (nativeQualityVideo === video) nativeQualityVideo = null;
+  });
+}
+
 function playNativeHls(video, url, onLog, videoWrap, title, session, onStallFallback, onFatal) {
   debug.debugLog("Player path: native HLS");
   if (onLog) onLog("Player path: native HLS (wait up to 12s, then HLS.js fallback)");
   setCrossOrigin(video, true);
   video.src = url;
+  setupNativeQualityTracking(video, session);
 
   function fallback(reason) {
     if (!isActiveSession(session) || !onStallFallback) return;
@@ -798,8 +914,11 @@ function playSources(video, sources, onLog, videoWrap, title, options) {
     if (onLog) onLog("Using warmed manifest");
   }
 
+  var lastFailureReason = null;
+
   function tryNext(reason) {
     if (reason) {
+      lastFailureReason = reason;
       debug.debugLog(reason);
       if (onLog) onLog(reason);
     }
@@ -807,6 +926,9 @@ function playSources(video, sources, onLog, videoWrap, title, options) {
       var done = "All sources failed — CDN may be blocking playback";
       debug.debugLog(done);
       if (onLog) onLog(done);
+      if (options.onAllSourcesFailed) {
+        options.onAllSourcesFailed(lastFailureReason || done);
+      }
       return;
     }
 
@@ -837,8 +959,8 @@ function playSources(video, sources, onLog, videoWrap, title, options) {
     playbackReported = false;
     nonFatalRecoveries = 0;
     var label = "Trying " + source.provider + " " + source.label + " (" + index + "/" + sources.length + ")";
-    debug.debugLog(label);
     if (onLog) onLog(label);
+    else debug.debugLog(label);
 
     playUrlAttempt(video, source.url, onLog, videoWrap, title, source.type, function (fatalMsg) {
       tryNext(fatalMsg);
@@ -920,6 +1042,11 @@ module.exports = {
   isMediaPlayPauseKey: isMediaPlayPauseKey,
   getQualityOptions: getQualityOptions,
   applyQualityMode: applyQualityMode,
+  applyQualityPreference: applyQualityPreference,
+  setQualityLevel: setQualityLevel,
+  getCurrentQuality: getCurrentQuality,
+  onQualityChange: onQualityChange,
+  formatQualityLabel: formatQualityLabel,
   setResumePosition: setResumePosition,
   getHlsInstance: function () {
     return hlsInstance;

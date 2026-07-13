@@ -160,7 +160,10 @@ async function probeSource(
     console.warn(
       `[validate] ${source.provider} ${source.label}: ${probe.reason ?? "manifest unavailable"}`
     );
-    return { source };
+    return {
+      source,
+      warning: `${source.provider} ${source.label}: ${probe.reason ?? "manifest unavailable"}`,
+    };
   }
   return {
     source,

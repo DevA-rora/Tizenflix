@@ -1312,6 +1312,7 @@ body.animations-off .detail-episodes-section.is-revealed {
 
 .episode-list {
   padding: 0;
+  overflow: visible;
 }
 
 .episode-list-heading {
@@ -1326,6 +1327,8 @@ body.animations-off .detail-episodes-section.is-revealed {
   -webkit-flex-direction: column;
   flex-direction: column;
   gap: 12px;
+  padding: 0 10px;
+  overflow: visible;
 }
 
 .episode-item {
@@ -1335,14 +1338,18 @@ body.animations-off .detail-episodes-section.is-revealed {
   align-items: stretch;
   width: 100%;
   min-height: 96px;
-  padding: 0;
+  padding: 4px;
   text-align: left;
   background-color: #1f1f1f;
   border: 2px solid transparent;
   border-radius: 4px;
   color: #ffffff;
   cursor: pointer;
-  overflow: hidden;
+  overflow: visible;
+  -webkit-transform-origin: center left;
+  transform-origin: center left;
+  -webkit-transition: -webkit-transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 300ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 300ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 300ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 300ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .episode-thumb {
@@ -1353,6 +1360,8 @@ body.animations-off .detail-episodes-section.is-revealed {
   background-color: #141414;
   background-size: cover;
   background-position: center;
+  border-radius: 2px;
+  overflow: hidden;
 }
 
 .episode-meta {
@@ -1397,6 +1406,18 @@ body.animations-off .detail-episodes-section.is-revealed {
   border-color: #ffffff;
   background-color: #333333;
   box-shadow: 0 0 0 2px #e50914;
+  -webkit-transform: scale(1.02);
+  transform: scale(1.02);
+}
+
+body.animations-off .episode-item {
+  -webkit-transition: none;
+  transition: none;
+}
+
+body.animations-off .episode-item.tv-focus {
+  -webkit-transform: none;
+  transform: none;
 }
 
 /* --- Search --- */

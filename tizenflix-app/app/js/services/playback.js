@@ -14,14 +14,32 @@ var VIDKING_SERVER_FALLBACKS = [
   { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15000 },
   { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15000 },
 ];
-var FAST_RESOLVE_QUERY = "onlySourceId=vixsrc&backend=tmdb-native";
-var FAST_RESOLVE_TIMEOUT_MS = 8000;
+var AUTO_RESOLVE_QUERY = "backend=auto";
+var TMDB_BACKUP_QUERY = "backend=tmdb-native&sources=twoembed,vidrock,vidsrcnet,vidzee";
+var PRIMARY_RESOLVE_TIMEOUT_MS = 20000;
 var playSession = 0;
 var progressSaveTimer = null;
 var lastProgressSaveAt = 0;
 var PROGRESS_SAVE_INTERVAL_MS = 30000;
 var autoplayTimer = null;
 var autoplayEndedHandler = null;
+var qualityUnsubscribe = null;
+
+function unbindQualityWatcher() {
+  if (qualityUnsubscribe) {
+    qualityUnsubscribe();
+    qualityUnsubscribe = null;
+  }
+}
+
+function bindQualityWatcher() {
+  unbindQualityWatcher();
+  var video = document.getElementById("video");
+  qualityUnsubscribe = player.onQualityChange(function (info) {
+    playerChrome.updateQualityBadge(info);
+  });
+  playerChrome.updateQualityBadge(player.getCurrentQuality(player.getHlsInstance(), video));
+}
 
 function clearAutoplayTimer() {
   if (autoplayTimer) {
@@ -127,10 +145,30 @@ function formatResolveError(play) {
 
 function formatPlaybackError(err) {
   var msg = err && err.message ? err.message : String(err);
+  if (msg.indexOf("Cannot reach API") !== -1) return msg;
+  if (msg.indexOf("Failed to fetch") !== -1 || msg.indexOf("NetworkError") !== -1) {
+    return (
+      "Cannot reach API at " +
+      api.getBase() +
+      ". Open Settings, set API URL to your PC's LAN address (port 8790), and ensure tizenflix-api is running."
+    );
+  }
   if (msg.indexOf("timed out") !== -1) {
     return "Stream lookup timed out. Could not find a playable source.";
   }
   return msg;
+}
+
+function ensureApiReachable() {
+  var base = api.getBase();
+  debug.debugLog("API: " + base);
+  return api.health().catch(function () {
+    throw new Error(
+      "Cannot reach API at " +
+        base +
+        ". Open Settings, set API URL to your PC's LAN address (port 8790), and ensure tizenflix-api is running."
+    );
+  });
 }
 
 function isActivePlaySession(session) {
@@ -185,10 +223,44 @@ function buildChromeHandlers(onStatus) {
         log(err.message);
       });
     },
-    onQualitySelect: function (mode) {
-      config.setQualityMode(mode);
-      player.applyQualityMode(player.getHlsInstance(), mode);
-      log("Quality: " + mode);
+    onQualitySelect: function (level) {
+      var hls = player.getHlsInstance();
+      var video = document.getElementById("video");
+      if (level < 0) {
+        config.setQualityAuto();
+        if (hls) {
+          player.setQualityLevel(hls, -1);
+        } else {
+          playerChrome.updateQualityBadge(player.getCurrentQuality(null, video));
+        }
+        log("Quality: Auto");
+        return;
+      }
+      config.setQualityLevel(level);
+      if (hls) {
+        player.setQualityLevel(hls, level);
+        var info = player.getCurrentQuality(hls, video);
+        log("Quality: " + (info.label || level));
+        return;
+      }
+      var stored = playbackSession.get();
+      if (!stored || !stored.sources.length) {
+        log("Quality: stream not ready");
+        return;
+      }
+      if (video && video.currentTime > 0) {
+        player.setResumePosition(video.currentTime);
+      }
+      var sourceIndex = stored.currentSourceIndex || 0;
+      switchSource(sourceIndex, onStatus)
+        .then(function () {
+          var newHls = player.getHlsInstance();
+          if (newHls) player.setQualityLevel(newHls, level);
+        })
+        .catch(function (err) {
+          log(err.message);
+        });
+      log("Quality: switching to level " + level);
     },
     onSpeedCycle: function () {
       var next = config.cyclePlaybackSpeed();
@@ -243,6 +315,7 @@ function buildChromeHandlers(onStatus) {
 
 function mountChrome(session, onStatus) {
   playerChrome.mount(session, buildChromeHandlers(onStatus));
+  bindQualityWatcher();
 }
 
 function beginPlaybackRequest(meta, onStatus) {
@@ -270,24 +343,156 @@ function beginPlaybackRequest(meta, onStatus) {
   return session;
 }
 
+function isCdnPlaybackError(reason) {
+  if (!reason) return false;
+  return /HTTP (521|502|503|403|404)|manifestLoadError|networkError/i.test(String(reason));
+}
+
+function countPlayableSources(play) {
+  return api.sourcesForPlay(play).length;
+}
+
+function pickBestResolveResult(results) {
+  var best = null;
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    if (!r.play || !api.hasPlayableSources(r.play)) continue;
+    var count = countPlayableSources(r.play);
+    if (
+      !best ||
+      count > best.count ||
+      (count === best.count && r.tierIndex < best.tierIndex)
+    ) {
+      best = {
+        play: r.play,
+        via: r.via,
+        tierIndex: r.tierIndex,
+        count: count,
+      };
+    }
+  }
+  return best;
+}
+
+/** Race primary resolve attempts in parallel; pick the richest playable result. */
+function raceResolveAttempts(resolveAttempts, onStatus, session) {
+  if (!resolveAttempts.length) {
+    return Promise.resolve({ play: null, via: null, tierIndex: -1, fallbacks: [] });
+  }
+
+  debug.debugLog("Racing: " + resolveAttempts.map(function (e) { return e.label; }).join(", "));
+  if (onStatus) onStatus("Finding stream…");
+
+  return new Promise(function (resolve) {
+    var finished = false;
+    var pending = resolveAttempts.length;
+    var results = [];
+
+    function finish() {
+      if (finished) return;
+      finished = true;
+      var best = pickBestResolveResult(results);
+      if (best) {
+        debug.debugLog("Resolved via: " + best.via + " (" + best.count + " source(s))");
+        if (onStatus) onStatus("Resolved via: " + best.via);
+        resolve({
+          play: best.play,
+          via: best.via,
+          tierIndex: best.tierIndex,
+          fallbacks: resolveAttempts.slice(best.tierIndex + 1),
+        });
+        return;
+      }
+      resolve({
+        play: null,
+        via: null,
+        tierIndex: -1,
+        fallbacks: resolveAttempts,
+      });
+    }
+
+    for (var i = 0; i < resolveAttempts.length; i++) {
+      (function (entry, tierIndex) {
+        debug.debugLog("Trying " + entry.label + "…");
+        entry
+          .run()
+          .then(function (play) {
+            if (!isActivePlaySession(session) || finished) return;
+            if (play && api.hasPlayableSources(play)) {
+              results.push({
+                play: play,
+                via: entry.label,
+                tierIndex: tierIndex,
+                count: countPlayableSources(play),
+              });
+            }
+          })
+          .catch(function (err) {
+            debug.debugLog("Resolve failed (" + entry.label + "): " + err.message);
+          })
+          .then(function () {
+            pending -= 1;
+            if (pending === 0) finish();
+          });
+      })(resolveAttempts[i], i);
+    }
+  });
+}
+
 function resolveWithTizenFallback(resolveAttempts, onStatus, session) {
-  var chain = Promise.resolve(null);
+  var chain = Promise.resolve({ play: null, via: null, tierIndex: -1 });
   for (var i = 0; i < resolveAttempts.length; i++) {
-    (function (entry) {
+    (function (entry, tierIndex) {
       chain = chain.then(function (prev) {
         if (!isActivePlaySession(session)) return prev;
-        if (prev && api.hasPlayableSources(prev)) return prev;
+        if (prev.play && api.hasPlayableSources(prev.play)) return prev;
         var msg = "Trying " + entry.label + "…";
         debug.debugLog(msg);
         if (onStatus) onStatus(msg);
-        return entry.run().catch(function (err) {
-          debug.debugLog("Resolve failed (" + entry.label + "): " + err.message);
-          return null;
-        });
+        return entry
+          .run()
+          .then(function (play) {
+            if (play && api.hasPlayableSources(play)) {
+              return { play: play, via: entry.label, tierIndex: tierIndex };
+            }
+            return prev;
+          })
+          .catch(function (err) {
+            debug.debugLog("Resolve failed (" + entry.label + "): " + err.message);
+            return prev;
+          });
       });
-    })(resolveAttempts[i]);
+    })(resolveAttempts[i], i);
   }
-  return chain;
+  return chain.then(function (result) {
+    if (result.via && result.play) {
+      debug.debugLog("Resolved via: " + result.via);
+      if (onStatus) onStatus("Resolved via: " + result.via);
+    }
+    var fallbacks =
+      result.tierIndex >= 0 ? resolveAttempts.slice(result.tierIndex + 1) : resolveAttempts;
+    return { play: result.play, via: result.via, fallbacks: fallbacks };
+  });
+}
+
+function escalatePlaybackFallback(fallbacks, title, onStatus, session, playOptions) {
+  if (!isActivePlaySession(session)) return Promise.resolve();
+  if (!fallbacks || !fallbacks.length) {
+    return Promise.reject(new Error("All sources failed — CDN may be blocking playback"));
+  }
+
+  var msg = "CDN error — trying next server…";
+  debug.debugLog(msg);
+  if (onStatus) onStatus(msg);
+
+  return resolveWithTizenFallback(fallbacks, onStatus, session).then(function (result) {
+    if (!isActivePlaySession(session)) return;
+    if (!result.play || !api.hasPlayableSources(result.play)) {
+      return Promise.reject(new Error(formatResolveError(result.play)));
+    }
+    playOptions._fallbacks = result.fallbacks || [];
+    return playResolved(result.play, title, onStatus, session, playOptions);
+  });
 }
 
 function playResolved(play, title, onStatus, session, playOptions) {
@@ -315,12 +520,11 @@ function playResolved(play, title, onStatus, session, playOptions) {
   video.playbackRate = config.getPlaybackSpeed();
   bindAutoplayHandler(video, onStatus);
 
-  debug.debugClear();
   debug.debugLog("Playing: " + (title || play.title || ""));
 
   function log(msg) {
-    debug.debugLog(msg);
     if (onStatus) onStatus(msg);
+    else debug.debugLog(msg);
   }
 
   var sourceOptions = {};
@@ -330,6 +534,22 @@ function playResolved(play, title, onStatus, session, playOptions) {
   var warmed = playbackSession.getWarmedManifest();
   if (warmed && sources[0] && sources[0].url === warmed) {
     sourceOptions.warmedManifestUrl = warmed;
+  }
+  if (playOptions._fallbacks && playOptions._fallbacks.length) {
+    var escalating = false;
+    sourceOptions.onAllSourcesFailed = function (reason) {
+      if (escalating || !playOptions._fallbacks || !playOptions._fallbacks.length) return;
+      if (!isCdnPlaybackError(reason)) return;
+      escalating = true;
+      var nextFallbacks = playOptions._fallbacks;
+      playOptions._fallbacks = [];
+      escalatePlaybackFallback(nextFallbacks, title, onStatus, session, playOptions).catch(
+        function (err) {
+          escalating = false;
+          log(err.message);
+        }
+      );
+    };
   }
   player.playSources(video, sources, log, wrap, title || play.title || "Playback", sourceOptions);
   return Promise.resolve();
@@ -354,22 +574,25 @@ function loadSubtitlesAsync(play, video) {
     });
 }
 
-function buildMovieResolveChain(tmdbId) {
-  var attempts = [
+function buildMoviePrimaryAttempts(tmdbId) {
+  return [
     {
-      label: "VixSrc (fast)",
+      label: "TMDB-native backups",
       run: function () {
-        return api.resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
+        return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
       },
     },
     {
       label: "Auto",
       run: function () {
-        return api.resolveMovie(tmdbId, "backend=auto", config.PLAY_RESOLVE_TIMEOUT_MS);
+        return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
       },
     },
   ];
+}
 
+function buildMovieVidkingFallbacks(tmdbId) {
+  var attempts = [];
   for (var i = 0; i < VIDKING_SERVER_FALLBACKS.length; i++) {
     (function (fb) {
       attempts.push({
@@ -380,21 +603,20 @@ function buildMovieResolveChain(tmdbId) {
       });
     })(VIDKING_SERVER_FALLBACKS[i]);
   }
-
   return attempts;
 }
 
-function buildTvResolveChain(tmdbId, season, episode) {
-  var attempts = [
+function buildTvPrimaryAttempts(tmdbId, season, episode) {
+  return [
     {
-      label: "VixSrc (fast)",
+      label: "TMDB-native backups",
       run: function () {
         return api.resolveTvEpisode(
           tmdbId,
           season,
           episode,
-          FAST_RESOLVE_QUERY,
-          FAST_RESOLVE_TIMEOUT_MS
+          TMDB_BACKUP_QUERY,
+          PRIMARY_RESOLVE_TIMEOUT_MS
         );
       },
     },
@@ -405,13 +627,16 @@ function buildTvResolveChain(tmdbId, season, episode) {
           tmdbId,
           season,
           episode,
-          "backend=auto",
-          config.PLAY_RESOLVE_TIMEOUT_MS
+          AUTO_RESOLVE_QUERY,
+          PRIMARY_RESOLVE_TIMEOUT_MS
         );
       },
     },
   ];
+}
 
+function buildTvVidkingFallbacks(tmdbId, season, episode) {
+  var attempts = [];
   for (var i = 0; i < VIDKING_SERVER_FALLBACKS.length; i++) {
     (function (fb) {
       attempts.push({
@@ -422,7 +647,6 @@ function buildTvResolveChain(tmdbId, season, episode) {
       });
     })(VIDKING_SERVER_FALLBACKS[i]);
   }
-
   return attempts;
 }
 
@@ -457,22 +681,38 @@ function handlePlaybackFailure(session, err) {
 }
 
 function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
+  var primary =
+    type === "tv"
+      ? buildTvPrimaryAttempts(tmdbId, season, episode)
+      : buildMoviePrimaryAttempts(tmdbId);
+  var vidking =
+    type === "tv"
+      ? buildTvVidkingFallbacks(tmdbId, season, episode)
+      : buildMovieVidkingFallbacks(tmdbId);
   var key =
     type === "tv"
       ? playbackSession.prefetchKey("tv", tmdbId, season, episode)
       : playbackSession.prefetchKey("movie", tmdbId);
   var prefetched = playbackSession.getPrefetch(key);
   if (prefetched && api.hasPlayableSources(prefetched)) {
-    debug.debugLog("Using prefetched resolve");
+    debug.debugLog("Resolved via: prefetched");
     if (onStatus) onStatus("Starting playback…");
-    return Promise.resolve(prefetched);
+    return Promise.resolve({
+      play: prefetched,
+      via: "prefetched",
+      fallbacks: vidking,
+    });
   }
 
-  var chain =
-    type === "tv"
-      ? buildTvResolveChain(tmdbId, season, episode)
-      : buildMovieResolveChain(tmdbId);
-  return resolveWithTizenFallback(chain, onStatus, session);
+  return ensureApiReachable().then(function () {
+    return raceResolveAttempts(primary, onStatus, session).then(function (result) {
+      if (result.play && api.hasPlayableSources(result.play)) {
+        result.fallbacks = vidking;
+        return result;
+      }
+      return resolveWithTizenFallback(vidking, onStatus, session);
+    });
+  });
 }
 
 function warmManifestFromPlay(play) {
@@ -488,12 +728,11 @@ function warmManifestFromPlay(play) {
 }
 
 function prefetchMovie(tmdbId) {
-  api
-    .resolveMovie(tmdbId, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS)
-    .then(function (play) {
-      if (play && api.hasPlayableSources(play)) {
-        playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
-        warmManifestFromPlay(play);
+  raceResolveAttempts(buildMoviePrimaryAttempts(tmdbId), null, playSession)
+    .then(function (result) {
+      if (result.play && api.hasPlayableSources(result.play)) {
+        playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), result.play);
+        warmManifestFromPlay(result.play);
       }
     })
     .catch(function () {
@@ -502,15 +741,14 @@ function prefetchMovie(tmdbId) {
 }
 
 function prefetchTvEpisode(tmdbId, season, episode) {
-  api
-    .resolveTvEpisode(tmdbId, season, episode, FAST_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS)
-    .then(function (play) {
-      if (play && api.hasPlayableSources(play)) {
+  raceResolveAttempts(buildTvPrimaryAttempts(tmdbId, season, episode), null, playSession)
+    .then(function (result) {
+      if (result.play && api.hasPlayableSources(result.play)) {
         playbackSession.setPrefetch(
           playbackSession.prefetchKey("tv", tmdbId, season, episode),
-          play
+          result.play
         );
-        warmManifestFromPlay(play);
+        warmManifestFromPlay(result.play);
       }
     })
     .catch(function () {
@@ -533,12 +771,15 @@ function playMovie(tmdbId, title, onStatus, meta) {
   }
   var session = beginPlaybackRequest(sessionMeta, onStatus);
   return resolvePlayback(tmdbId, "movie", null, null, onStatus, session)
-    .then(function (play) {
+    .then(function (result) {
       if (!isActivePlaySession(session)) return;
-      if (!play || !api.hasPlayableSources(play)) {
-        return Promise.reject(new Error(formatResolveError(play)));
+      if (!result.play || !api.hasPlayableSources(result.play)) {
+        return Promise.reject(new Error(formatResolveError(result.play)));
       }
-      return playResolved(play, title, onStatus, session, { startSeconds: startSeconds });
+      return playResolved(result.play, title, onStatus, session, {
+        startSeconds: startSeconds,
+        _fallbacks: result.fallbacks || [],
+      });
     })
     .catch(function (err) {
       return handlePlaybackFailure(session, err);
@@ -565,12 +806,15 @@ function playTvEpisode(tmdbId, season, episode, title, onStatus, meta) {
   }
   var session = beginPlaybackRequest(sessionMeta, onStatus);
   return resolvePlayback(tmdbId, "tv", season, episode, onStatus, session)
-    .then(function (play) {
+    .then(function (result) {
       if (!isActivePlaySession(session)) return;
-      if (!play || !api.hasPlayableSources(play)) {
-        return Promise.reject(new Error(formatResolveError(play)));
+      if (!result.play || !api.hasPlayableSources(result.play)) {
+        return Promise.reject(new Error(formatResolveError(result.play)));
       }
-      return playResolved(play, title, onStatus, session, { startSeconds: startSeconds });
+      return playResolved(result.play, title, onStatus, session, {
+        startSeconds: startSeconds,
+        _fallbacks: result.fallbacks || [],
+      });
     })
     .catch(function (err) {
       return handlePlaybackFailure(session, err);
@@ -649,6 +893,7 @@ function stop(options) {
   if (video) savePlaybackProgress(video, true);
   unbindProgressSaver();
   unbindAutoplayHandler();
+  unbindQualityWatcher();
 
   playSession += 1;
   var wasFullscreen =

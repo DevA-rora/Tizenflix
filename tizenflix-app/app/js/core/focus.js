@@ -14,6 +14,7 @@ var rememberedMainEl = null;
 var keyHandler = null;
 var lastFocusRowId = null;
 var lastSearchLeftEl = null;
+var lastOskTopRowReturnEl = null;
 var scrollAnimGen = 0;
 var cachedRowAnchorY = null;
 var verticalAnchorTimer = null;
@@ -595,7 +596,11 @@ function scheduleVerticalAnchor(el, options) {
         if (gen !== scrollAnimGen || currentEl !== el) return;
         var detailSection = el.closest(".detail-episodes-section");
         if (detailSection) {
-          scrollDetailSectionToAnchor(detailSection);
+          if (isEpisodeItem(el)) {
+            scrollIntoView(el);
+          } else {
+            scrollDetailSectionToAnchor(detailSection);
+          }
         } else {
           scrollFocusRowToAnchor(el, capturedAnchorY);
         }
@@ -811,6 +816,15 @@ function isSearchResultsRow(rowId) {
   return !!(rowId && rowId.indexOf("search-results-") === 0);
 }
 
+function isEpisodeItem(el) {
+  return !!(el && el.classList && el.classList.contains("episode-item"));
+}
+
+function getEpisodeSiblings(el) {
+  var list = el && el.closest ? el.closest(".episode-list-items") : null;
+  return list ? getFocusables(list) : [];
+}
+
 function getCrossTargetRow(rowId, col) {
   var main = getMainRoot();
   if (!main || !rowId) return null;
@@ -823,6 +837,8 @@ function getCrossTargetRow(rowId, col) {
 }
 
 function handleMainLeft(el) {
+  if (isEpisodeItem(el)) return el;
+
   var items = getRowFocusables(getFocusRowId(el));
   var idx = indexInRow(el);
   if (idx > 0) return items[idx - 1];
@@ -844,6 +860,8 @@ function handleMainLeft(el) {
 }
 
 function handleMainRight(el) {
+  if (isEpisodeItem(el)) return el;
+
   var items = getRowFocusables(getFocusRowId(el));
   var idx = indexInRow(el);
   if (idx < items.length - 1) return items[idx + 1];
@@ -885,8 +903,35 @@ function resolveCrossCol(colAttr, fallbackCol, itemsLength) {
 }
 
 function handleMainVertical(el, dir) {
+  if (isEpisodeItem(el)) {
+    var episodeItems = getEpisodeSiblings(el);
+    var episodeIdx = episodeItems.indexOf(el);
+    if (episodeIdx !== -1) {
+      if (dir === "down" && episodeIdx < episodeItems.length - 1) {
+        return episodeItems[episodeIdx + 1];
+      }
+      if (dir === "up" && episodeIdx > 0) {
+        return episodeItems[episodeIdx - 1];
+      }
+    }
+  }
+
   var rowId = getFocusRowId(el);
   if (!rowId) return handleMainVerticalLinear(el, dir);
+
+  if (dir === "down" && rowId === "osk-0") {
+    if (
+      lastOskTopRowReturnEl &&
+      document.body.contains(lastOskTopRowReturnEl) &&
+      getFocusRowId(lastOskTopRowReturnEl) === "osk-1"
+    ) {
+      return lastOskTopRowReturnEl;
+    }
+  }
+
+  if (dir === "up" && el.getAttribute("data-cross-up") === "osk-0") {
+    lastOskTopRowReturnEl = el;
+  }
 
   var crossAttr = dir === "down" ? "data-cross-down" : "data-cross-up";
   var crossRow = el.getAttribute(crossAttr);

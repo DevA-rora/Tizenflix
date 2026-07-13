@@ -318,7 +318,7 @@ function loadContent(el) {
       } else if (msg.indexOf("Failed to fetch") !== -1 || msg.indexOf("NetworkError") !== -1) {
         showError(
           el,
-          "Cannot reach the API. In Settings set API URL to http://localhost:8790 (browser) or http://192.168.86.49:8790 (TV), then start: cd tizenflix-api && npm run api"
+          "Cannot reach the API. In Settings set API URL to http://localhost:8790 (browser) or http://<your-pc-lan-ip>:8790 (TV), then start: cd tizenflix-api && PUBLIC_BASE=http://<your-pc-lan-ip>:8790 npm run api"
         );
       } else {
         showError(el, "Could not load catalog: " + msg);

@@ -51,6 +51,16 @@ function create(options) {
   section.appendChild(seasonsRow);
   section.appendChild(episodesRow);
 
+  function getSelectedSeasonTabIndex() {
+    var tabs = seasonsRow.querySelectorAll(".season-tab");
+    for (var i = 0; i < tabs.length; i++) {
+      if (parseInt(tabs[i].getAttribute("data-season"), 10) === selectedSeason) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
   function renderSeasonTabs(seasons) {
     seasonsRow.innerHTML = "";
     if (!seasons.length) {
@@ -67,6 +77,8 @@ function create(options) {
           "season-tab focusable" + (season.season === selectedSeason ? " is-active" : "");
         tab.setAttribute("data-season", String(season.season));
         tab.setAttribute("aria-label", "Season " + season.season);
+        tab.setAttribute("data-cross-down", "detail-episodes");
+        tab.setAttribute("data-cross-down-col", "0");
         tab.textContent = "Season " + season.season;
         tab.addEventListener("click", function () {
           selectSeason(season.season);
@@ -114,9 +126,10 @@ function create(options) {
 
     var list = document.createElement("div");
     list.className = "episode-list-items";
+    var seasonTabIndex = getSelectedSeasonTabIndex();
 
     for (var i = 0; i < episodes.length; i++) {
-      (function (ep) {
+      (function (ep, episodeIndex) {
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "episode-item focusable";
@@ -124,6 +137,10 @@ function create(options) {
           "aria-label",
           "Episode " + ep.episode + ": " + (ep.title || "Episode")
         );
+        if (episodeIndex === 0) {
+          btn.setAttribute("data-cross-up", "detail-seasons");
+          btn.setAttribute("data-cross-up-col", String(seasonTabIndex));
+        }
 
         var still = ep.still
           ? ' style="background-image:url(\'' + escapeHtml(ep.still) + '\')"'
@@ -154,7 +171,7 @@ function create(options) {
           }
         });
         list.appendChild(btn);
-      })(episodes[i]);
+      })(episodes[i], i);
     }
 
     episodesRow.appendChild(list);

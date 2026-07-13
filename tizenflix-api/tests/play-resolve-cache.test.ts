@@ -47,4 +47,23 @@ describe("play resolve cache", () => {
     });
     expect(movieKey).not.toBe(tvKey);
   });
+
+  it("builds distinct keys for different sources lists", () => {
+    const bare = playResolveCacheKey({
+      type: "tv",
+      tmdbId: "273240",
+      season: "1",
+      episode: "1",
+      backend: "tmdb-native",
+    });
+    const backups = playResolveCacheKey({
+      type: "tv",
+      tmdbId: "273240",
+      season: "1",
+      episode: "1",
+      backend: "tmdb-native",
+      sources: "twoembed,vidrock,vidsrcnet",
+    });
+    expect(bare).not.toBe(backups);
+  });
 });

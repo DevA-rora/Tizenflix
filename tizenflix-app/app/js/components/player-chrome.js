@@ -166,7 +166,8 @@ function openPanel(name) {
   panel.classList.remove("hidden");
   if (name === "subs") renderSubsPanel(panel);
   else if (name === "server") renderServerPanel(panel);
-  else if (name === "quality" || name === "settings") renderSettingsPanel(panel);
+  else if (name === "quality") renderQualityPanel(panel);
+  else if (name === "settings") renderSettingsPanel(panel);
   if (hideTimer) clearTimeout(hideTimer);
   var first = panel.querySelector("button");
   if (first) playerFocus.focusElement(first);
@@ -215,27 +216,54 @@ function renderSubsPanel(panel) {
   });
 }
 
-function renderSettingsPanel(panel) {
-  var modes = ["auto", "high", "medium", "low"];
-  var current = config.getQualityMode();
-  var speed = config.getPlaybackSpeed();
-  var html = '<h3 class="player-panel-title">Settings</h3><div data-player-zone="panel">';
-  html += '<p class="player-panel-hint">Quality</p>';
-  for (var i = 0; i < modes.length; i++) {
-    var m = modes[i];
-    var active = m === current ? " is-active" : "";
+function renderQualityPanel(panel) {
+  var hls = player.getHlsInstance();
+  var options = player.getQualityOptions(hls);
+  var pref = config.getQualityPreference();
+  var current = player.getCurrentQuality(hls, document.getElementById("video"));
+  var html = '<h3 class="player-panel-title">Quality</h3><div data-player-zone="panel">';
+  if (current && current.badge && current.badge !== "—") {
+    html += '<p class="player-panel-hint">Now playing: ' + escapeHtml(current.badge) + "</p>";
+  }
+  if (!options.length) {
+    html +=
+      '<p class="player-panel-hint">Quality options appear once the stream loads.</p>';
+  } else {
+    var autoActive = pref.mode === "auto" ? " is-active" : "";
     html +=
       '<button type="button" class="player-panel-item focusable' +
-      active +
-      '" data-quality="' +
-      m +
-      '" aria-label="Quality ' +
-      m +
-      '">' +
-      m.charAt(0).toUpperCase() +
-      m.slice(1) +
-      "</button>";
+      autoActive +
+      '" data-quality-level="-1" aria-label="Quality Auto">Auto</button>';
+    for (var i = 0; i < options.length; i++) {
+      var opt = options[i];
+      var active = pref.mode === "manual" && pref.level === opt.level ? " is-active" : "";
+      html +=
+        '<button type="button" class="player-panel-item focusable' +
+        active +
+        '" data-quality-level="' +
+        opt.level +
+        '" aria-label="Quality ' +
+        escapeHtml(opt.label) +
+        '">' +
+        escapeHtml(opt.label) +
+        "</button>";
+    }
   }
+  html += "</div>";
+  panel.innerHTML = html;
+  bindPanelItems(panel, function (btn) {
+    var raw = btn.getAttribute("data-quality-level");
+    if (raw === null || raw === "" || !handlers.onQualitySelect) return;
+    var level = parseInt(raw, 10);
+    if (isNaN(level)) return;
+    handlers.onQualitySelect(level);
+    closePanel();
+  });
+}
+
+function renderSettingsPanel(panel) {
+  var speed = config.getPlaybackSpeed();
+  var html = '<h3 class="player-panel-title">Settings</h3><div data-player-zone="panel">';
   html +=
     '<p class="player-panel-hint">Playback speed</p>' +
     '<button type="button" class="player-panel-item focusable is-active" data-speed="cycle" aria-label="Playback speed">' +
@@ -244,8 +272,6 @@ function renderSettingsPanel(panel) {
   html += "</div>";
   panel.innerHTML = html;
   bindPanelItems(panel, function (btn) {
-    var mode = btn.getAttribute("data-quality");
-    if (mode && handlers.onQualitySelect) handlers.onQualitySelect(mode);
     if (btn.getAttribute("data-speed") && handlers.onSpeedCycle) handlers.onSpeedCycle();
     closePanel();
   });
@@ -467,6 +493,15 @@ function bindVideoEvents(video) {
   });
 }
 
+function updateQualityBadge(info) {
+  if (!chromeEl) return;
+  var badge = chromeEl.querySelector("#playerQualityBadge");
+  if (!badge) return;
+  var text = info && info.badge ? info.badge : info && info.label ? info.label : "—";
+  badge.textContent = text;
+  badge.setAttribute("aria-label", "Current quality " + text);
+}
+
 function getZones() {
   if (!chromeEl) return {};
   return {
@@ -494,12 +529,15 @@ function mount(session, h) {
     '<div class="player-vignette-top"></div>' +
     '<div class="player-vignette-bottom"></div>' +
     '<div class="player-top" data-player-zone="top">' +
+    '<div class="player-top-group">' +
     '<button type="button" class="player-icon-btn focusable" id="playerBack" aria-label="Back">' +
     iconBack() +
     "</button>" +
     '<button type="button" class="player-icon-btn focusable" id="playerServer" aria-label="Server">' +
     iconServer() +
     "</button>" +
+    "</div>" +
+    '<span id="playerQualityBadge" class="player-quality-badge" aria-label="Current quality">—</span>' +
     "</div>" +
     '<div class="player-progress-wrap" data-player-zone="progress">' +
     '<span class="player-progress-time">0:00</span>' +
@@ -539,6 +577,9 @@ function mount(session, h) {
       : "") +
     '<button type="button" class="player-dock-btn focusable" id="playerSubs" aria-label="Audio and Subtitles">' +
     iconSubtitles() +
+    "</button>" +
+    '<button type="button" class="player-dock-btn focusable" id="playerQuality" aria-label="Quality">' +
+    iconQuality() +
     "</button>" +
     '<button type="button" class="player-dock-btn focusable" id="playerSettings" aria-label="Settings">' +
     iconSettings() +
@@ -595,6 +636,9 @@ function mount(session, h) {
   }
   chromeEl.querySelector("#playerSubs").addEventListener("click", function () {
     openPanel("subs");
+  });
+  chromeEl.querySelector("#playerQuality").addEventListener("click", function () {
+    openPanel("quality");
   });
   chromeEl.querySelector("#playerSettings").addEventListener("click", function () {
     openPanel("settings");
@@ -685,4 +729,5 @@ module.exports = {
   closeRail: closeRail,
   updateProgress: updateProgress,
   updatePlayPauseIcon: updatePlayPauseIcon,
+  updateQualityBadge: updateQualityBadge,
 };

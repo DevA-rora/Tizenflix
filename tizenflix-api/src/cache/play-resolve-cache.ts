@@ -17,6 +17,8 @@ export interface PlayResolveCacheKeyInput {
   backend?: string;
   onlySourceId?: string;
   server?: string;
+  /** Comma-separated TMDB-native source ids (e.g. twoembed,vidrock). */
+  sources?: string;
 }
 
 export function playResolveCacheKey(input: PlayResolveCacheKeyInput): string {
@@ -28,6 +30,7 @@ export function playResolveCacheKey(input: PlayResolveCacheKeyInput): string {
     input.backend ?? "auto",
     input.onlySourceId ?? "",
     input.server ?? "",
+    input.sources ?? "",
   ].join(":");
 }
 

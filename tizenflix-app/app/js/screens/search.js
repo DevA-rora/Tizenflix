@@ -218,7 +218,7 @@ function wireBrowserKeyboard() {
     if (!keyboardEl) return;
 
     var key = e.key || "";
-    if (key.length === 1 && /[a-z0-9 ]/i.test(key)) {
+    if (key.length === 1 && /[a-z0-9 :.\-'?!]/i.test(key)) {
       if (key === " ") keyboardEl.space();
       else keyboardEl.appendChar(key.toLowerCase());
       e.preventDefault();

@@ -8,10 +8,11 @@
 - [ ] Integrate subDL + opensubtitles so that we can get subtitles with movies! (replace current picker)
 opensubtitles is best for western movies, and subDL for non-western showings.
 - [ ] Add to settings the ability for the user to change the size of the grids. (small medium large)
-
 - [ ] Add ease in animation when the lefthandside toolbar/drawer is opened up.
+- [ ] Add a loading ring when the source stuff is being loaded.
 
 # Doing
+- [ ] Add new row to keyboard.
 
 # Done
 - [x] When typing in search, make sure that the button press down from the backspace lands on F, not on b

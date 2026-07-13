@@ -106,7 +106,7 @@ describe("validatePlaySources tizen profile", () => {
     expect(result.sources[0]?.type).toBe("m3u8");
     expect(result.sources[0]?.provider).toBe("Oxygen");
     expect(result.recommended).toBe("oxygen-720p-0");
-    expect(result.warnings).toBeUndefined();
+    expect(result.warnings).toEqual(["Hydrogen 480p: CDN returned HTTP 403"]);
   });
 
   it("emits a single concise warning when no HLS is playable", async () => {
@@ -118,6 +118,8 @@ describe("validatePlaySources tizen profile", () => {
     expect(result.sources).toHaveLength(0);
     expect(result.recommended).toBeNull();
     expect(result.warnings).toEqual([
+      "Hydrogen 480p: CDN returned HTTP 403",
+      "Oxygen 720p: first segment HTTP 403",
       "No playable HLS stream for this title right now. Try again later.",
     ]);
   });
