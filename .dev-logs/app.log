@@ -1,0 +1,40 @@
+
+> @dev-arora/tizenflix@0.2.0 start
+> npm run build && node scripts/dev.mjs
+
+
+> @dev-arora/tizenflix@0.2.0 build
+> npm run build:app && npm run build:gate
+
+
+> @dev-arora/tizenflix@0.2.0 build:app
+> esbuild app/js/app.js --bundle --outfile=app/dist/app.bundle.js --target=es2015 --format=iife --global-name=TizenflixApp
+
+
+  app/dist/app.bundle.js  249.9kb
+
+⚡ Done in 18ms
+
+> @dev-arora/tizenflix@0.2.0 build:gate
+> esbuild app/js/gate/main.js --bundle --outfile=app/dist/gate.bundle.js --target=es2015 --format=iife --global-name=TizenflixGate
+
+
+  app/dist/gate.bundle.js  167.6kb
+
+⚡ Done in 7ms
+
+Tizenflix app dev server
+  App:   http://localhost:3010/app/index.html
+  Gate:  http://localhost:3010/app/gate/index.html
+  App:   http://192.168.86.178:3010/app/index.html
+  Gate:  http://192.168.86.178:3010/app/gate/index.html
+
+  ⚠ TizenBrew websiteURL IP mismatch!
+    package.json has: 192.168.86.49
+    Your LAN IP is:   192.168.86.178
+    Update root package.json websiteURL, push, and refresh the GitHub module on TV.
+
+
+Also run tizenflix-api with PUBLIC_BASE=http://192.168.86.178:8790
+See docs/tv-setup.md for loading this on your TV via TizenBrew.
+

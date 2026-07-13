@@ -1,13 +1,17 @@
 # Todo
+- [ ] When typing in search, make sure that the button press down from the backspace lands on F, not on b
+- [ ] When leaving search, make sure that you focus on the first movie, not the last movie in the row.
+- [ ] Fix the episode picker (clicking on an episode doesn't )
+- [ ] Fix the back button in the player.
 - [ ] When the user clicks the search button, 
 - [ ] Revamp player UI (it looks like ass rn)
-- [ ] Integrate subDL + opensubtitles so that we can get subtitles with movies!
+- [ ] Integrate subDL + opensubtitles so that we can get subtitles with movies! (replace current picker)
 opensubtitles is best for western movies, and subDL for non-western showings.
-- [ ] Fix weird row UI scrolling bug (skipping rows!?!)
 - [ ] Add to settings the ability for the user to change the size of the grids. (small medium large)
 
 
 # Doing
+- [ ] Fix weird row UI scrolling bug (skipping rows!?!)
 
 # Done
 - [x] port other tmdbprovider hot-path extractors to typescript
