@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from VidsonicExtractor */
+/** Ported from VidsonicExtractor — fallback generic packed */
 export const vidsonicExtractor: ExtractorDef = {
   name: "Vidsonic",
   mainUrl: "https://vidsonic.net",
-  
-  extract: notImplementedExtract("Vidsonic"),
+  extract: (link) => extractGenericPacked(link),
 };

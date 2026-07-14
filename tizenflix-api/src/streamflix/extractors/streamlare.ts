@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from StreamlareExtractor */
+/** Ported from StreamlareExtractor (GenericPackedSourceExtractor) */
 export const streamlareExtractor: ExtractorDef = {
   name: "Streamlare",
   mainUrl: "https://example.com",
-  
-  extract: notImplementedExtract("Streamlare"),
+  extract: (link) => extractGenericPacked(link),
 };

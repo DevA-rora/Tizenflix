@@ -291,7 +291,7 @@ function render(container) {
 
   if (backendBtn) {
     backendBtn.addEventListener("click", function () {
-      var order = ["auto", "tmdb-native", "vidking", "streamflix"];
+      var order = ["streamflix", "auto", "vidking"];
       var current = config.getPlayBackend();
       var idx = order.indexOf(current);
       var next = order[(idx + 1) % order.length];

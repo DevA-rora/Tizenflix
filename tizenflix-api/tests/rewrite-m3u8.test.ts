@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { rewriteM3u8, shouldRewriteAsM3u8, simplifyMasterForTv } from "../src/proxy/rewrite-m3u8.js";
+import { rewriteM3u8, shouldRewriteAsM3u8, simplifyMasterForTv, parseMaxManifestHeight } from "../src/proxy/rewrite-m3u8.js";
 import { buildProxyUrl, resolvePlaylistUrl } from "../src/proxy/proxy-url.js";
 
 const PUBLIC_BASE = "http://192.168.1.10:8790";
@@ -27,6 +27,21 @@ describe("shouldRewriteAsM3u8", () => {
         "#EXTM3U\n#EXTINF:8,\nseg.ts"
       )
     ).toBe(true);
+  });
+});
+
+describe("parseMaxManifestHeight", () => {
+  it("returns highest RESOLUTION height from master playlist", () => {
+    const input = `#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080
+1080p/index.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=1280x720
+720p/index.m3u8`;
+    expect(parseMaxManifestHeight(input)).toBe(1080);
+  });
+
+  it("returns 0 when no RESOLUTION tags are present", () => {
+    expect(parseMaxManifestHeight("#EXTM3U\n#EXTINF:8,\nseg.ts")).toBe(0);
   });
 });
 

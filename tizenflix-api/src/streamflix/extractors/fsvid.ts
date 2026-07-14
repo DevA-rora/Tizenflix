@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from FsvidExtractor */
+/** Ported from FsvidExtractor (GenericPackedSourceExtractor) */
 export const fsvidExtractor: ExtractorDef = {
   name: "FSVid",
   mainUrl: "https://fsvid.lol",
-  
-  extract: notImplementedExtract("FSVid"),
+  extract: (link) => extractGenericPacked(link),
 };

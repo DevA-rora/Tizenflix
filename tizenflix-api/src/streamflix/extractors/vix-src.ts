@@ -2,15 +2,58 @@ import {
   INLINE_MANIFEST_PREFIX,
   storeInlineManifest,
 } from "../../cache/inline-manifest-cache.js";
-import { getExtractLang } from "../extract-context.js";
+import { getExtractLang, getExtractMaxHeight } from "../extract-context.js";
 import type { ExtractorDef } from "../types.js";
 import { fetchJson, fetchText } from "../http.js";
 import { BROWSER_UA } from "../http.js";
+import { parseMaxManifestHeight } from "../../proxy/rewrite-m3u8.js";
 import { patchVixSrcPlaylist } from "./vix-src-playlist.js";
 
 const MAIN_URL = "https://vixsrc.to";
 
-async function extractVixSrc(link: string, lang = "en") {
+function wantsFhdPlaylist(canFhd: boolean, targetMaxHeight?: number): boolean {
+  if (canFhd) return true;
+  return typeof targetMaxHeight === "number" && targetMaxHeight >= 1080;
+}
+
+function buildPlaylistParams(
+  token: string,
+  expires: string,
+  hasB: boolean,
+  requestFhd: boolean,
+  lang: string
+): URLSearchParams {
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  if (expires) params.set("expires", expires);
+  if (hasB) params.set("b", "1");
+  if (requestFhd) params.set("h", "1");
+  params.set("lang", lang);
+  return params;
+}
+
+async function fetchVixSrcPlaylist(
+  playlistUrl: string,
+  referer: string,
+  headers: Record<string, string>
+): Promise<{ body: string; maxHeight: number } | null> {
+  try {
+    const playlistBody = await fetchText(playlistUrl, {
+      headers: {
+        ...headers,
+        Referer: referer,
+        Accept: "*/*",
+      },
+      referer,
+    });
+    if (!playlistBody.trimStart().startsWith("#EXTM3U")) return null;
+    return { body: playlistBody, maxHeight: parseMaxManifestHeight(playlistBody) };
+  } catch {
+    return null;
+  }
+}
+
+async function extractVixSrc(link: string, lang = "en", targetMaxHeight?: number) {
   let apiPath = link.replace(MAIN_URL, "").replace(/^\//, "");
   if (!apiPath.startsWith("api/")) apiPath = `api/${apiPath}`;
   if (!apiPath.includes("lang=")) {
@@ -62,34 +105,36 @@ async function extractVixSrc(link: string, lang = "en") {
   const expires = masterBlock.match(/['"]expires['"]\s*:\s*['"]([^'"]+)['"]/)?.[1] ?? "";
   const hasB = masterBlock.includes("b=1") || masterBlock.includes("ub=1");
   const canFhd = script.includes("window.canPlayFHD = true");
+  const requestFhd = wantsFhdPlaylist(canFhd, targetMaxHeight);
 
-  const params = new URLSearchParams();
-  if (token) params.set("token", token);
-  if (expires) params.set("expires", expires);
-  if (hasB) params.set("b", "1");
-  if (canFhd) params.set("h", "1");
-  params.set("lang", lang);
-
-  const playlistUrl = `${MAIN_URL}/playlist/${videoId}.m3u8?${params.toString()}`;
   const referer = `${MAIN_URL}/${embedPath}`;
+  let params = buildPlaylistParams(token, expires, hasB, requestFhd, lang);
+  let playlistUrl = `${MAIN_URL}/playlist/${videoId}.m3u8?${params.toString()}`;
+
+  let fetched = await fetchVixSrcPlaylist(playlistUrl, referer, headers);
+  if (
+    fetched &&
+    targetMaxHeight &&
+    targetMaxHeight > 0 &&
+    fetched.maxHeight > 0 &&
+    fetched.maxHeight < targetMaxHeight &&
+    !requestFhd
+  ) {
+    params = buildPlaylistParams(token, expires, hasB, true, lang);
+    playlistUrl = `${MAIN_URL}/playlist/${videoId}.m3u8?${params.toString()}`;
+    const retry = await fetchVixSrcPlaylist(playlistUrl, referer, headers);
+    if (retry && retry.maxHeight >= fetched.maxHeight) {
+      fetched = retry;
+    }
+  }
 
   let source = playlistUrl;
-  try {
-    const playlistBody = await fetchText(playlistUrl, {
-      headers: {
-        ...headers,
-        Referer: referer,
-        Accept: "*/*",
-      },
-      referer,
-    });
-    if (playlistBody.trimStart().startsWith("#EXTM3U")) {
-      const patched = patchVixSrcPlaylist(playlistBody, playlistUrl, lang);
-      const manifestToken = storeInlineManifest(patched, playlistUrl, referer);
-      source = `${INLINE_MANIFEST_PREFIX}${manifestToken}`;
-    }
-  } catch {
-    /* fall back to remote playlist URL */
+  let manifestMaxHeight = fetched?.maxHeight ?? 0;
+  if (fetched) {
+    const patched = patchVixSrcPlaylist(fetched.body, playlistUrl, lang);
+    manifestMaxHeight = parseMaxManifestHeight(patched) || manifestMaxHeight;
+    const manifestToken = storeInlineManifest(patched, playlistUrl, referer);
+    source = `${INLINE_MANIFEST_PREFIX}${manifestToken}`;
   }
 
   return {
@@ -100,6 +145,7 @@ async function extractVixSrc(link: string, lang = "en") {
       "User-Agent": BROWSER_UA,
     },
     type: "m3u8" as const,
+    manifestMaxHeight: manifestMaxHeight > 0 ? manifestMaxHeight : undefined,
   };
 }
 
@@ -107,5 +153,5 @@ export const vixSrcExtractor: ExtractorDef = {
   name: "VixSrc",
   mainUrl: MAIN_URL,
   aliasUrls: ["https://vixsrc.to/"],
-  extract: (link) => extractVixSrc(link, getExtractLang()),
+  extract: (link) => extractVixSrc(link, getExtractLang(), getExtractMaxHeight()),
 };

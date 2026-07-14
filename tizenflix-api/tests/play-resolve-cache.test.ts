@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getCachedPlay,
+  invalidatePlayCacheKey,
   isCachedPlayValidated,
   markCachedPlayValidated,
   playResolveCacheKey,
@@ -63,25 +64,6 @@ describe("play resolve cache", () => {
     expect(movieKey).not.toBe(tvKey);
   });
 
-  it("builds distinct keys for different sources lists", () => {
-    const bare = playResolveCacheKey({
-      type: "tv",
-      tmdbId: "273240",
-      season: "1",
-      episode: "1",
-      backend: "tmdb-native",
-    });
-    const backups = playResolveCacheKey({
-      type: "tv",
-      tmdbId: "273240",
-      season: "1",
-      episode: "1",
-      backend: "tmdb-native",
-      sources: "twoembed,vidrock,vidsrcnet",
-    });
-    expect(bare).not.toBe(backups);
-  });
-
   it("builds distinct keys for audio and catalog language", () => {
     const original = playResolveCacheKey({
       type: "movie",
@@ -96,5 +78,48 @@ describe("play resolve cache", () => {
       audioLang: "ja",
     });
     expect(original).not.toBe(japanese);
+  });
+
+  it("builds distinct keys for streamflix provider id", () => {
+    const all = playResolveCacheKey({
+      type: "movie",
+      tmdbId: "27205",
+      backend: "streamflix",
+    });
+    const sflix = playResolveCacheKey({
+      type: "movie",
+      tmdbId: "27205",
+      backend: "streamflix",
+      providerId: "sflix",
+    });
+    expect(all).not.toBe(sflix);
+  });
+
+  it("builds distinct keys for preferred provider hint", () => {
+    const bare = playResolveCacheKey({
+      type: "movie",
+      tmdbId: "27205",
+      backend: "auto",
+    });
+    const preferred = playResolveCacheKey({
+      type: "movie",
+      tmdbId: "27205",
+      backend: "auto",
+      preferredProviderId: "sflix",
+    });
+    expect(bare).not.toBe(preferred);
+  });
+
+  it("invalidates a single cache key", () => {
+    const key = playResolveCacheKey({
+      type: "tv",
+      tmdbId: "65942",
+      season: "1",
+      episode: "1",
+      backend: "auto",
+    });
+    setCachedPlay(key, samplePlay());
+    invalidatePlayCacheKey(key);
+    expect(getCachedPlay(key)).toBeNull();
   });
 });

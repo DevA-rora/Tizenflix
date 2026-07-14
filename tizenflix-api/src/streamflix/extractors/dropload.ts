@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from DroploadExtractor */
+/** Ported from DroploadExtractor (GenericPackedSourceExtractor) */
 export const droploadExtractor: ExtractorDef = {
   name: "Dropload",
   mainUrl: "https://dropload.tv",
   aliasUrls: ["https://dropload.io", "https://dropload.pro", "https://dr0pstream.com"],
-  extract: notImplementedExtract("Dropload"),
+  extract: (link) => extractGenericPacked(link),
 };

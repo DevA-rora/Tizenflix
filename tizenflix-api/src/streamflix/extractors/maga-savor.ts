@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from MagaSavorExtractor */
+/** Ported from MagaSavorExtractor (GenericPackedSourceExtractor) */
 export const magaSavorExtractor: ExtractorDef = {
   name: "MagaSavors",
   mainUrl: "https://magasavor.net",
-  
-  extract: notImplementedExtract("MagaSavors"),
+  extract: (link) => extractGenericPacked(link),
 };

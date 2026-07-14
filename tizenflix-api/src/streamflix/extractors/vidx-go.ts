@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from VidxGoExtractor */
+/** Ported from VidxGoExtractor — fallback generic packed */
 export const vidxGoExtractor: ExtractorDef = {
   name: "VidxGo",
   mainUrl: "https://v.vidxgo.co",
-  
-  extract: notImplementedExtract("VidxGo"),
+  extract: (link) => extractGenericPacked(link),
 };

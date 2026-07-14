@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from ZillaExtractor */
+/** Ported from ZillaExtractor (GenericPackedSourceExtractor) */
 export const zillaExtractor: ExtractorDef = {
   name: "Zilla",
   mainUrl: "https://player.zilla-networks.com",
-  
-  extract: notImplementedExtract("Zilla"),
+  extract: (link) => extractGenericPacked(link),
 };

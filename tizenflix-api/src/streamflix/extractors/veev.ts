@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from VeevExtractor */
+/** Ported from VeevExtractor — fallback generic packed */
 export const veevExtractor: ExtractorDef = {
   name: "Veev",
   mainUrl: "https://veev.to",
   aliasUrls: ["https://veev.to", "https://kinoger.pw", "https://poophq.com", "https://doods.to"],
-  extract: notImplementedExtract("Veev"),
+  extract: (link) => extractGenericPacked(link),
 };

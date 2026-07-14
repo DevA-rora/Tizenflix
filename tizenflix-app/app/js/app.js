@@ -19,6 +19,7 @@ var random = require("./screens/random.js");
 var settings = require("./screens/settings.js");
 var categories = require("./screens/categories.js");
 var mylist = require("./screens/mylist.js");
+var liveTv = require("./screens/live-tv.js");
 var detailMovie = require("./screens/detail-movie.js");
 var detailTv = require("./screens/detail-tv.js");
 
@@ -145,6 +146,7 @@ function init() {
   router.register("search", search);
   router.register("settings", settings);
   router.register("mylist", mylist);
+  router.register("live-tv", liveTv);
   router.register("detail-movie", detailMovie);
   router.register("detail-tv", detailTv);
 

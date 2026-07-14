@@ -1,5 +1,7 @@
 # Backend comparison — Vidking vs TMDB-native vs scrapers (v4)
 
+> **Superseded** by [streamflix-playback.md](./streamflix-playback.md) (July 2026). Kept for historical reference.
+
 > TMDB-native architecture ported from Streamflix `TmdbProvider` (July 2026).
 
 ## Three backend tiers

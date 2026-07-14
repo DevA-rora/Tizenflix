@@ -15,7 +15,7 @@ export const wiflixProvider: ContentProvider = {
   supportsMovies: true,
   supportsTv: true,
   enabled: true,
-  implementationStatus: "partial",
+  implementationStatus: "full",
   async findByTmdb(_tmdbId, _type, meta) {
     const body = new URLSearchParams({
       do: "search",

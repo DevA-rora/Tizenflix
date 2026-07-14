@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from VidMoLyExtractor.ToDomain */
+/** Ported from VidMoLyExtractor.ToDomain — fallback generic packed */
 export const vidMoLyToDomainExtractor: ExtractorDef = {
   name: "VidMoLy",
   mainUrl: "https://vidmoly.me/",
   aliasUrls: ["https://vidmoly.net"],
-  extract: notImplementedExtract("VidMoLy"),
+  extract: (link) => extractGenericPacked(link),
 };

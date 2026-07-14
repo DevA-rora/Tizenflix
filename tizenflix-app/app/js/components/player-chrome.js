@@ -142,6 +142,7 @@ function closePanel() {
   if (panel) {
     panel.classList.add("hidden");
     panel.innerHTML = "";
+    panel._panelDelegationBound = false;
   }
   resetHideTimer();
   playerFocus.focusDefault();
@@ -150,6 +151,7 @@ function closePanel() {
 function closeRail() {
   railOpen = false;
   if (!chromeEl) return;
+  chromeEl.classList.remove("player-chrome-rail-open");
   var rail = chromeEl.querySelector(".player-rail");
   if (rail) rail.classList.add("hidden");
   resetHideTimer();
@@ -181,11 +183,13 @@ function toggleRail() {
   if (!rail) return;
   if (railOpen) {
     rail.classList.remove("hidden");
+    chromeEl.classList.add("player-chrome-rail-open");
     show();
     loadRailEpisodes(rail);
     if (hideTimer) clearTimeout(hideTimer);
   } else {
     rail.classList.add("hidden");
+    chromeEl.classList.remove("player-chrome-rail-open");
     resetHideTimer();
   }
 }
@@ -296,10 +300,16 @@ function formatSourceLabel(src) {
 
 function renderServerPanel(panel) {
   var session = playbackSession.get();
-  panel.innerHTML = '<h3 class="player-panel-title">Server</h3><div class="player-panel-loading">Loading…</div>';
-  var html = '<h3 class="player-panel-title">Server</h3><div data-player-zone="panel">';
-  html += '<p class="player-panel-hint">Stream sources</p>';
+  var activeProviderId =
+    session && session.sources && session.sources[session.currentSourceIndex || 0]
+      ? session.sources[session.currentSourceIndex || 0].providerId
+      : null;
 
+  var html = '<h3 class="player-panel-title">Server</h3><div data-player-zone="panel">';
+  html += '<p class="player-panel-hint">Providers</p>';
+  html += '<div class="player-panel-providers" data-provider-list>Loading providers…</div>';
+
+  html += '<p class="player-panel-hint">Stream sources</p>';
   var sources = (session && session.sources) || [];
   for (var i = 0; i < sources.length; i++) {
     var src = sources[i];
@@ -317,7 +327,7 @@ function renderServerPanel(panel) {
       "</button>";
   }
 
-  html += '<p class="player-panel-hint">Vidking servers</p>';
+  html += '<p class="player-panel-hint">CDN fallback (Vidking)</p>';
   for (var v = 0; v < VIDKING_SERVERS.length; v++) {
     var server = VIDKING_SERVERS[v];
     html +=
@@ -329,18 +339,13 @@ function renderServerPanel(panel) {
       escapeHtml(server) +
       "</button>";
   }
-
-  html += '<p class="player-panel-hint">TMDB-native sources</p>';
-  html += '<div class="player-panel-native" data-native-list>Loading providers…</div>';
   html += "</div>";
   panel.innerHTML = html;
 
-  bindPanelItems(panel, function (btn) {
+  bindPanelDelegation(panel, function (btn) {
     if (btn.hasAttribute("data-source-index")) {
       var idx = parseInt(btn.getAttribute("data-source-index"), 10);
-      if (!isNaN(idx) && handlers.onSourceSwitch) {
-        handlers.onSourceSwitch(idx);
-      }
+      if (!isNaN(idx) && handlers.onSourceSwitch) handlers.onSourceSwitch(idx);
       return;
     }
     var vk = btn.getAttribute("data-vidking");
@@ -348,52 +353,69 @@ function renderServerPanel(panel) {
       handlers.onReResolve({ server: vk, backend: "vidking" });
       return;
     }
-    var nativeId = btn.getAttribute("data-native-id");
-    if (nativeId && handlers.onReResolve) {
-      config.setPreferredSourceId(nativeId);
-      handlers.onReResolve({ onlySourceId: nativeId, backend: "tmdb-native" });
+    var providerId = btn.getAttribute("data-provider-id");
+    if (providerId && handlers.onReResolve) {
+      config.setPreferredProviderId(providerId);
+      handlers.onReResolve({ providerId: providerId, backend: "streamflix" });
     }
   });
 
-  loadNativeProviders(panel);
+  loadStreamflixProviders(panel, activeProviderId);
 }
 
-function loadNativeProviders(panel) {
-  var container = panel.querySelector("[data-native-list]");
+function loadStreamflixProviders(panel, activeProviderId) {
+  var container = panel.querySelector("[data-provider-list]");
   if (!container) return;
+
+  function renderList(providers) {
+    var session = playbackSession.get();
+    var html = "";
+    if (!providers || !providers.length) {
+      container.textContent = "No providers";
+      return;
+    }
+    for (var i = 0; i < providers.length; i++) {
+      var p = providers[i];
+      if (p.implementationStatus === "stub") continue;
+      var id = p.id || "";
+      if (!id) continue;
+      var label = p.name || id;
+      var health = p.health;
+      var healthTxt = health
+        ? " · " + health.successes + " ok / " + health.failures + " fail"
+        : "";
+      var active = activeProviderId === id ? " is-active" : "";
+      var enabled = p.enabled !== false;
+      html +=
+        '<button type="button" class="player-panel-item focusable' +
+        active +
+        (enabled ? "" : " is-disabled") +
+        '" data-provider-id="' +
+        escapeHtml(id) +
+        '" aria-label="' +
+        escapeHtml(label) +
+        '">' +
+        escapeHtml(label) +
+        " [" +
+        escapeHtml(p.language || "?") +
+        "]" +
+        escapeHtml(healthTxt) +
+        "</button>";
+    }
+    container.innerHTML = html || "<p>No providers</p>";
+  }
+
   if (providersCache) {
-    renderNativeList(container, providersCache);
+    renderList(providersCache);
     return;
   }
-  api.getProviders().then(function (data) {
-    providersCache = data.sources || data.providers || [];
-    renderNativeList(container, providersCache);
+
+  api.getStreamflixProviders().then(function (data) {
+    providersCache = data.providers || [];
+    renderList(providersCache);
   }).catch(function () {
     container.textContent = "Providers unavailable";
   });
-}
-
-function renderNativeList(container, providers) {
-  var html = "";
-  if (!providers || !providers.length) {
-    container.textContent = "No providers";
-    return;
-  }
-  for (var i = 0; i < providers.length; i++) {
-    var p = providers[i];
-    var id = p.id || p.sourceId || "";
-    var label = p.label || p.name || id;
-    if (!id) continue;
-    html +=
-      '<button type="button" class="player-panel-item focusable" data-native-id="' +
-      escapeHtml(id) +
-      '" aria-label="' +
-      escapeHtml(label) +
-      '">' +
-      escapeHtml(label) +
-      "</button>";
-  }
-  container.innerHTML = html;
 }
 
 function bindPanelItems(panel, onClick) {
@@ -405,6 +427,21 @@ function bindPanelItems(panel, onClick) {
       });
     })(buttons[i]);
   }
+}
+
+function bindPanelDelegation(panel, onClick) {
+  if (panel._panelDelegationBound) return;
+  panel._panelDelegationBound = true;
+  panel.addEventListener("click", function (e) {
+    var btn = e.target;
+    while (btn && btn !== panel) {
+      if (btn.classList && btn.classList.contains("player-panel-item")) {
+        onClick(btn);
+        return;
+      }
+      btn = btn.parentNode;
+    }
+  });
 }
 
 function loadRailEpisodes(rail) {
@@ -439,6 +476,11 @@ function loadRailEpisodes(rail) {
           escapeHtml(ep.title) +
           "</strong></div>";
         card.addEventListener("click", function () {
+          if (String(session.episode) === String(ep.episode)) {
+            closeRail();
+            return;
+          }
+          list.innerHTML = '<div class="loading-msg">Loading episode…</div>';
           if (handlers.onEpisodeSelect) {
             handlers.onEpisodeSelect(session.tmdbId, session.season, ep.episode, ep.title, ep.overview);
           }
@@ -699,23 +741,12 @@ function handleBack() {
     closeRail();
     return true;
   }
-  if (isVisible()) {
-    hide();
-    return true;
-  }
-  return false;
+  if (handlers.onStop) handlers.onStop();
+  return true;
 }
 
 function handleUiBack() {
-  if (panelOpen) {
-    closePanel();
-    return;
-  }
-  if (railOpen) {
-    closeRail();
-    return;
-  }
-  if (handlers.onStop) handlers.onStop();
+  handleBack();
 }
 
 function destroy() {

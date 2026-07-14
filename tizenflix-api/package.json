@@ -16,6 +16,7 @@
     "sample-mp4": "node scripts/sample-mp4.mjs",
     "benchmark-streamflix": "tsx scripts/benchmark-streamflix.mjs",
     "benchmark-tmdb-native": "tsx scripts/benchmark-tmdb-native.mjs",
+    "sync-streamflix": "node scripts/sync-streamflix.mjs",
     "setup": "playwright install chromium",
     "postinstall": "node scripts/postinstall.mjs"
   },

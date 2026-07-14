@@ -13,6 +13,7 @@ var TizenflixGate = (() => {
       var DEV_MODE_KEY = "tizenflix.devMode";
       var BACKEND_KEY = "tizenflix.playBackend";
       var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
+      var PREFERRED_PROVIDER_KEY = "tizenflix.preferredProvider";
       var GRID_SCALE_KEY = "tizenflix.gridScale";
       var AUTOPLAY_KEY = "tizenflix.autoplay";
       var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
@@ -25,7 +26,7 @@ var TizenflixGate = (() => {
       var VALID_AUDIO_PREFS = ["original", "en", "de", "fr", "it", "es", "ja", "ko", "zh"];
       var VALID_TARGET_RESOLUTIONS = ["auto", "720", "1080", "2160"];
       var API_PORT = "8790";
-      var PLAY_RESOLVE_TIMEOUT_MS = 2e4;
+      var PLAY_RESOLVE_TIMEOUT_MS = 9e4;
       var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
       function isTizenClient() {
         if (typeof navigator === "undefined") return false;
@@ -143,6 +144,14 @@ var TizenflixGate = (() => {
         }
         return max;
       }
+      function qualityHeightScore(height, target) {
+        var targetPx = targetResolutionPixels(target);
+        if (!targetPx) return height || 0;
+        if (!height) return -1;
+        if (height === targetPx) return 1e4 + height;
+        if (height < targetPx) return 5e3 + height;
+        return height;
+      }
       function isBelowTargetResolution(play, target) {
         var targetPx = targetResolutionPixels(target);
         if (!targetPx || !play) return false;
@@ -154,7 +163,7 @@ var TizenflixGate = (() => {
           if (stored === "vidking" || stored === "streamflix" || stored === "auto" || stored === "tmdb-native") return stored;
         } catch (err) {
         }
-        return "auto";
+        return "streamflix";
       }
       function setPlayBackend(mode) {
         var m = mode === "streamflix" || mode === "auto" || mode === "tmdb-native" ? mode : "vidking";
@@ -179,6 +188,22 @@ var TizenflixGate = (() => {
         } catch (err) {
         }
         return sourceId || null;
+      }
+      function getPreferredProviderId() {
+        try {
+          var stored = localStorage.getItem(PREFERRED_PROVIDER_KEY);
+          if (stored && typeof stored === "string") return stored;
+        } catch (err) {
+        }
+        return null;
+      }
+      function setPreferredProviderId(providerId) {
+        try {
+          if (!providerId) localStorage.removeItem(PREFERRED_PROVIDER_KEY);
+          else localStorage.setItem(PREFERRED_PROVIDER_KEY, String(providerId));
+        } catch (err) {
+        }
+        return providerId || null;
       }
       function deriveDefaultApi() {
         if (typeof window !== "undefined" && window.location && window.location.hostname) {
@@ -538,15 +563,20 @@ var TizenflixGate = (() => {
       }
       function orderSourcesForPlay(play) {
         var sources = listM3u8Sources(play);
-        sources = orderSourcesForTargetResolution(sources, getTargetResolution());
+        var target = getTargetResolution();
+        sources = orderSourcesForTargetResolution(sources, target);
         if (!play || !play.recommended) return sources;
+        var targetPx = targetResolutionPixels(target);
         var first = null;
         var rest = [];
         for (var i = 0; i < sources.length; i++) {
           if (sources[i].id === play.recommended) first = sources[i];
           else rest.push(sources[i]);
         }
-        if (first) return [first].concat(rest);
+        if (!first) return sources;
+        if (target === "auto") return [first].concat(rest);
+        var recH = parseHeightFromLabel(first.label);
+        if (!targetPx || recH >= targetPx || recH === 0) return [first].concat(rest);
         return sources;
       }
       function listSourcesToTry(play) {
@@ -624,6 +654,8 @@ var TizenflixGate = (() => {
         setPlayBackend,
         getPreferredSourceId,
         setPreferredSourceId,
+        getPreferredProviderId,
+        setPreferredProviderId,
         getApiBase,
         setApiBase,
         getQualityMode,
@@ -641,6 +673,7 @@ var TizenflixGate = (() => {
         parseHeightFromLabel,
         orderSourcesForTargetResolution,
         maxSourceHeight,
+        qualityHeightScore,
         isBelowTargetResolution,
         VALID_TARGET_RESOLUTIONS,
         checkHealth,
@@ -1208,7 +1241,7 @@ var TizenflixGate = (() => {
         }
         return { label: "\u2014", height: 0, isAuto: true, badge: "\u2014" };
       }
-      function logTargetQualityWarning(hls, onLog) {
+      function logTargetQualityWarning(hls, onLog, sourceLabel) {
         var target = config2.getTargetResolution();
         if (target === "auto" || !hls || !hls.levels || !hls.levels.length) return;
         var targetPx = config2.targetResolutionPixels(target);
@@ -1216,7 +1249,18 @@ var TizenflixGate = (() => {
         var info = getCurrentQuality(hls, hls.media);
         if (!info.height || info.height >= targetPx) return;
         var want = config2.preferredQualityForTarget(target) || target + "p";
+        var maxLevel = 0;
+        for (var i = 0; i < hls.levels.length; i++) {
+          var lh = hls.levels[i].height || 0;
+          if (lh > maxLevel) maxLevel = lh;
+        }
         var msg = "Playing " + info.label + " (" + want + " requested)";
+        if (maxLevel > 0) {
+          msg += " \u2014 manifest max " + maxLevel + "p";
+        }
+        if (sourceLabel) {
+          msg += " [" + sourceLabel + "]";
+        }
         debug2.debugLog(msg);
         if (onLog) onLog(msg);
       }
@@ -1454,8 +1498,22 @@ var TizenflixGate = (() => {
         setupBufferWatchdog(video, hlsInstance, session, onLog);
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
           if (!isActiveSession(session)) return;
-          debug2.debugLog("HLS.js manifest parsed");
-          if (onLog) onLog("HLS.js manifest parsed \u2014 buffering ahead");
+          var levelCount = hlsInstance.levels ? hlsInstance.levels.length : 0;
+          var maxH = 0;
+          if (hlsInstance.levels) {
+            for (var li = 0; li < hlsInstance.levels.length; li++) {
+              var lh = hlsInstance.levels[li].height || 0;
+              if (lh > maxH) maxH = lh;
+            }
+          }
+          debug2.debugLog(
+            "HLS.js manifest parsed \u2014 levels: " + levelCount + ", max height: " + (maxH ? maxH + "p" : "unknown")
+          );
+          if (onLog) {
+            onLog(
+              "HLS.js manifest parsed \u2014 " + levelCount + " level(s)" + (maxH ? ", max " + maxH + "p" : "")
+            );
+          }
           applyQualityPreference(hlsInstance, onLog);
           notifyQualityChange(getCurrentQuality(hlsInstance, video));
           setupPlaybackHealthReport(video, session);
@@ -1992,6 +2050,17 @@ var TizenflixGate = (() => {
       function toggleStreamflixProvider(id, enabled) {
         return config2.apiPost("/providers/streamflix/toggle", { id, enabled });
       }
+      function getLiveProviders() {
+        return config2.apiGet("/live/providers");
+      }
+      function getLiveChannels(providerId) {
+        return config2.apiGet("/live/" + encodeURIComponent(providerId) + "/channels");
+      }
+      function resolveLiveChannel(providerId, channelId) {
+        return config2.apiGet(
+          "/live/" + encodeURIComponent(providerId) + "/play/" + encodeURIComponent(channelId)
+        );
+      }
       module.exports = {
         getBase,
         setBase: config2.setApiBase,
@@ -2017,7 +2086,10 @@ var TizenflixGate = (() => {
         listGenres,
         browseGenre,
         getStreamflixProviders,
-        toggleStreamflixProvider
+        toggleStreamflixProvider,
+        getLiveProviders,
+        getLiveChannels,
+        resolveLiveChannel
       };
     }
   });
@@ -2416,6 +2488,7 @@ var TizenflixGate = (() => {
         if (panel) {
           panel.classList.add("hidden");
           panel.innerHTML = "";
+          panel._panelDelegationBound = false;
         }
         resetHideTimer();
         playerFocus.focusDefault();
@@ -2423,6 +2496,7 @@ var TizenflixGate = (() => {
       function closeRail() {
         railOpen = false;
         if (!chromeEl) return;
+        chromeEl.classList.remove("player-chrome-rail-open");
         var rail = chromeEl.querySelector(".player-rail");
         if (rail) rail.classList.add("hidden");
         resetHideTimer();
@@ -2452,11 +2526,13 @@ var TizenflixGate = (() => {
         if (!rail) return;
         if (railOpen) {
           rail.classList.remove("hidden");
+          chromeEl.classList.add("player-chrome-rail-open");
           show();
           loadRailEpisodes(rail);
           if (hideTimer) clearTimeout(hideTimer);
         } else {
           rail.classList.add("hidden");
+          chromeEl.classList.remove("player-chrome-rail-open");
           resetHideTimer();
         }
       }
@@ -2537,8 +2613,10 @@ var TizenflixGate = (() => {
       }
       function renderServerPanel(panel) {
         var session = playbackSession.get();
-        panel.innerHTML = '<h3 class="player-panel-title">Server</h3><div class="player-panel-loading">Loading\u2026</div>';
+        var activeProviderId = session && session.sources && session.sources[session.currentSourceIndex || 0] ? session.sources[session.currentSourceIndex || 0].providerId : null;
         var html = '<h3 class="player-panel-title">Server</h3><div data-player-zone="panel">';
+        html += '<p class="player-panel-hint">Providers</p>';
+        html += '<div class="player-panel-providers" data-provider-list>Loading providers\u2026</div>';
         html += '<p class="player-panel-hint">Stream sources</p>';
         var sources = session && session.sources || [];
         for (var i = 0; i < sources.length; i++) {
@@ -2547,21 +2625,17 @@ var TizenflixGate = (() => {
           var active = session && session.currentSourceIndex === i ? " is-active" : "";
           html += '<button type="button" class="player-panel-item focusable' + active + '" data-source-index="' + i + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
         }
-        html += '<p class="player-panel-hint">Vidking servers</p>';
+        html += '<p class="player-panel-hint">CDN fallback (Vidking)</p>';
         for (var v = 0; v < VIDKING_SERVERS.length; v++) {
           var server = VIDKING_SERVERS[v];
           html += '<button type="button" class="player-panel-item focusable" data-vidking="' + escapeHtml(server) + '" aria-label="Vidking ' + escapeHtml(server) + '">' + escapeHtml(server) + "</button>";
         }
-        html += '<p class="player-panel-hint">TMDB-native sources</p>';
-        html += '<div class="player-panel-native" data-native-list>Loading providers\u2026</div>';
         html += "</div>";
         panel.innerHTML = html;
-        bindPanelItems(panel, function(btn) {
+        bindPanelDelegation(panel, function(btn) {
           if (btn.hasAttribute("data-source-index")) {
             var idx = parseInt(btn.getAttribute("data-source-index"), 10);
-            if (!isNaN(idx) && handlers.onSourceSwitch) {
-              handlers.onSourceSwitch(idx);
-            }
+            if (!isNaN(idx) && handlers.onSourceSwitch) handlers.onSourceSwitch(idx);
             return;
           }
           var vk = btn.getAttribute("data-vidking");
@@ -2569,42 +2643,48 @@ var TizenflixGate = (() => {
             handlers.onReResolve({ server: vk, backend: "vidking" });
             return;
           }
-          var nativeId = btn.getAttribute("data-native-id");
-          if (nativeId && handlers.onReResolve) {
-            config2.setPreferredSourceId(nativeId);
-            handlers.onReResolve({ onlySourceId: nativeId, backend: "tmdb-native" });
+          var providerId = btn.getAttribute("data-provider-id");
+          if (providerId && handlers.onReResolve) {
+            config2.setPreferredProviderId(providerId);
+            handlers.onReResolve({ providerId, backend: "streamflix" });
           }
         });
-        loadNativeProviders(panel);
+        loadStreamflixProviders(panel, activeProviderId);
       }
-      function loadNativeProviders(panel) {
-        var container = panel.querySelector("[data-native-list]");
+      function loadStreamflixProviders(panel, activeProviderId) {
+        var container = panel.querySelector("[data-provider-list]");
         if (!container) return;
+        function renderList(providers) {
+          var session = playbackSession.get();
+          var html = "";
+          if (!providers || !providers.length) {
+            container.textContent = "No providers";
+            return;
+          }
+          for (var i = 0; i < providers.length; i++) {
+            var p = providers[i];
+            if (p.implementationStatus === "stub") continue;
+            var id = p.id || "";
+            if (!id) continue;
+            var label = p.name || id;
+            var health = p.health;
+            var healthTxt = health ? " \xB7 " + health.successes + " ok / " + health.failures + " fail" : "";
+            var active = activeProviderId === id ? " is-active" : "";
+            var enabled = p.enabled !== false;
+            html += '<button type="button" class="player-panel-item focusable' + active + (enabled ? "" : " is-disabled") + '" data-provider-id="' + escapeHtml(id) + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + " [" + escapeHtml(p.language || "?") + "]" + escapeHtml(healthTxt) + "</button>";
+          }
+          container.innerHTML = html || "<p>No providers</p>";
+        }
         if (providersCache) {
-          renderNativeList(container, providersCache);
+          renderList(providersCache);
           return;
         }
-        api.getProviders().then(function(data) {
-          providersCache = data.sources || data.providers || [];
-          renderNativeList(container, providersCache);
+        api.getStreamflixProviders().then(function(data) {
+          providersCache = data.providers || [];
+          renderList(providersCache);
         }).catch(function() {
           container.textContent = "Providers unavailable";
         });
-      }
-      function renderNativeList(container, providers) {
-        var html = "";
-        if (!providers || !providers.length) {
-          container.textContent = "No providers";
-          return;
-        }
-        for (var i = 0; i < providers.length; i++) {
-          var p = providers[i];
-          var id = p.id || p.sourceId || "";
-          var label = p.label || p.name || id;
-          if (!id) continue;
-          html += '<button type="button" class="player-panel-item focusable" data-native-id="' + escapeHtml(id) + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
-        }
-        container.innerHTML = html;
       }
       function bindPanelItems(panel, onClick) {
         var buttons = panel.querySelectorAll(".player-panel-item");
@@ -2615,6 +2695,20 @@ var TizenflixGate = (() => {
             });
           })(buttons[i]);
         }
+      }
+      function bindPanelDelegation(panel, onClick) {
+        if (panel._panelDelegationBound) return;
+        panel._panelDelegationBound = true;
+        panel.addEventListener("click", function(e) {
+          var btn = e.target;
+          while (btn && btn !== panel) {
+            if (btn.classList && btn.classList.contains("player-panel-item")) {
+              onClick(btn);
+              return;
+            }
+            btn = btn.parentNode;
+          }
+        });
       }
       function loadRailEpisodes(rail) {
         var session = playbackSession.get();
@@ -2636,6 +2730,11 @@ var TizenflixGate = (() => {
               card.setAttribute("aria-label", "Episode " + ep.episode);
               card.innerHTML = '<div class="player-rail-thumb"' + still + '></div><div class="player-rail-meta"><strong>' + ep.episode + ". " + escapeHtml(ep.title) + "</strong></div>";
               card.addEventListener("click", function() {
+                if (String(session.episode) === String(ep.episode)) {
+                  closeRail();
+                  return;
+                }
+                list.innerHTML = '<div class="loading-msg">Loading episode\u2026</div>';
                 if (handlers.onEpisodeSelect) {
                   handlers.onEpisodeSelect(session.tmdbId, session.season, ep.episode, ep.title, ep.overview);
                 }
@@ -2809,22 +2908,11 @@ var TizenflixGate = (() => {
           closeRail();
           return true;
         }
-        if (isVisible()) {
-          hide();
-          return true;
-        }
-        return false;
+        if (handlers.onStop) handlers.onStop();
+        return true;
       }
       function handleUiBack() {
-        if (panelOpen) {
-          closePanel();
-          return;
-        }
-        if (railOpen) {
-          closeRail();
-          return;
-        }
-        if (handlers.onStop) handlers.onStop();
+        handleBack();
       }
       function destroy() {
         document.removeEventListener("keydown", onActivity, true);
@@ -2869,11 +2957,15 @@ var TizenflixGate = (() => {
       var playerChrome = require_player_chrome();
       var VIDKING_SERVER_FALLBACKS = [
         { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15e3 },
-        { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15e3 }
+        { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15e3 },
+        { label: "Helium", query: "server=Helium&backend=vidking", timeoutMs: 15e3 },
+        { label: "Hydrogen", query: "server=Hydrogen&backend=vidking", timeoutMs: 15e3 },
+        { label: "Lithium", query: "server=Lithium&backend=vidking", timeoutMs: 15e3 }
       ];
-      var AUTO_RESOLVE_QUERY = "backend=auto";
+      var PRIMARY_RESOLVE_TIMEOUT_MS = 9e4;
+      var ANIME_PROVIDER_ORDER = ["hianime", "anikoto", "ani-world", "anime-world"];
+      var EN_PROVIDER_ORDER = ["sflix", "ridomovies", "superstream", "streaming-community-en", "anymovie"];
       var TMDB_BACKUP_QUERY = "backend=tmdb-native&sources=twoembed,vidrock,vidsrcnet,vidzee";
-      var FAST_RESOLVE_TIMEOUT_MS = 5e3;
       var playSession = 0;
       var progressSaveTimer = null;
       var lastProgressSaveAt = 0;
@@ -2881,6 +2973,9 @@ var TizenflixGate = (() => {
       var autoplayTimer = null;
       var autoplayEndedHandler = null;
       var qualityUnsubscribe = null;
+      var lastKnownPlayingHeight = 0;
+      var qualityUpgradeAttempted = false;
+      var pendingQualityUpgrade = null;
       function unbindQualityWatcher() {
         if (qualityUnsubscribe) {
           qualityUnsubscribe();
@@ -2891,7 +2986,21 @@ var TizenflixGate = (() => {
         unbindQualityWatcher();
         var video = document.getElementById("video");
         qualityUnsubscribe = player2.onQualityChange(function(info) {
+          if (info.height) lastKnownPlayingHeight = info.height;
           playerChrome.updateQualityBadge(info);
+          if (!pendingQualityUpgrade || qualityUpgradeAttempted) return;
+          var targetPx = config2.targetResolutionPixels(config2.getTargetResolution());
+          if (targetPx && info.height > 0 && info.height < targetPx) {
+            var pending = pendingQualityUpgrade;
+            pendingQualityUpgrade = null;
+            scheduleQualityUpgrade(
+              pending.session,
+              pending.play,
+              pending.title,
+              pending.onStatus,
+              pending.playOptions
+            );
+          }
         });
         playerChrome.updateQualityBadge(player2.getCurrentQuality(player2.getHlsInstance(), video));
       }
@@ -2977,8 +3086,9 @@ var TizenflixGate = (() => {
         lastProgressSaveAt = 0;
       }
       function formatResolveError(play) {
-        if (play && play.warnings && play.warnings.length === 1) {
-          return play.warnings[0];
+        if (play && play.warnings && play.warnings.length) {
+          if (play.warnings.length === 1) return play.warnings[0];
+          return play.warnings.slice(0, 3).join("; ");
         }
         return "No playable stream for this title right now.";
       }
@@ -3098,6 +3208,9 @@ var TizenflixGate = (() => {
           },
           onEpisodeSelect: function(tmdbId, season, episode, episodeTitle, overview) {
             var session = playbackSession.get();
+            if (session && String(session.season) === String(season) && String(session.episode) === String(episode)) {
+              return;
+            }
             var showTitle = session ? session.showTitle : "";
             var label = showTitle + " S" + season + "E" + episode;
             playTvEpisode(
@@ -3143,6 +3256,9 @@ var TizenflixGate = (() => {
       function beginPlaybackRequest(meta, onStatus) {
         playSession += 1;
         var session = playSession;
+        qualityUpgradeAttempted = false;
+        lastKnownPlayingHeight = 0;
+        pendingQualityUpgrade = null;
         var video = document.getElementById("video");
         var wrap = document.getElementById("videoWrap");
         if (video) player2.destroyPlayer(video);
@@ -3161,84 +3277,6 @@ var TizenflixGate = (() => {
       function isCdnPlaybackError(reason) {
         if (!reason) return false;
         return /HTTP (521|502|503|403|404)|manifestLoadError|networkError/i.test(String(reason));
-      }
-      function countPlayableSources(play) {
-        return api.sourcesForPlay(play).length;
-      }
-      function pickBestResolveResult(results) {
-        var best = null;
-        for (var i = 0; i < results.length; i++) {
-          var r = results[i];
-          if (!r.play || !api.hasPlayableSources(r.play)) continue;
-          var count = countPlayableSources(r.play);
-          if (!best || count > best.count || count === best.count && r.tierIndex < best.tierIndex) {
-            best = {
-              play: r.play,
-              via: r.via,
-              tierIndex: r.tierIndex,
-              count
-            };
-          }
-        }
-        return best;
-      }
-      function raceResolveAttempts(resolveAttempts, onStatus, session) {
-        if (!resolveAttempts.length) {
-          return Promise.resolve({ play: null, via: null, tierIndex: -1, fallbacks: [] });
-        }
-        debug2.debugLog("Racing: " + resolveAttempts.map(function(e) {
-          return e.label;
-        }).join(", "));
-        if (onStatus) onStatus("Finding stream\u2026");
-        return new Promise(function(resolve) {
-          var finished = false;
-          var pending = resolveAttempts.length;
-          var results = [];
-          function finish() {
-            if (finished) return;
-            finished = true;
-            var best = pickBestResolveResult(results);
-            if (best) {
-              debug2.debugLog("Resolved via: " + best.via + " (" + best.count + " source(s))");
-              if (onStatus) onStatus("Resolved via: " + best.via);
-              resolve({
-                play: best.play,
-                via: best.via,
-                tierIndex: best.tierIndex,
-                fallbacks: resolveAttempts.slice(best.tierIndex + 1)
-              });
-              return;
-            }
-            resolve({
-              play: null,
-              via: null,
-              tierIndex: -1,
-              fallbacks: resolveAttempts
-            });
-          }
-          for (var i = 0; i < resolveAttempts.length; i++) {
-            (function(entry, tierIndex) {
-              debug2.debugLog("Trying " + entry.label + "\u2026");
-              entry.run().then(function(play) {
-                if (!isActivePlaySession(session) || finished) return;
-                if (play && api.hasPlayableSources(play)) {
-                  results.push({
-                    play,
-                    via: entry.label,
-                    tierIndex,
-                    count: countPlayableSources(play)
-                  });
-                  finish();
-                }
-              }).catch(function(err) {
-                debug2.debugLog("Resolve failed (" + entry.label + "): " + err.message);
-              }).then(function() {
-                pending -= 1;
-                if (pending === 0) finish();
-              });
-            })(resolveAttempts[i], i);
-          }
-        });
       }
       function resolveWithTizenFallback(resolveAttempts, onStatus, session) {
         var chain = Promise.resolve({ play: null, via: null, tierIndex: -1 });
@@ -3276,6 +3314,7 @@ var TizenflixGate = (() => {
         if (!fallbacks || !fallbacks.length) {
           return Promise.reject(new Error("All sources failed \u2014 CDN may be blocking playback"));
         }
+        playbackSession.clearPrefetch();
         var msg = "CDN error \u2014 trying next server\u2026";
         debug2.debugLog(msg);
         if (onStatus) onStatus(msg);
@@ -3283,6 +3322,9 @@ var TizenflixGate = (() => {
           if (!isActivePlaySession(session)) return;
           if (!result.play || !api.hasPlayableSources(result.play)) {
             return Promise.reject(new Error(formatResolveError(result.play)));
+          }
+          if (result.via && result.play.sources && result.play.sources[0]) {
+            config2.setPreferredProviderId(result.play.sources[0].providerId || null);
           }
           playOptions._fallbacks = result.fallbacks || [];
           return playResolved(result.play, title, onStatus, session, playOptions);
@@ -3300,6 +3342,9 @@ var TizenflixGate = (() => {
         }
         playbackSession.setFromPlay(play, sources, { displayTitle: title });
         var stored = playbackSession.get();
+        if (sources[0] && sources[0].providerId) {
+          config2.setPreferredProviderId(sources[0].providerId);
+        }
         wrap.classList.remove("hidden");
         player2.showPlaybackChrome(wrap, title || play.title || "");
         player2.applySubtitles(video, play.subtitles || []);
@@ -3344,6 +3389,27 @@ var TizenflixGate = (() => {
           };
         }
         player2.playSources(video, sources, log, wrap, title || play.title || "Playback", sourceOptions);
+        if (playOptions._upgradeAttempts && playOptions._upgradeAttempts.length) {
+          pendingQualityUpgrade = {
+            session,
+            play,
+            title,
+            onStatus,
+            playOptions
+          };
+          setTimeout(function() {
+            if (!pendingQualityUpgrade || pendingQualityUpgrade.session !== session) return;
+            var pending = pendingQualityUpgrade;
+            pendingQualityUpgrade = null;
+            scheduleQualityUpgrade(
+              pending.session,
+              pending.play,
+              pending.title,
+              pending.onStatus,
+              pending.playOptions
+            );
+          }, 5e3);
+        }
         return Promise.resolve();
       }
       function loadSubtitlesAsync(play, video) {
@@ -3361,21 +3427,57 @@ var TizenflixGate = (() => {
         }).catch(function() {
         });
       }
-      function buildMoviePrimaryAttempts(tmdbId) {
-        return [
-          {
-            label: "Auto (fast)",
-            run: function() {
-              return api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS);
-            }
-          },
-          {
-            label: "TMDB-native backups",
-            run: function() {
-              return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, FAST_RESOLVE_TIMEOUT_MS);
-            }
-          }
-        ];
+      function buildPrimaryResolveQuery() {
+        var parts = [];
+        var backend = config2.getPlayBackend();
+        if (backend === "auto") backend = "streamflix";
+        parts.push("backend=" + backend);
+        var preferred = config2.getPreferredProviderId();
+        if (preferred) {
+          parts.push("preferredProviderId=" + encodeURIComponent(preferred));
+        }
+        return parts.join("&");
+      }
+      function isAnimeProviderId(providerId) {
+        return providerId && ANIME_PROVIDER_ORDER.indexOf(providerId) !== -1;
+      }
+      function streamflixProviderChain(startAfterId) {
+        var preferred = config2.getPreferredProviderId();
+        var anchor = startAfterId || preferred;
+        if (anchor && isAnimeProviderId(anchor)) {
+          var aIdx = ANIME_PROVIDER_ORDER.indexOf(anchor);
+          return aIdx >= 0 ? ANIME_PROVIDER_ORDER.slice(aIdx + 1) : ANIME_PROVIDER_ORDER.slice();
+        }
+        if (anchor && EN_PROVIDER_ORDER.indexOf(anchor) !== -1) {
+          var eIdx = EN_PROVIDER_ORDER.indexOf(anchor);
+          return eIdx >= 0 ? EN_PROVIDER_ORDER.slice(eIdx + 1) : EN_PROVIDER_ORDER.slice();
+        }
+        return ANIME_PROVIDER_ORDER.concat(EN_PROVIDER_ORDER);
+      }
+      function buildStreamflixProviderFallbacks(tmdbId, type, season, episode, startAfterId) {
+        var chain = streamflixProviderChain(startAfterId);
+        var attempts = [];
+        for (var i = 0; i < chain.length; i++) {
+          (function(providerId) {
+            attempts.push({
+              label: providerId,
+              run: function() {
+                var q = "providerId=" + encodeURIComponent(providerId) + "&backend=streamflix";
+                if (type === "tv") {
+                  return api.resolveTvEpisode(
+                    tmdbId,
+                    season,
+                    episode,
+                    q,
+                    PRIMARY_RESOLVE_TIMEOUT_MS
+                  );
+                }
+                return api.resolveMovie(tmdbId, q, PRIMARY_RESOLVE_TIMEOUT_MS);
+              }
+            });
+          })(chain[i]);
+        }
+        return attempts;
       }
       function buildMovieVidkingFallbacks(tmdbId) {
         var attempts = [];
@@ -3391,34 +3493,6 @@ var TizenflixGate = (() => {
         }
         return attempts;
       }
-      function buildTvPrimaryAttempts(tmdbId, season, episode) {
-        return [
-          {
-            label: "Auto (fast)",
-            run: function() {
-              return api.resolveTvEpisode(
-                tmdbId,
-                season,
-                episode,
-                AUTO_RESOLVE_QUERY,
-                FAST_RESOLVE_TIMEOUT_MS
-              );
-            }
-          },
-          {
-            label: "TMDB-native backups",
-            run: function() {
-              return api.resolveTvEpisode(
-                tmdbId,
-                season,
-                episode,
-                TMDB_BACKUP_QUERY,
-                FAST_RESOLVE_TIMEOUT_MS
-              );
-            }
-          }
-        ];
-      }
       function buildTvVidkingFallbacks(tmdbId, season, episode) {
         var attempts = [];
         for (var i = 0; i < VIDKING_SERVER_FALLBACKS.length; i++) {
@@ -3433,17 +3507,81 @@ var TizenflixGate = (() => {
         }
         return attempts;
       }
+      function buildQualityUpgradeAttempts(tmdbId, type, season, episode) {
+        var backup = {
+          label: "TMDB-native backups",
+          run: function() {
+            if (type === "tv") {
+              return api.resolveTvEpisode(
+                tmdbId,
+                season,
+                episode,
+                TMDB_BACKUP_QUERY,
+                PRIMARY_RESOLVE_TIMEOUT_MS
+              );
+            }
+            return api.resolveMovie(tmdbId, TMDB_BACKUP_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+          }
+        };
+        return [backup];
+      }
+      function scheduleQualityUpgrade(session, currentPlay, title, onStatus, playOptions) {
+        var target = config2.getTargetResolution();
+        if (target === "auto" || qualityUpgradeAttempted) return;
+        var targetPx = config2.targetResolutionPixels(target);
+        if (!targetPx) return;
+        var currentMax = config2.maxSourceHeight(currentPlay);
+        var playingH = lastKnownPlayingHeight || 0;
+        if (playingH >= targetPx) return;
+        if (!playingH && currentMax >= targetPx) return;
+        if (!playOptions._upgradeAttempts || !playOptions._upgradeAttempts.length) return;
+        qualityUpgradeAttempted = true;
+        debug2.debugLog("Searching for higher quality than " + (lastKnownPlayingHeight || currentMax || "?") + "p\u2026");
+        if (onStatus) onStatus("Searching for higher quality\u2026");
+        resolveWithTizenFallback(playOptions._upgradeAttempts, onStatus, session).then(function(upgradeResult) {
+          if (!isActivePlaySession(session)) return;
+          if (!upgradeResult.play || !api.hasPlayableSources(upgradeResult.play)) return;
+          var upgradeMax = config2.maxSourceHeight(upgradeResult.play);
+          var playingH2 = lastKnownPlayingHeight || currentMax;
+          if (upgradeMax <= playingH2) return;
+          var video = document.getElementById("video");
+          var pos = video && video.currentTime > 0 ? video.currentTime : 0;
+          if (pos > 0) player2.setResumePosition(pos);
+          var want = config2.preferredQualityForTarget(target) || target + "p";
+          debug2.debugLog("Upgrading to " + want + " via " + (upgradeResult.via || "alternate server"));
+          if (onStatus) onStatus("Upgrading to " + want + "\u2026");
+          return playResolved(upgradeResult.play, title, onStatus, session, {
+            startSeconds: pos,
+            _fallbacks: playOptions._fallbacks || []
+          }).then(function() {
+            if (onStatus) onStatus("Now playing " + want);
+          });
+        }).catch(function() {
+        });
+      }
+      function buildNextProviderFallbacks(currentProviderId, tmdbId, type, season, episode) {
+        return buildStreamflixProviderFallbacks(tmdbId, type, season, episode, currentProviderId);
+      }
+      function buildPlaybackFallbacks(play, tmdbId, type, season, episode) {
+        var currentProviderId = play && play.sources && play.sources[0] ? play.sources[0].providerId : null;
+        return buildNextProviderFallbacks(currentProviderId, tmdbId, type, season, episode);
+      }
+      function buildVidkingFallbacks(tmdbId, type, season, episode) {
+        return type === "tv" ? buildTvVidkingFallbacks(tmdbId, season, episode) : buildMovieVidkingFallbacks(tmdbId);
+      }
       function buildReResolveQuery(overrides) {
         overrides = overrides || {};
         var parts = [];
         if (overrides.server) {
           parts.push("server=" + encodeURIComponent(overrides.server));
           parts.push("backend=vidking");
+        } else if (overrides.providerId) {
+          parts.push("providerId=" + encodeURIComponent(overrides.providerId));
+          parts.push("backend=streamflix");
         } else if (overrides.onlySourceId) {
           parts.push("onlySourceId=" + encodeURIComponent(overrides.onlySourceId));
           parts.push("backend=tmdb-native");
-        }
-        if (overrides.backend && !overrides.server) {
+        } else if (overrides.backend) {
           parts.push("backend=" + encodeURIComponent(overrides.backend));
         }
         return parts.join("&");
@@ -3462,8 +3600,9 @@ var TizenflixGate = (() => {
         throw new Error(formatPlaybackError(err));
       }
       function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
-        var primary = type === "tv" ? buildTvPrimaryAttempts(tmdbId, season, episode) : buildMoviePrimaryAttempts(tmdbId);
-        var vidking = type === "tv" ? buildTvVidkingFallbacks(tmdbId, season, episode) : buildMovieVidkingFallbacks(tmdbId);
+        var query = buildPrimaryResolveQuery();
+        var preferred = config2.getPreferredProviderId();
+        var upgradeAttempts = buildQualityUpgradeAttempts(tmdbId, type, season, episode);
         var key = type === "tv" ? playbackSession.prefetchKey("tv", tmdbId, season, episode) : playbackSession.prefetchKey("movie", tmdbId);
         var prefetched = playbackSession.getPrefetch(key);
         if (prefetched && api.hasPlayableSources(prefetched)) {
@@ -3472,33 +3611,56 @@ var TizenflixGate = (() => {
           return Promise.resolve({
             play: prefetched,
             via: "prefetched",
-            fallbacks: vidking
+            fallbacks: buildPlaybackFallbacks(prefetched, tmdbId, type, season, episode),
+            _upgradeAttempts: upgradeAttempts
           });
         }
         return ensureApiReachable().then(function() {
-          return raceResolveAttempts(primary, onStatus, session).then(function(result) {
-            if (result.play && api.hasPlayableSources(result.play)) {
-              var target = config2.getTargetResolution();
-              if (target !== "auto" && config2.isBelowTargetResolution(result.play, target)) {
-                var want = config2.preferredQualityForTarget(target) || target + "p";
-                if (onStatus) onStatus("No " + want + " source \u2014 trying alternate server\u2026");
-                return resolveWithTizenFallback(vidking, onStatus, session).then(function(vkResult) {
-                  if (vkResult.play && api.hasPlayableSources(vkResult.play)) {
-                    var vkMax = config2.maxSourceHeight(vkResult.play);
-                    var primaryMax = config2.maxSourceHeight(result.play);
-                    if (vkMax > primaryMax) {
-                      vkResult.fallbacks = [];
-                      return vkResult;
-                    }
-                  }
-                  result.fallbacks = vidking;
-                  return result;
-                });
+          if (preferred) {
+            if (onStatus) onStatus("Trying " + preferred + "\u2026");
+          } else if (onStatus) {
+            onStatus("Finding stream\u2026");
+          }
+          var resolvePromise = type === "tv" ? api.resolveTvEpisode(tmdbId, season, episode, query, PRIMARY_RESOLVE_TIMEOUT_MS) : api.resolveMovie(tmdbId, query, PRIMARY_RESOLVE_TIMEOUT_MS);
+          return resolvePromise.then(function(play) {
+            if (!isActivePlaySession(session)) return { play: null, fallbacks: [] };
+            if (play && api.hasPlayableSources(play)) {
+              var via = play.sources[0] && play.sources[0].providerId || play.backend || "auto";
+              debug2.debugLog("Resolved via: " + via);
+              if (onStatus) onStatus("Resolved via: " + via);
+              if (play.warnings && play.warnings.length && onStatus) {
+                onStatus("Trying fallback\u2026");
               }
-              result.fallbacks = vidking;
-              return result;
+              return {
+                play,
+                via,
+                fallbacks: buildPlaybackFallbacks(play, tmdbId, type, season, episode),
+                _upgradeAttempts: upgradeAttempts
+              };
             }
-            return resolveWithTizenFallback(vidking, onStatus, session);
+            var backend = config2.getPlayBackend();
+            if (backend === "vidking") {
+              var vidking = buildVidkingFallbacks(tmdbId, type, season, episode);
+              if (onStatus) onStatus("Trying CDN fallback\u2026");
+              return resolveWithTizenFallback(vidking, onStatus, session).then(function(vkResult) {
+                vkResult.fallbacks = [];
+                vkResult._upgradeAttempts = upgradeAttempts;
+                return vkResult;
+              });
+            }
+            var streamflix = buildStreamflixProviderFallbacks(
+              tmdbId,
+              type,
+              season,
+              episode,
+              preferred
+            );
+            if (onStatus) onStatus("Trying alternate providers\u2026");
+            return resolveWithTizenFallback(streamflix, onStatus, session).then(function(sfResult) {
+              sfResult.fallbacks = [];
+              sfResult._upgradeAttempts = upgradeAttempts;
+              return sfResult;
+            });
           });
         });
       }
@@ -3513,7 +3675,7 @@ var TizenflixGate = (() => {
         });
       }
       function prefetchMovie(tmdbId) {
-        api.resolveMovie(tmdbId, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+        api.resolveMovie(tmdbId, buildPrimaryResolveQuery(), PRIMARY_RESOLVE_TIMEOUT_MS).then(function(play) {
           if (play && api.hasPlayableSources(play)) {
             playbackSession.setPrefetch(playbackSession.prefetchKey("movie", tmdbId), play);
             warmManifestFromPlay(play);
@@ -3522,7 +3684,7 @@ var TizenflixGate = (() => {
         });
       }
       function prefetchTvEpisode(tmdbId, season, episode) {
-        api.resolveTvEpisode(tmdbId, season, episode, AUTO_RESOLVE_QUERY, FAST_RESOLVE_TIMEOUT_MS).then(function(play) {
+        api.resolveTvEpisode(tmdbId, season, episode, buildPrimaryResolveQuery(), PRIMARY_RESOLVE_TIMEOUT_MS).then(function(play) {
           if (play && api.hasPlayableSources(play)) {
             playbackSession.setPrefetch(
               playbackSession.prefetchKey("tv", tmdbId, season, episode),
@@ -3554,7 +3716,8 @@ var TizenflixGate = (() => {
           }
           return playResolved(result.play, title, onStatus, session, {
             startSeconds,
-            _fallbacks: result.fallbacks || []
+            _fallbacks: result.fallbacks || [],
+            _upgradeAttempts: result._upgradeAttempts || []
           });
         }).catch(function(err) {
           return handlePlaybackFailure(session, err);
@@ -3586,7 +3749,8 @@ var TizenflixGate = (() => {
           }
           return playResolved(result.play, title, onStatus, session, {
             startSeconds,
-            _fallbacks: result.fallbacks || []
+            _fallbacks: result.fallbacks || [],
+            _upgradeAttempts: result._upgradeAttempts || []
           });
         }).catch(function(err) {
           return handlePlaybackFailure(session, err);
@@ -3638,12 +3802,14 @@ var TizenflixGate = (() => {
           if (!play || !api.hasPlayableSources(play)) {
             return Promise.reject(new Error(formatResolveError(play)));
           }
+          if (overrides && overrides.providerId) {
+            config2.setPreferredProviderId(overrides.providerId);
+          }
           return playResolved(play, stored.displayTitle, onStatus, playSession);
         });
       }
       function handleBackKey() {
-        if (playerChrome.handleBack()) return true;
-        stop();
+        playerChrome.handleBack();
         return true;
       }
       function stop(options) {
@@ -3653,6 +3819,7 @@ var TizenflixGate = (() => {
         unbindProgressSaver();
         unbindAutoplayHandler();
         unbindQualityWatcher();
+        pendingQualityUpgrade = null;
         playSession += 1;
         var wasFullscreen = document.body && document.body.classList.contains("is-playback-fullscreen");
         playerChrome.destroy();
@@ -4529,13 +4696,12 @@ var TizenflixGate = (() => {
       function scrollEpisodeItemToAnchor(el) {
         var main = getMainRoot();
         if (!main || !el) return;
+        scrollAnimGen += 1;
         var mainRect = main.getBoundingClientRect();
         var itemRect = el.getBoundingClientRect();
         var itemTop = itemRect.top - mainRect.top + main.scrollTop;
         var anchorY = motion.computeBrowseLaneAnchorY(main);
-        var targetScrollTop = Math.max(0, itemTop - anchorY);
-        var profile = motion.getMotionProfile();
-        animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
+        main.scrollTop = Math.max(0, itemTop - anchorY);
       }
       function setDetailEpisodesRevealHandler(fn) {
         detailEpisodesRevealHandler = fn || null;
@@ -4545,7 +4711,7 @@ var TizenflixGate = (() => {
         cancelVerticalAnchorTimer();
         scrollAnimGen += 1;
         var gen = scrollAnimGen;
-        var delay = getLayoutSettleMs(options);
+        var delay = isEpisodeItem(el) ? 0 : getLayoutSettleMs(options);
         var capturedAnchorY = options.capturedAnchorY;
         if (options.spotlightToggled || options.browseFocusToggled) {
           capturedAnchorY = null;
@@ -4553,6 +4719,10 @@ var TizenflixGate = (() => {
         function measureAndScroll() {
           verticalAnchorTimer = null;
           if (gen !== scrollAnimGen || currentEl !== el) return;
+          if (isEpisodeItem(el)) {
+            scrollEpisodeItemToAnchor(el);
+            return;
+          }
           requestAnimationFrame(function() {
             if (gen !== scrollAnimGen || currentEl !== el) return;
             requestAnimationFrame(function() {

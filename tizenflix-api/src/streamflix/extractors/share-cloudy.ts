@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from ShareCloudyExtractor */
+/** Ported from ShareCloudyExtractor (GenericPackedSourceExtractor) */
 export const shareCloudyExtractor: ExtractorDef = {
   name: "ShareCloudy",
   mainUrl: "https://sharecloudy.com",
-  
-  extract: notImplementedExtract("ShareCloudy"),
+  extract: (link) => extractGenericPacked(link),
 };

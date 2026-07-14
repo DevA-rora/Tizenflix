@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from LoadXExtractor */
+/** Ported from LoadXExtractor (GenericPackedSourceExtractor) */
 export const loadXExtractor: ExtractorDef = {
   name: "LoadX",
   mainUrl: "https://loadx.ws/",
-  
-  extract: notImplementedExtract("LoadX"),
+  extract: (link) => extractGenericPacked(link),
 };

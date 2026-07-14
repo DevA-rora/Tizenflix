@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from UpZurExtractor */
+/** Ported from UpZurExtractor — fallback generic packed */
 export const upZurExtractor: ExtractorDef = {
   name: "UpZur",
   mainUrl: "https://upzur.com",
-  
-  extract: notImplementedExtract("UpZur"),
+  extract: (link) => extractGenericPacked(link),
 };

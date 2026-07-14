@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from NinjaStreamExtractor */
+/** Ported from NinjaStreamExtractor (GenericPackedSourceExtractor) */
 export const ninjaStreamExtractor: ExtractorDef = {
   name: "NinjaStream",
   mainUrl: "https://example.com",
-  
-  extract: notImplementedExtract("NinjaStream"),
+  extract: (link) => extractGenericPacked(link),
 };

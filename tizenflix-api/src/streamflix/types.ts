@@ -11,6 +11,8 @@ export interface ExtractedVideo {
   type?: string;
   audioLanguage?: string;
   audioVariant?: "original" | "dubbed" | "unknown";
+  /** Max RESOLUTION= height parsed from the master playlist when known */
+  manifestMaxHeight?: number;
 }
 
 export interface StreamServer {

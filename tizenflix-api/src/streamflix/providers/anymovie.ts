@@ -14,7 +14,7 @@ export const anyMovieProvider: ContentProvider = {
   supportsMovies: true,
   supportsTv: true,
   enabled: true,
-  implementationStatus: "partial",
+  implementationStatus: "full",
   async findByTmdb(_tmdbId, _type, meta) {
     const html = await fetchText(`${BASE}?s=${encodeURIComponent(meta.title)}`, { referer: BASE });
     const $ = cheerio.load(html);

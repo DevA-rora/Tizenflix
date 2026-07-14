@@ -30,7 +30,6 @@ import { soloLatinoProvider } from "./solo-latino.js";
 import { cine24hProvider } from "./cine24h.js";
 import { pelisplustoProvider } from "./pelisplusto.js";
 import { pelisflixHdProvider } from "./pelisflix-hd.js";
-import { cableVisionHdProvider } from "./cable-vision-hd.js";
 import { altadefinizione01Provider } from "./altadefinizione01.js";
 import { guardaFlixProvider } from "./guarda-flix.js";
 import { cb01Provider } from "./cb01.js";
@@ -43,27 +42,13 @@ import { hdFilmeProvider } from "./hd-filme.js";
 import { megaKinoProvider } from "./mega-kino.js";
 import { filmyOnlineCcProvider } from "./filmy-online-cc.js";
 import { zeriunProvider } from "./zeriun.js";
-import { tvporinternetHdProvider } from "./tvporinternet-hd.js";
 import { frembedProvider } from "./frembed.js";
 import { kidrazProvider } from "./kidraz.js";
 import { frenchMangaProvider } from "./french-manga.js";
-import { iptvOrgProvider } from "./iptv-org.js";
-import { iptvSpainProvider } from "./iptv-spain.js";
-import { tvLibrefutbolProvider } from "./tv-librefutbol.js";
-import { pelotaLibreTvHdProvider } from "./pelota-libre-tv-hd.js";
-import { plutoTvMxProvider } from "./pluto-tv-mx.js";
-import { plutoTvArProvider } from "./pluto-tv-ar.js";
-import { plutoTvDeProvider } from "./pluto-tv-de.js";
-import { plutoTvEsProvider } from "./pluto-tv-es.js";
-import { plutoTvFrProvider } from "./pluto-tv-fr.js";
-import { plutoTvItProvider } from "./pluto-tv-it.js";
-import { plutoTvUsProvider } from "./pluto-tv-us.js";
-import { cineCityProvider } from "./cine-city.js";
-import { vavooDeProvider } from "./vavoo-de.js";
-import { vavooItProvider } from "./vavoo-it.js";
-import { vavooFrProvider } from "./vavoo-fr.js";
-import { vavooEsProvider } from "./vavoo-es.js";
-import { vavooPlProvider } from "./vavoo-pl.js";
+import { unJourUnFilmProvider } from "./un-jour-un-film.js";
+import { streamingItaProvider } from "./streaming-ita.js";
+import { otakufrProvider } from "./otakufr.js";
+import { animeBumProvider } from "./anime-bum.js";
 import type { ContentProvider } from "./types.js";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -104,7 +89,6 @@ const ALL_PROVIDERS: ContentProvider[] = [
   cine24hProvider,
   pelisplustoProvider,
   pelisflixHdProvider,
-  cableVisionHdProvider,
   altadefinizione01Provider,
   guardaFlixProvider,
   cb01Provider,
@@ -117,27 +101,13 @@ const ALL_PROVIDERS: ContentProvider[] = [
   megaKinoProvider,
   filmyOnlineCcProvider,
   zeriunProvider,
-  tvporinternetHdProvider,
   frembedProvider,
   kidrazProvider,
   frenchMangaProvider,
-  iptvOrgProvider,
-  iptvSpainProvider,
-  tvLibrefutbolProvider,
-  pelotaLibreTvHdProvider,
-  plutoTvMxProvider,
-  plutoTvArProvider,
-  plutoTvDeProvider,
-  plutoTvEsProvider,
-  plutoTvFrProvider,
-  plutoTvItProvider,
-  plutoTvUsProvider,
-  cineCityProvider,
-  vavooDeProvider,
-  vavooItProvider,
-  vavooFrProvider,
-  vavooEsProvider,
-  vavooPlProvider,
+  animeBumProvider,
+  otakufrProvider,
+  streamingItaProvider,
+  unJourUnFilmProvider,
 ];
 
 function loadDisabled(): Set<string> {

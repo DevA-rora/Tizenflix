@@ -1,13 +1,10 @@
+import { fetchMetadata } from "../api/metadata.js";
 import { resolvePlayableSources } from "../normalize/to-play-response.js";
-import {
-  resolveTmdbNativeFromOptions,
-  resolveTmdbNativeRaceFromOptions,
-} from "../streamflix/tmdb-native/resolve.js";
-import { mergeOrderForLanguage, simplifyLang, tmdbSourceIdsForLanguage } from "../streamflix/tmdb-native/lang-sources.js";
-import type { PlayResponse, ResolveOptions } from "../types.js";
+import { resolveTmdbNativeFromOptions } from "../streamflix/tmdb-native/resolve.js";
+import { isAnime } from "../tmdb/is-anime.js";
+import type { Metadata, PlayResponse, ResolveOptions } from "../types.js";
 
-const TIER1_TIMEOUT_MS = 4_000;
-const TIER2_TIMEOUT_MS = 8_000;
+const STREAMFLIX_AUTO_TIMEOUT_MS = 15_000;
 
 function tagBackend(play: PlayResponse, backend: PlayResponse["backend"], ms: number): PlayResponse {
   return { ...play, backend, resolveMs: ms };
@@ -23,66 +20,78 @@ function hasPlayableSources(play: PlayResponse | null): play is PlayResponse {
   return Boolean(play?.sources?.length);
 }
 
+function basePlayFromMeta(
+  options: ResolveOptions,
+  meta: Metadata
+): Pick<PlayResponse, "title" | "imdbId" | "type" | "tmdbId" | "season" | "episode"> {
+  return {
+    title: meta.title,
+    imdbId: meta.imdbId,
+    type: options.type,
+    tmdbId: options.tmdbId,
+    season: options.type === "tv" ? options.season : undefined,
+    episode: options.type === "tv" ? options.episode : undefined,
+  };
+}
+
+function emptyStreamflixPlay(
+  options: ResolveOptions,
+  meta: Metadata,
+  warnings: string[]
+): PlayResponse {
+  return {
+    ...basePlayFromMeta(options, meta),
+    sources: [],
+    recommended: null,
+    subtitles: [],
+    nextEpisode: null,
+    backend: "auto",
+    warnings,
+  };
+}
+
+/** backend=auto is Streamflix-only (alias for scraper-first playback). */
 async function resolveAutoTiered(
   options: ResolveOptions,
   fetchImpl: typeof fetch
 ): Promise<PlayResponse> {
+  const t0 = Date.now();
   const lang = options.lang ?? "en";
-  const langIds = tmdbSourceIdsForLanguage(options.type, lang);
-  const autoIds =
-    options.onlySourceIds ??
-    options.sources ??
-    mergeOrderForLanguage(options.type, lang, langIds);
+  const meta = await fetchMetadata(options.type, options.tmdbId, fetchImpl);
+  const baseMeta = basePlayFromMeta(options, meta);
+  const anime = isAnime(meta);
 
-  // Tier 1: VixSrc only (fast path) — or Moflix for DE
-  const tier1Id = simplifyLang(lang) === "de" ? "moflix" : "vixsrc";
+  const { resolveStreamflixFromOptions } = await import("../streamflix/resolve.js");
   try {
-    const { result, ms } = await timed(() =>
-      resolveTmdbNativeFromOptions(
-        {
-          ...options,
-          lang,
-          onlySourceIds: [tier1Id],
-          onePerSource: true,
-          sourceTimeoutMs: TIER1_TIMEOUT_MS,
-        },
-        fetchImpl
-      )
-    );
-    if (hasPlayableSources(result)) {
-      return tagBackend({ ...result, backend: "auto" }, "auto", ms);
-    }
-  } catch {
-    /* Tier 2 */
-  }
-
-  // Tier 2: remaining TMDB-native sources (race)
-  const tier2Ids = autoIds.filter((id) => id !== tier1Id);
-  if (tier2Ids.length) {
-    try {
-      const { result, ms } = await timed(() =>
-        resolveTmdbNativeRaceFromOptions({ ...options, lang }, tier2Ids, TIER2_TIMEOUT_MS, fetchImpl)
-      );
-      if (hasPlayableSources(result)) {
-        return tagBackend({ ...result, backend: "auto" }, "auto", ms);
-      }
-    } catch {
-      /* Tier 3 */
-    }
-  }
-
-  // Tier 3: Vidking first-success
-  const { result, ms } = await timed(() =>
-    resolvePlayableSources(
+    const streamflixPlay = await resolveStreamflixFromOptions(
       {
         ...options,
-        allServers: false,
-        firstSuccessOnly: true,
+        lang,
+        isAnime: anime,
+        preferredProviderId: options.preferredProviderId,
+        autoMode: true,
+        sourceTimeoutMs: STREAMFLIX_AUTO_TIMEOUT_MS,
       },
       fetchImpl
-    )
-  );
-  return tagBackend({ ...result, backend: "auto" }, "auto", ms);
+    );
+    if (hasPlayableSources(streamflixPlay)) {
+      return tagBackend({ ...streamflixPlay, ...baseMeta, backend: "auto" }, "auto", Date.now() - t0);
+    }
+    return tagBackend(
+      { ...streamflixPlay, ...baseMeta, backend: "auto" },
+      "auto",
+      Date.now() - t0
+    );
+  } catch (err) {
+    const providerResults =
+      err instanceof Error && "providerResults" in err
+        ? (err as Error & { providerResults?: { provider: string; error?: string }[] }).providerResults
+        : undefined;
+    const warnings =
+      providerResults?.map((r) => `${r.provider}: ${r.error ?? "unknown"}`) ??
+      [err instanceof Error ? err.message : String(err)];
+    return tagBackend(emptyStreamflixPlay(options, meta, warnings), "auto", Date.now() - t0);
+  }
 }
 
 export async function resolveWithBackend(
@@ -106,7 +115,14 @@ export async function resolveWithBackend(
   if (backend === "streamflix") {
     const { resolveStreamflixFromOptions } = await import("../streamflix/resolve.js");
     const { result, ms } = await timed(() =>
-      resolveStreamflixFromOptions(options, fetchImpl)
+      resolveStreamflixFromOptions(
+        {
+          ...options,
+          autoMode: !options.providerId,
+          sourceTimeoutMs: options.sourceTimeoutMs ?? STREAMFLIX_AUTO_TIMEOUT_MS,
+        },
+        fetchImpl
+      )
     );
     return tagBackend(result, "streamflix", ms);
   }
@@ -159,4 +175,18 @@ export function parseAudioLangParam(raw: unknown): string | undefined {
   if (value === "original") return "original";
   if (/^[a-z]{2}$/.test(value)) return value;
   return undefined;
+}
+
+export function parseProviderIdParam(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  return raw.trim().toLowerCase();
+}
+
+export function parsePreferredProviderIdParam(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  return raw.trim().toLowerCase();
+}
+
+export function parseRaceParam(raw: unknown): boolean {
+  return raw === "1" || raw === "true";
 }

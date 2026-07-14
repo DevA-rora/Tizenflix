@@ -576,13 +576,13 @@ function scrollEpisodeItemToAnchor(el) {
   var main = getMainRoot();
   if (!main || !el) return;
 
+  scrollAnimGen += 1;
+
   var mainRect = main.getBoundingClientRect();
   var itemRect = el.getBoundingClientRect();
   var itemTop = itemRect.top - mainRect.top + main.scrollTop;
   var anchorY = motion.computeBrowseLaneAnchorY(main);
-  var targetScrollTop = Math.max(0, itemTop - anchorY);
-  var profile = motion.getMotionProfile();
-  animateMainScroll(main, targetScrollTop, profile.mainScrollMs, { forceAnimate: true });
+  main.scrollTop = Math.max(0, itemTop - anchorY);
 }
 
 function setDetailEpisodesRevealHandler(fn) {
@@ -594,7 +594,7 @@ function scheduleVerticalAnchor(el, options) {
   cancelVerticalAnchorTimer();
   scrollAnimGen += 1;
   var gen = scrollAnimGen;
-  var delay = getLayoutSettleMs(options);
+  var delay = isEpisodeItem(el) ? 0 : getLayoutSettleMs(options);
   var capturedAnchorY = options.capturedAnchorY;
   if (options.spotlightToggled || options.browseFocusToggled) {
     capturedAnchorY = null;
@@ -603,6 +603,10 @@ function scheduleVerticalAnchor(el, options) {
   function measureAndScroll() {
     verticalAnchorTimer = null;
     if (gen !== scrollAnimGen || currentEl !== el) return;
+    if (isEpisodeItem(el)) {
+      scrollEpisodeItemToAnchor(el);
+      return;
+    }
     requestAnimationFrame(function () {
       if (gen !== scrollAnimGen || currentEl !== el) return;
       requestAnimationFrame(function () {

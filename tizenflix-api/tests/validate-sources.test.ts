@@ -271,4 +271,62 @@ describe("validatePlaySources preferredQuality", () => {
     expect(result.recommended).toBe("oxygen-1080p-0");
     expect(result.sources[0]?.label).toBe("1080p");
   });
+
+  it("prefers manifest 1080p over faster Auto-labeled 720p when preferredQuality is set", async () => {
+    const master720 = `#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=1280x720
+720p/index.m3u8
+#EXTINF:8,
+https://cdn.example/seg.ts`;
+    const master1080 = `#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080
+1080p/index.m3u8
+#EXTINF:8,
+https://cdn.example/seg.ts`;
+
+    const fetchImpl = vi.fn(async (url: string) => {
+      const slow = url.includes("1080");
+      if (slow) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      const body = url.includes("1080") ? master1080 : master720;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => (url.includes(".ts") ? "video/mp2t" : "application/vnd.apple.mpegurl") },
+        text: async () => body,
+      };
+    }) as unknown as typeof fetch;
+
+    const play: PlayResponse = {
+      ...samplePlay(),
+      sources: [
+        {
+          id: "vix-auto-0",
+          provider: "VixSrc/Server 1",
+          label: "Auto",
+          type: "m3u8",
+          url: "https://cdn.example/vix/auto.m3u8",
+          priority: 0,
+        },
+        {
+          id: "vix-auto-1",
+          provider: "VixSrc/Server 2",
+          label: "Auto",
+          type: "m3u8",
+          url: "https://cdn.example/vix/1080.m3u8",
+          priority: 1,
+        },
+      ],
+      recommended: "vix-auto-0",
+    };
+
+    const result = await validatePlaySources(play, PUBLIC_BASE, fetchImpl, {
+      tizenProfile: true,
+      preferredQuality: "1080p",
+    });
+
+    expect(result.recommended).toBe("vix-auto-1");
+    expect(result.sources[0]?.id).toBe("vix-auto-1");
+  });
 });

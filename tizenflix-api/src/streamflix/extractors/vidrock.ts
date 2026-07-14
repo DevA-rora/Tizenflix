@@ -91,7 +91,7 @@ async function extractVidrock(link: string) {
         headers: { Referer: `${MAIN_URL}/`, Origin: MAIN_URL, "User-Agent": BROWSER_UA },
         type: "mp4" as const,
         audioLanguage,
-        audioVariant: audioLanguage ? "dubbed" : "unknown",
+        audioVariant: (audioLanguage ? "dubbed" : "unknown") as "dubbed" | "unknown",
       };
     } catch {
       /* fall through to direct URL */
@@ -104,7 +104,7 @@ async function extractVidrock(link: string) {
     headers: { Referer: `${MAIN_URL}/`, Origin: MAIN_URL, "User-Agent": BROWSER_UA },
     type: videoUrl.includes(".m3u8") || sourceType === "hls" ? ("m3u8" as const) : undefined,
     audioLanguage,
-    audioVariant: audioLanguage ? "dubbed" : "unknown",
+    audioVariant: (audioLanguage ? "dubbed" : "unknown") as "dubbed" | "unknown",
   };
 }
 

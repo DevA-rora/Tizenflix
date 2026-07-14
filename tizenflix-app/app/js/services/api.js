@@ -127,6 +127,20 @@ function toggleStreamflixProvider(id, enabled) {
   return config.apiPost("/providers/streamflix/toggle", { id: id, enabled: enabled });
 }
 
+function getLiveProviders() {
+  return config.apiGet("/live/providers");
+}
+
+function getLiveChannels(providerId) {
+  return config.apiGet("/live/" + encodeURIComponent(providerId) + "/channels");
+}
+
+function resolveLiveChannel(providerId, channelId) {
+  return config.apiGet(
+    "/live/" + encodeURIComponent(providerId) + "/play/" + encodeURIComponent(channelId)
+  );
+}
+
 module.exports = {
   getBase: getBase,
   setBase: config.setApiBase,
@@ -153,4 +167,7 @@ module.exports = {
   browseGenre: browseGenre,
   getStreamflixProviders: getStreamflixProviders,
   toggleStreamflixProvider: toggleStreamflixProvider,
+  getLiveProviders: getLiveProviders,
+  getLiveChannels: getLiveChannels,
+  resolveLiveChannel: resolveLiveChannel,
 };

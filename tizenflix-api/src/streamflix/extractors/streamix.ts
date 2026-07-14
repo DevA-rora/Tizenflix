@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from StreamixExtractor */
+/** Ported from StreamixExtractor (GenericPackedSourceExtractor) */
 export const streamixExtractor: ExtractorDef = {
   name: "Streamix",
   mainUrl: "https://streamix.so",
   aliasUrls: ["https://stmix.io"],
-  extract: notImplementedExtract("Streamix"),
+  extract: (link) => extractGenericPacked(link),
 };

@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from GxPlayerExtractor */
+/** Ported from GxPlayerExtractor — fallback generic packed */
 export const gxPlayerExtractor: ExtractorDef = {
   name: "GxPlayer",
   mainUrl: "https://watch.gxplayer.xyz",
-  
-  extract: notImplementedExtract("GxPlayer"),
+  extract: (link) => extractGenericPacked(link),
 };

@@ -26,6 +26,9 @@ export interface Metadata {
   title: string;
   year: string | number;
   imdbId: string;
+  genres?: string[];
+  genreIds?: number[];
+  originalLanguage?: string;
 }
 
 export interface PlayableSource {
@@ -37,6 +40,8 @@ export interface PlayableSource {
   priority: number;
   /** TMDB-native source id (vixsrc, vidrock, …) for player source picker */
   sourceId?: string;
+  /** Streamflix scraper provider registry id (sflix, ridomovies, …) */
+  providerId?: string;
   /** Per-source upstream headers for Streamflix embed hosts */
   upstreamHeaders?: Record<string, string>;
   /** ISO-ish audio track language when known (en, ja, fr, …) */
@@ -123,6 +128,18 @@ export interface ResolveOptions {
   audioLang?: string;
   /** Resolved target audio language for extractors and proxy */
   targetAudioLang?: string;
+  /** Resolve a single Streamflix scraper provider only */
+  providerId?: string;
+  /** Hint: try this provider first in ordered streamflix resolve */
+  preferredProviderId?: string;
+  /** Race all streamflix providers in parallel (benchmark / ?race=1) */
+  raceProviders?: boolean;
+  /** Content is anime (used for provider ordering) */
+  isAnime?: boolean;
+  /** Single-provider-first resolve for backend=auto step 1 */
+  autoMode?: boolean;
+  /** Client-requested max video height (e.g. 1080, 2160) */
+  maxHeight?: number;
 }
 
 export interface ServerResult {

@@ -4,6 +4,7 @@ var QUALITY_LEVEL_KEY = "tizenflix.qualityLevel";
 var DEV_MODE_KEY = "tizenflix.devMode";
 var BACKEND_KEY = "tizenflix.playBackend";
 var PREFERRED_SOURCE_KEY = "tizenflix.preferredSourceId";
+var PREFERRED_PROVIDER_KEY = "tizenflix.preferredProvider";
 var GRID_SCALE_KEY = "tizenflix.gridScale";
 var AUTOPLAY_KEY = "tizenflix.autoplay";
 var AUTOPLAY_BUFFER_KEY = "tizenflix.autoplayBuffer";
@@ -16,7 +17,7 @@ var TARGET_RESOLUTION_KEY = "tizenflix.targetResolution";
 var VALID_AUDIO_PREFS = ["original", "en", "de", "fr", "it", "es", "ja", "ko", "zh"];
 var VALID_TARGET_RESOLUTIONS = ["auto", "720", "1080", "2160"];
 var API_PORT = "8790";
-var PLAY_RESOLVE_TIMEOUT_MS = 20000;
+var PLAY_RESOLVE_TIMEOUT_MS = 90000;
 var VALID_QUALITY_MODES = ["auto", "high", "medium", "low"];
 
 function isTizenClient() {
@@ -151,6 +152,15 @@ function maxSourceHeight(play) {
   return max;
 }
 
+function qualityHeightScore(height, target) {
+  var targetPx = targetResolutionPixels(target);
+  if (!targetPx) return height || 0;
+  if (!height) return -1;
+  if (height === targetPx) return 10000 + height;
+  if (height < targetPx) return 5000 + height;
+  return height;
+}
+
 function isBelowTargetResolution(play, target) {
   var targetPx = targetResolutionPixels(target);
   if (!targetPx || !play) return false;
@@ -164,7 +174,7 @@ function getPlayBackend() {
   } catch (err) {
     /* TV may block storage */
   }
-  return "auto";
+  return "streamflix";
 }
 
 function setPlayBackend(mode) {
@@ -196,6 +206,26 @@ function setPreferredSourceId(sourceId) {
     /* TV may block storage */
   }
   return sourceId || null;
+}
+
+function getPreferredProviderId() {
+  try {
+    var stored = localStorage.getItem(PREFERRED_PROVIDER_KEY);
+    if (stored && typeof stored === "string") return stored;
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return null;
+}
+
+function setPreferredProviderId(providerId) {
+  try {
+    if (!providerId) localStorage.removeItem(PREFERRED_PROVIDER_KEY);
+    else localStorage.setItem(PREFERRED_PROVIDER_KEY, String(providerId));
+  } catch (err) {
+    /* TV may block storage */
+  }
+  return providerId || null;
 }
 
 function deriveDefaultApi() {
@@ -633,15 +663,20 @@ function listM3u8Sources(play) {
 
 function orderSourcesForPlay(play) {
   var sources = listM3u8Sources(play);
-  sources = orderSourcesForTargetResolution(sources, getTargetResolution());
+  var target = getTargetResolution();
+  sources = orderSourcesForTargetResolution(sources, target);
   if (!play || !play.recommended) return sources;
+  var targetPx = targetResolutionPixels(target);
   var first = null;
   var rest = [];
   for (var i = 0; i < sources.length; i++) {
     if (sources[i].id === play.recommended) first = sources[i];
     else rest.push(sources[i]);
   }
-  if (first) return [first].concat(rest);
+  if (!first) return sources;
+  if (target === "auto") return [first].concat(rest);
+  var recH = parseHeightFromLabel(first.label);
+  if (!targetPx || recH >= targetPx || recH === 0) return [first].concat(rest);
   return sources;
 }
 
@@ -726,6 +761,8 @@ module.exports = {
   setPlayBackend: setPlayBackend,
   getPreferredSourceId: getPreferredSourceId,
   setPreferredSourceId: setPreferredSourceId,
+  getPreferredProviderId: getPreferredProviderId,
+  setPreferredProviderId: setPreferredProviderId,
   getApiBase: getApiBase,
   setApiBase: setApiBase,
   getQualityMode: getQualityMode,
@@ -743,6 +780,7 @@ module.exports = {
   parseHeightFromLabel: parseHeightFromLabel,
   orderSourcesForTargetResolution: orderSourcesForTargetResolution,
   maxSourceHeight: maxSourceHeight,
+  qualityHeightScore: qualityHeightScore,
   isBelowTargetResolution: isBelowTargetResolution,
   VALID_TARGET_RESOLUTIONS: VALID_TARGET_RESOLUTIONS,
   checkHealth: checkHealth,

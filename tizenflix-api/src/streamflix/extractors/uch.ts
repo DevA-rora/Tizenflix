@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from UchExtractor */
+/** Ported from UchExtractor (GenericPackedSourceExtractor) */
 export const uchExtractor: ExtractorDef = {
   name: "Uch",
   mainUrl: "https://example.com",
-  
-  extract: notImplementedExtract("Uch"),
+  extract: (link) => extractGenericPacked(link),
 };

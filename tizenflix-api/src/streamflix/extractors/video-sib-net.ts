@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from VideoSibNetExtractor */
+/** Ported from VideoSibNetExtractor — fallback generic packed */
 export const videoSibNetExtractor: ExtractorDef = {
   name: "VideoSibNet",
   mainUrl: "https://example.com",
-  
-  extract: notImplementedExtract("VideoSibNet"),
+  extract: (link) => extractGenericPacked(link),
 };

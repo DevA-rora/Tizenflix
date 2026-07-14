@@ -178,10 +178,12 @@ async function main() {
     process.exit(1);
   }
 
-  const enabled = getEnabledProviders("movie");
+  const enabledMovie = getEnabledProviders("movie");
+  const enabledTv = getEnabledProviders("tv");
   console.log("Tizenflix benchmark v3");
   console.log("Playwright:", pw.ready ? "ready" : pw.message);
-  console.log(`Enabled movie providers: ${enabled.length}`);
+  console.log(`Enabled movie providers: ${enabledMovie.length}`);
+  console.log(`Enabled TV providers: ${enabledTv.length}`);
   console.log("");
 
   const results = [];
@@ -198,7 +200,8 @@ async function main() {
     generatedAt: new Date().toISOString(),
     live: LIVE,
     playwright: pw,
-    enabledProviders: enabled.length,
+    enabledMovieProviders: enabledMovie.length,
+    enabledTvProviders: enabledTv.length,
     results,
     summary: {
       vidkingWins: results.filter((r) => r.winner === "vidking").length,

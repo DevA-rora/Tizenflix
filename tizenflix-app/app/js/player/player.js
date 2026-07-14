@@ -477,7 +477,7 @@ function getCurrentQuality(hls, video) {
   return { label: "—", height: 0, isAuto: true, badge: "—" };
 }
 
-function logTargetQualityWarning(hls, onLog) {
+function logTargetQualityWarning(hls, onLog, sourceLabel) {
   var target = config.getTargetResolution();
   if (target === "auto" || !hls || !hls.levels || !hls.levels.length) return;
   var targetPx = config.targetResolutionPixels(target);
@@ -485,7 +485,18 @@ function logTargetQualityWarning(hls, onLog) {
   var info = getCurrentQuality(hls, hls.media);
   if (!info.height || info.height >= targetPx) return;
   var want = config.preferredQualityForTarget(target) || target + "p";
+  var maxLevel = 0;
+  for (var i = 0; i < hls.levels.length; i++) {
+    var lh = hls.levels[i].height || 0;
+    if (lh > maxLevel) maxLevel = lh;
+  }
   var msg = "Playing " + info.label + " (" + want + " requested)";
+  if (maxLevel > 0) {
+    msg += " — manifest max " + maxLevel + "p";
+  }
+  if (sourceLabel) {
+    msg += " [" + sourceLabel + "]";
+  }
   debug.debugLog(msg);
   if (onLog) onLog(msg);
 }
@@ -757,8 +768,28 @@ function playHlsJs(video, url, onLog, videoWrap, title, session, onFatal) {
   setupBufferWatchdog(video, hlsInstance, session, onLog);
   hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
     if (!isActiveSession(session)) return;
-    debug.debugLog("HLS.js manifest parsed");
-    if (onLog) onLog("HLS.js manifest parsed — buffering ahead");
+    var levelCount = hlsInstance.levels ? hlsInstance.levels.length : 0;
+    var maxH = 0;
+    if (hlsInstance.levels) {
+      for (var li = 0; li < hlsInstance.levels.length; li++) {
+        var lh = hlsInstance.levels[li].height || 0;
+        if (lh > maxH) maxH = lh;
+      }
+    }
+    debug.debugLog(
+      "HLS.js manifest parsed — levels: " +
+        levelCount +
+        ", max height: " +
+        (maxH ? maxH + "p" : "unknown")
+    );
+    if (onLog) {
+      onLog(
+        "HLS.js manifest parsed — " +
+          levelCount +
+          " level(s)" +
+          (maxH ? ", max " + maxH + "p" : "")
+      );
+    }
     applyQualityPreference(hlsInstance, onLog);
     notifyQualityChange(getCurrentQuality(hlsInstance, video));
     setupPlaybackHealthReport(video, session);

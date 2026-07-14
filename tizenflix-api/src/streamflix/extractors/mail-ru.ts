@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from MailRuExtractor */
+/** Ported from MailRuExtractor — fallback generic packed */
 export const mailRuExtractor: ExtractorDef = {
   name: "MailRu",
   mainUrl: "https://my.mail.ru",
-  
-  extract: notImplementedExtract("MailRu"),
+  extract: (link) => extractGenericPacked(link),
 };

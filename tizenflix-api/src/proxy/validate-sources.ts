@@ -1,3 +1,4 @@
+import { parseMaxManifestHeight } from "./rewrite-m3u8.js";
 import { fetchProxiedStream } from "./upstream.js";
 import type { PlayResponse, PlayableSource } from "../types.js";
 
@@ -6,6 +7,8 @@ export interface ManifestProbe {
   status: number;
   reason?: string;
   segmentMs?: number;
+  /** Highest RESOLUTION= height parsed from manifest body */
+  maxHeight?: number;
 }
 
 export interface ValidatePlayOptions {
@@ -36,6 +39,12 @@ function parseBandwidthFromLabel(label: string): number {
 function targetHeightFromPreferredQuality(preferred?: string): number {
   if (!preferred) return 0;
   return parseHeightFromLabel(preferred);
+}
+
+export function effectiveSourceHeight(source: PlayableSource, probe?: ManifestProbe): number {
+  const manifestH = probe?.maxHeight ?? 0;
+  const labelH = parseHeightFromLabel(source.label);
+  return manifestH > 0 ? manifestH : labelH;
 }
 
 function firstSegmentUrl(manifestBody: string): string | null {
@@ -73,6 +82,7 @@ export async function probeHlsManifest(
       };
     }
 
+    const maxHeight = parseMaxManifestHeight(body);
     let segmentMs: number | undefined;
     const segUrl = firstSegmentUrl(body);
     if (segUrl) {
@@ -86,6 +96,7 @@ export async function probeHlsManifest(
             status: seg.status,
             reason: `first segment HTTP ${seg.status}`,
             segmentMs,
+            maxHeight: maxHeight > 0 ? maxHeight : undefined,
           };
         }
       } catch (err) {
@@ -94,11 +105,17 @@ export async function probeHlsManifest(
           status: 0,
           reason: err instanceof Error ? err.message : String(err),
           segmentMs: Date.now() - t0,
+          maxHeight: maxHeight > 0 ? maxHeight : undefined,
         };
       }
     }
 
-    return { ok: true, status: result.status, segmentMs };
+    return {
+      ok: true,
+      status: result.status,
+      segmentMs,
+      maxHeight: maxHeight > 0 ? maxHeight : undefined,
+    };
   } catch (err) {
     return {
       ok: false,
@@ -118,24 +135,23 @@ interface RankedSource {
   healthScore: number;
 }
 
+function qualityScore(height: number, targetPx: number): number {
+  if (!height) return -1;
+  if (height === targetPx) return 10000 + height;
+  if (height < targetPx) return 5000 + height;
+  return height;
+}
+
 function sortSourcesForProbe(sources: PlayableSource[], preferredQuality?: string): PlayableSource[] {
   const targetPx = targetHeightFromPreferredQuality(preferredQuality);
   if (!targetPx) return sources;
 
   return sources.slice().sort((a, b) => {
-    const ha = parseHeightFromLabel(a.label);
-    const hb = parseHeightFromLabel(b.label);
-    const score = (h: number) => {
-      if (!h) return -1;
-      if (h === targetPx) return 10000 + h;
-      if (h < targetPx) return 5000 + h;
-      return h;
-    };
-    const sa = score(ha);
-    const sb = score(hb);
+    const sa = qualityScore(parseHeightFromLabel(a.label), targetPx);
+    const sb = qualityScore(parseHeightFromLabel(b.label), targetPx);
     if (sa !== sb) return sb - sa;
     if (a.priority !== b.priority) return a.priority - b.priority;
-    return hb - ha;
+    return parseHeightFromLabel(b.label) - parseHeightFromLabel(a.label);
   });
 }
 
@@ -143,10 +159,24 @@ function isVixSrcProvider(provider: string): boolean {
   return /^vixsrc/i.test(provider);
 }
 
-function sortPlayableSources(ranked: RankedSource[]): PlayableSource[] {
+function sortPlayableSources(
+  ranked: RankedSource[],
+  preferredQuality?: string
+): PlayableSource[] {
+  const targetPx = targetHeightFromPreferredQuality(preferredQuality);
+
   return ranked
     .slice()
     .sort((a, b) => {
+      if (targetPx) {
+        const ha = effectiveSourceHeight(a.source, a.probe);
+        const hb = effectiveSourceHeight(b.source, b.probe);
+        const sa = qualityScore(ha, targetPx);
+        const sb = qualityScore(hb, targetPx);
+        if (sa !== sb) return sb - sa;
+        if (ha !== hb) return hb - ha;
+      }
+
       if (a.source.priority !== b.source.priority) {
         return a.source.priority - b.source.priority;
       }
@@ -262,15 +292,21 @@ export async function validatePlaySources(
     }
   }
 
-  const playable = sortPlayableSources(rankedPlayable);
+  const playable = sortPlayableSources(rankedPlayable, options.preferredQuality);
   const sources = options.tizenProfile ? playable : [...playable, ...blocked];
 
   const targetPx = targetHeightFromPreferredQuality(options.preferredQuality);
   if (targetPx && playable.length) {
-    const bestH = parseHeightFromLabel(playable[0]!.label);
+    const bestRanked = rankedPlayable.find((r) => r.source.id === playable[0]!.id);
+    const bestH = effectiveSourceHeight(
+      playable[0]!,
+      bestRanked?.probe ?? rankedPlayable[0]?.probe
+    );
     if (bestH > 0 && bestH < targetPx) {
+      const label =
+        bestH >= 2160 ? "4K" : bestH >= 1080 ? "1080p" : bestH >= 720 ? "720p" : `${bestH}p`;
       warnings.push(
-        `No ${options.preferredQuality} source available — playing best available (${playable[0]!.label})`
+        `No ${options.preferredQuality} source available — playing best available (${label})`
       );
     }
   }

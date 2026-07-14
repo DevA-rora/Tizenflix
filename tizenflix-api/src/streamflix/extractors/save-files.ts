@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from SaveFilesExtractor */
+/** Ported from SaveFilesExtractor (GenericPackedSourceExtractor) */
 export const saveFilesExtractor: ExtractorDef = {
   name: "Savefiles",
   mainUrl: "https://savefiles.com/",
   aliasUrls: ["https://streamhls.to"],
-  extract: notImplementedExtract("Savefiles"),
+  extract: (link) => extractGenericPacked(link),
 };

@@ -10,6 +10,7 @@ const SKIP = new Set([
   "registry.ts",
   "types.ts",
   "voe-decrypt.ts",
+  "vix-src-playlist.ts",
 ]);
 
 const IMPLEMENTED_PRIORITY = [

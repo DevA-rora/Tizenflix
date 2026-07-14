@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from StreamhubExtractor */
+/** Ported from StreamhubExtractor (GenericPackedSourceExtractor) */
 export const streamhubExtractor: ExtractorDef = {
   name: "Streamhub",
   mainUrl: "https://streamhub.to",
-  
-  extract: notImplementedExtract("Streamhub"),
+  extract: (link) => extractGenericPacked(link),
 };

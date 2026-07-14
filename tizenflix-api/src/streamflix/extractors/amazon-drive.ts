@@ -1,11 +1,8 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractAmazonDrive } from "./base/embed-hosts.js";
 
-/** Auto-generated from AmazonDriveExtractor */
 export const amazonDriveExtractor: ExtractorDef = {
-  name: "AmazonDrive",
+  name: "Amazon Drive",
   mainUrl: "https://www.amazon.com",
-  
-  extract: notImplementedExtract("AmazonDrive"),
+  extract: extractAmazonDrive,
 };

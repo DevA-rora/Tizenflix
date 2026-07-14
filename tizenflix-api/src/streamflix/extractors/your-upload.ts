@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from YourUploadExtractor */
+/** Ported from YourUploadExtractor (GenericPackedSourceExtractor) */
 export const yourUploadExtractor: ExtractorDef = {
   name: "YourUpload",
   mainUrl: "https://www.yourupload.com",
   aliasUrls: ["https://www.yucache.net"],
-  extract: notImplementedExtract("YourUpload"),
+  extract: (link) => extractGenericPacked(link),
 };

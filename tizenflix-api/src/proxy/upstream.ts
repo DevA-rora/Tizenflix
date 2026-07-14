@@ -14,6 +14,12 @@ export const UPSTREAM_HEADERS: HeadersInit = {
   ...VIDKING_HEADERS,
 };
 
+/** UA/Accept only — some CDNs (ironbubble / Hydrogen) 403 when Origin/Referer is set. */
+export const BARE_UPSTREAM_HEADERS: HeadersInit = {
+  Accept: "*/*",
+  "User-Agent": (VIDKING_HEADERS as Record<string, string>)["User-Agent"]!,
+};
+
 const UPSTREAM_TIMEOUT_MS = 12_000;
 const MANIFEST_CACHE_TTL_MS = 60_000;
 
@@ -55,6 +61,49 @@ export function buildUpstreamHeaders(options?: UpstreamHeaderOptions): HeadersIn
   };
 }
 
+function headersIncludeOriginOrReferer(headers: HeadersInit): boolean {
+  const record = headers as Record<string, string>;
+  return Boolean(record.Origin || record.Referer || record.origin || record.referer);
+}
+
+/**
+ * Fetch upstream with Vidking (or custom referer) headers.
+ * On HTTP 403, retry once without Origin/Referer — needed for Hydrogen/ironbubble CDNs
+ * that reject forged vidking.net referers while accepting bare browser UA requests.
+ */
+export async function fetchUpstreamWithRefererFallback(
+  targetUrl: string,
+  fetchImpl: typeof fetch = fetch,
+  headerOptions?: UpstreamHeaderOptions
+): Promise<globalThis.Response> {
+  const primary = buildUpstreamHeaders(headerOptions);
+  const first = await fetchWithTimeout(
+    targetUrl,
+    { headers: primary, redirect: "follow" },
+    UPSTREAM_TIMEOUT_MS,
+    fetchImpl
+  );
+
+  if (first.status !== 403 || !headersIncludeOriginOrReferer(primary)) {
+    return first;
+  }
+
+  // Drain body so the connection can close before retry (mocks may omit arrayBuffer).
+  try {
+    if (typeof first.arrayBuffer === "function") await first.arrayBuffer();
+    else if (typeof first.text === "function") await first.text();
+  } catch {
+    /* ignore */
+  }
+
+  return fetchWithTimeout(
+    targetUrl,
+    { headers: BARE_UPSTREAM_HEADERS, redirect: "follow" },
+    UPSTREAM_TIMEOUT_MS,
+    fetchImpl
+  );
+}
+
 export interface ProxyStreamResult {
   status: number;
   contentType: string | null;
@@ -73,11 +122,10 @@ export async function pipeProxiedStream(
   fetchImpl: typeof fetch = fetch,
   headerOptions?: UpstreamHeaderOptions
 ): Promise<void> {
-  const upstream = await fetchWithTimeout(
+  const upstream = await fetchUpstreamWithRefererFallback(
     targetUrl,
-    { headers: buildUpstreamHeaders(headerOptions), redirect: "follow" },
-    UPSTREAM_TIMEOUT_MS,
-    fetchImpl
+    fetchImpl,
+    headerOptions
   );
 
   res.status(upstream.status);
@@ -101,11 +149,10 @@ export async function fetchProxiedStream(
   fetchImpl: typeof fetch = fetch,
   headerOptions?: UpstreamHeaderOptions
 ): Promise<ProxyStreamResult> {
-  const upstream = await fetchWithTimeout(
+  const upstream = await fetchUpstreamWithRefererFallback(
     targetUrl,
-    { headers: buildUpstreamHeaders(headerOptions), redirect: "follow" },
-    UPSTREAM_TIMEOUT_MS,
-    fetchImpl
+    fetchImpl,
+    headerOptions
   );
 
   const contentType = upstream.headers.get("content-type");

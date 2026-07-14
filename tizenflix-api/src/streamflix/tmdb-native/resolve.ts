@@ -2,7 +2,7 @@ import { detectStreamType, slugify } from "../../normalize/detect-type.js";
 import { tagPlayableSource } from "../../normalize/audio-metadata.js";
 import type { PlayResponse } from "../../types.js";
 import { extractVideo } from "../extractors/registry.js";
-import { runWithExtractLang } from "../extract-context.js";
+import { runWithExtractOptions } from "../extract-context.js";
 import { getCfBypassUsedInContext, runWithCfContext } from "../network/client.js";
 import type { ExtractedVideo } from "../types.js";
 import { AUTO_TMDB_SOURCE_IDS } from "./auto-sources.js";
@@ -18,6 +18,7 @@ export interface TmdbNativeResolveOptions extends TmdbNativeResolveOpts {
   /** Explicit priority order for merge (auto source ids). */
   mergeOrder?: string[];
   targetAudioLang?: string;
+  maxHeight?: number;
 }
 
 type ResolvedEntry = {
@@ -44,6 +45,34 @@ function classifyLayer(msg: string): TmdbNativeSourceResult["layer"] {
   return "extract";
 }
 
+function videoManifestHeight(video: ExtractedVideo): number {
+  return video.manifestMaxHeight ?? 0;
+}
+
+function sourceLabel(entry: Omit<ResolvedEntry, "sourceId" | "ms">): string {
+  const h = videoManifestHeight(entry.video);
+  return h > 0 ? `${h}p` : entry.serverName;
+}
+
+function compareResolvedEntries(
+  a: Omit<ResolvedEntry, "sourceId" | "ms">,
+  b: Omit<ResolvedEntry, "sourceId" | "ms">
+): number {
+  const ha = videoManifestHeight(a.video);
+  const hb = videoManifestHeight(b.video);
+  if (ha !== hb) return hb - ha;
+  const hlsA = detectStreamType(a.video.source) === "m3u8" ? 1 : 0;
+  const hlsB = detectStreamType(b.video.source) === "m3u8" ? 1 : 0;
+  return hlsB - hlsA;
+}
+
+function pickBestEntry(
+  pool: Array<Omit<ResolvedEntry, "sourceId" | "ms">>
+): Omit<ResolvedEntry, "sourceId" | "ms"> | undefined {
+  if (!pool.length) return undefined;
+  return pool.reduce((best, cur) => (compareResolvedEntries(cur, best) < 0 ? cur : best));
+}
+
 function toPlayResponse(
   opts: TmdbNativeResolveOptions,
   entries: ResolvedEntry[],
@@ -59,7 +88,7 @@ function toPlayResponse(
         {
           id: `tmdb-${slugify(entry.sourceId)}-${slugify(entry.serverName)}-${sources.length}`,
           provider: `${entry.sourceName}/${entry.serverName}`,
-          label: entry.serverName,
+          label: sourceLabel(entry),
           type,
           url: entry.video.source,
           priority: priorityOffset + sources.length,
@@ -110,7 +139,7 @@ function pickBestPerSource(results: TmdbNativeSourceResult[]): ResolvedEntry[] {
     if (!r.ok || !r.resolved?.length) continue;
     const hls = r.resolved.filter((e) => detectStreamType(e.video.source) === "m3u8");
     const pool = hls.length ? hls : r.resolved;
-    const best = pool[0];
+    const best = pickBestEntry(pool);
     if (!best) continue;
     picked.push({
       ...best,
@@ -180,27 +209,41 @@ async function resolveOneSource(
 
   try {
     const result = await Promise.race([
-      runWithExtractLang(opts.targetAudioLang ?? opts.lang, () =>
-        runWithCfContext(async () => {
+      runWithExtractOptions(
+        { lang: opts.targetAudioLang ?? opts.lang, maxHeight: opts.maxHeight },
+        () =>
+          runWithCfContext(async () => {
           const entries = await source.buildEntries(opts);
           if (!entries.length) throw new Error("api_hop: no server entries");
 
           const resolved: Array<Omit<ResolvedEntry, "sourceId" | "ms">> = [];
           const errors: string[] = [];
+          const targetHeight = opts.maxHeight ?? 0;
+          let oneBest: Omit<ResolvedEntry, "sourceId" | "ms"> | null = null;
 
           for (const entry of entries.slice(0, 8)) {
             try {
               const video = await extractVideo(entry.url, entry.name);
               if (!video.source) continue;
-              resolved.push({
+              const item = {
                 serverName: entry.name,
                 sourceName: source.name,
                 video,
-              });
-              if (opts.onePerSource) break;
+              };
+              if (opts.onePerSource) {
+                if (!oneBest || compareResolvedEntries(item, oneBest) < 0) oneBest = item;
+                const h = videoManifestHeight(video);
+                if (!targetHeight || h >= targetHeight) break;
+              } else {
+                resolved.push(item);
+              }
             } catch (err) {
               errors.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
             }
+          }
+
+          if (opts.onePerSource && oneBest) {
+            resolved.push(oneBest);
           }
 
           if (!resolved.length) {
@@ -397,6 +440,7 @@ export async function resolveTmdbNativeFromOptions(
     onePerSource: options.onePerSource,
     mergeOrder: options.mergeOrder,
     sourceTimeoutMs: options.sourceTimeoutMs,
+    maxHeight: options.maxHeight,
   });
 }
 

@@ -21,7 +21,7 @@ function htmlProvider(
     baseUrl,
     supportsMovies: movies,
     supportsTv: tv,
-    implementationStatus: "partial",
+    implementationStatus: "full",
     requiresPlaywright: opts.playwright ?? false,
     searchPath: (title) => searchTpl(title),
     parseSearch: (html, title) => {

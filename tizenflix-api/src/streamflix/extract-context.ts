@@ -1,11 +1,34 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-const extractLangContext = new AsyncLocalStorage<{ lang: string }>();
+export interface ExtractContext {
+  lang: string;
+  maxHeight?: number;
+}
+
+const extractContext = new AsyncLocalStorage<ExtractContext>();
+
+export function runWithExtractOptions<T>(
+  opts: { lang?: string; maxHeight?: number },
+  fn: () => Promise<T>
+): Promise<T> {
+  const parent = extractContext.getStore();
+  return extractContext.run(
+    {
+      lang: opts.lang ?? parent?.lang ?? "en",
+      maxHeight: opts.maxHeight ?? parent?.maxHeight,
+    },
+    fn
+  );
+}
 
 export function runWithExtractLang<T>(lang: string | undefined, fn: () => Promise<T>): Promise<T> {
-  return extractLangContext.run({ lang: lang ?? "en" }, fn);
+  return runWithExtractOptions({ lang }, fn);
 }
 
 export function getExtractLang(): string {
-  return extractLangContext.getStore()?.lang ?? "en";
+  return extractContext.getStore()?.lang ?? "en";
+}
+
+export function getExtractMaxHeight(): number | undefined {
+  return extractContext.getStore()?.maxHeight;
 }

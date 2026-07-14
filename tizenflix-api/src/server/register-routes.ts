@@ -6,6 +6,8 @@ import type { AppConfig } from "../config.js";
 import { requireTmdbKey } from "../config.js";
 import {
   getCachedPlay,
+  invalidatePlayCacheForTmdb,
+  invalidatePlayCacheKey,
   isCachedPlayValidated,
   markCachedPlayValidated,
   playResolveCacheKey,
@@ -18,9 +20,10 @@ import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from ".
 import { rewriteM3u8 } from "../proxy/rewrite-m3u8.js";
 import { validatePlaySources } from "../proxy/validate-sources.js";
 import { resolvePlayableSources, listProviders } from "../normalize/to-play-response.js";
-import { parseBackendParam, parseLangParam, parseAudioLangParam, parseSourcesParam, resolveWithBackend } from "../normalize/resolve-backend.js";
+import { parseBackendParam, parseLangParam, parseAudioLangParam, parseSourcesParam, parseProviderIdParam, parsePreferredProviderIdParam, parseRaceParam, resolveWithBackend } from "../normalize/resolve-backend.js";
 import { filterSourcesByAudioLang } from "../normalize/filter-audio-sources.js";
 import { resolveTargetAudioLang } from "../normalize/resolve-audio-lang.js";
+import { runWithExtractOptions } from "../streamflix/extract-context.js";
 import { fetchMetadata } from "../api/metadata.js";
 import { enrichWithOpenSubtitles } from "../subtitles/opensubtitles.js";
 import type { Metadata, PlayResponse } from "../types.js";
@@ -32,6 +35,13 @@ import {
   setProviderConfig,
   setProviderEnabled,
 } from "../streamflix/providers/registry.js";
+import {
+  getAllIptvProviders,
+  getIptvProviderConfig,
+  setIptvProviderEnabled,
+  setIptvProviderConfig,
+} from "../streamflix/iptv/registry.js";
+import { listIptvChannels, listIptvProviders, resolveIptvPlayResponse } from "../streamflix/iptv/resolve.js";
 import { TMDB_NATIVE_SOURCES } from "../streamflix/tmdb-native/registry.js";
 import * as tmdb from "../tmdb/client.js";
 
@@ -54,7 +64,11 @@ function proxyWrap(
   if (isInlineManifestSource(url)) {
     const token = url.slice("tizenflix-inline-manifest:".length);
     let inlineUrl = `${publicBase.replace(/\/$/, "")}/proxy/inline-manifest/${token}`;
-    if (audioLang) inlineUrl += `?audioLang=${encodeURIComponent(audioLang)}`;
+    const params = new URLSearchParams();
+    if (audioLang) params.set("audioLang", audioLang);
+    if (maxHeight && maxHeight > 0) params.set("maxHeight", String(maxHeight));
+    const qs = params.toString();
+    if (qs) inlineUrl += `?${qs}`;
     return inlineUrl;
   }
   return buildProxyUrl(publicBase, url, referer, audioLang, maxHeight);
@@ -516,6 +530,57 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     }
   });
 
+  app.get("/live/providers", (_req, res) => {
+    try {
+      const providers = listIptvProviders();
+      res.json({ count: providers.length, providers, config: getIptvProviderConfig() });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/live/:providerId/channels", async (req, res) => {
+    try {
+      const channels = await listIptvChannels(req.params.providerId);
+      res.json({ providerId: req.params.providerId, count: channels.length, channels });
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/live/:providerId/play/:channelId", async (req, res) => {
+    try {
+      const play = await resolveIptvPlayResponse(req.params.providerId, req.params.channelId);
+      res.json(play);
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post("/live/providers/toggle", (req, res) => {
+    try {
+      const id = typeof req.body?.id === "string" ? req.body.id : "";
+      const enabled = req.body?.enabled !== false;
+      if (!id) return res.status(400).json({ error: "id required" });
+      setIptvProviderEnabled(id, enabled);
+      res.json({ ok: true, id, enabled });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post("/live/providers/config", (req, res) => {
+    try {
+      const disabled = Array.isArray(req.body?.disabled)
+        ? req.body.disabled.filter((d: unknown) => typeof d === "string")
+        : [];
+      setIptvProviderConfig(disabled);
+      res.json({ ok: true, disabled });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.get("/providers/tmdb-native", (_req, res) => {
     try {
       const sources = TMDB_NATIVE_SOURCES.map((s) => ({
@@ -650,6 +715,9 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     const includeSubtitles = req.query.subtitles === "1";
     const onlySourceId =
       typeof req.query.onlySourceId === "string" ? req.query.onlySourceId : undefined;
+    const providerId = parseProviderIdParam(req.query.providerId);
+    const preferredProviderId = parsePreferredProviderIdParam(req.query.preferredProviderId);
+    const raceProviders = parseRaceParam(req.query.race);
     const sources = parseSourcesParam(req.query.sources);
     const sourcesKey = sources?.length ? sources.join(",") : undefined;
     const lang = parseLangParam(req.query.lang);
@@ -676,19 +744,29 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       episode: options.episode,
       backend: options.backend,
       onlySourceId,
+      providerId,
+      preferredProviderId,
       server: options.server,
       sources: sourcesKey,
       lang,
       audioLang: audioLangParam,
     });
-    const cached = getCachedPlay(cacheKey);
+    const noCache = req.query.nocache === "1";
+    if (noCache) {
+      invalidatePlayCacheKey(cacheKey);
+      invalidatePlayCacheForTmdb(options.tmdbId);
+    }
+    const cached = noCache ? null : getCachedPlay(cacheKey);
     const fastResolve = req.query.fast === "1";
+    const autoBackend = (options.backend ?? "auto") === "auto";
+    const probeLimit = autoBackend ? 3 : 1;
     if (cached) {
       await validateAndRespond(cached, res, tizenProfile, {
         includeSubtitles,
         skipValidation: fastResolve || isCachedPlayValidated(cacheKey),
         preferredQuality,
         maxHeight,
+        probeLimit,
       });
       if (!fastResolve && !isCachedPlayValidated(cacheKey)) {
         markCachedPlayValidated(cacheKey);
@@ -698,21 +776,30 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
 
     const baseProviders = await listProviders();
     const providerList = providerHealth.list(baseProviders);
-    const resolved = await resolveWithBackend({
-      ...options,
-      sources,
-      onlySourceId,
-      lang,
-      audioLang: audioLangParam,
-      targetAudioLang: audioPref.targetLanguage,
-      providerScore: providerScoreFromList(providerList),
-    });
+    const resolved = await runWithExtractOptions(
+      { lang: audioPref.targetLanguage, maxHeight },
+      () =>
+        resolveWithBackend({
+          ...options,
+          sources,
+          onlySourceId,
+          providerId,
+          preferredProviderId,
+          raceProviders,
+          lang,
+          audioLang: audioLangParam,
+          targetAudioLang: audioPref.targetLanguage,
+          maxHeight,
+          providerScore: providerScoreFromList(providerList),
+        })
+    );
     const play = applyAudioPreference(resolved, audioPref);
     setCachedPlay(cacheKey, play);
     await validateAndRespond(play, res, tizenProfile, {
       includeSubtitles,
-      skipValidation: onlySourceId === "vixsrc" || fastResolve,
-      probeLimit: 1,
+      skipValidation:
+        fastResolve || (onlySourceId === "vixsrc" && !preferredQuality && !maxHeight),
+      probeLimit,
       preferredQuality,
       maxHeight,
     });
@@ -1114,12 +1201,16 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           ? undefined
           : req.query.audioLang.split("-")[0]
         : undefined;
+    const maxHeightRaw =
+      typeof req.query.maxHeight === "string" ? parseInt(req.query.maxHeight, 10) : undefined;
+    const maxHeight =
+      maxHeightRaw && Number.isFinite(maxHeightRaw) && maxHeightRaw > 0 ? maxHeightRaw : undefined;
     const rewritten = rewriteM3u8(
       entry.body,
       entry.upstreamUrl,
       publicBase,
       entry.referer,
-      { preferredAudioLang }
+      { preferredAudioLang, maxHeight }
     );
     res.status(200);
     res.setHeader("content-type", "application/vnd.apple.mpegurl");

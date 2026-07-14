@@ -16,7 +16,6 @@ import { vidGuardExtractor } from "./vid-guard.js";
 import { twoEmbedExtractor } from "./two-embed.js";
 import { afterDarkExtractor } from "./after-dark.js";
 import { amazonDriveExtractor } from "./amazon-drive.js";
-import { frembedExtractor } from "./frembed.js";
 import { apiVoirFilmExtractor } from "./api-voir-film.js";
 import { bigWarpExtractor } from "./big-warp.js";
 import { chillxJeanExtractor } from "./chillx-jean.js";
@@ -27,6 +26,7 @@ import { doodLaDoodLiExtractor } from "./dood-la-dood-li.js";
 import { doodLaDoodExtractor } from "./dood-la-dood.js";
 import { droploadExtractor } from "./dropload.js";
 import { einschaltenExtractor } from "./einschalten.js";
+import { frembedExtractor } from "./frembed.js";
 import { fsvidExtractor } from "./fsvid.js";
 import { goodstreamExtractor } from "./goodstream.js";
 import { googleDriveExtractor } from "./google-drive.js";
@@ -49,6 +49,7 @@ import { nekostreamExtractor } from "./nekostream.js";
 import { ninjaStreamExtractor } from "./ninja-stream.js";
 import { nuuploadExtractor } from "./nuupload.js";
 import { okruExtractor } from "./okru.js";
+import { onRegardeOuExtractor } from "./on-regarde-ou.js";
 import { oneuploadExtractor } from "./oneupload.js";
 import { pDrainExtractor } from "./p-drain.js";
 import { pcloudExtractor } from "./pcloud.js";
@@ -107,8 +108,6 @@ import { yourUploadExtractor } from "./your-upload.js";
 import { zillaExtractor } from "./zilla.js";
 
 const EXTRACTORS: ExtractorDef[] = [
-  afterDarkExtractor,
-  frembedExtractor,
   vixcloudExtractor,
   rabbitstreamExtractor,
   vidplayExtractor,
@@ -121,6 +120,7 @@ const EXTRACTORS: ExtractorDef[] = [
   streamWishExtractor,
   vidGuardExtractor,
   twoEmbedExtractor,
+  afterDarkExtractor,
   amazonDriveExtractor,
   apiVoirFilmExtractor,
   bigWarpExtractor,
@@ -132,6 +132,7 @@ const EXTRACTORS: ExtractorDef[] = [
   doodLaDoodExtractor,
   droploadExtractor,
   einschaltenExtractor,
+  frembedExtractor,
   fsvidExtractor,
   goodstreamExtractor,
   googleDriveExtractor,
@@ -154,6 +155,7 @@ const EXTRACTORS: ExtractorDef[] = [
   ninjaStreamExtractor,
   nuuploadExtractor,
   okruExtractor,
+  onRegardeOuExtractor,
   oneuploadExtractor,
   pDrainExtractor,
   pcloudExtractor,
@@ -236,30 +238,15 @@ async function resolveBridge(link: string): Promise<string> {
 
 export async function extractVideo(link: string, serverName?: string): Promise<ExtractedVideo> {
   let finalLink = await resolveBridge(link);
-
-  if (/\.m3u8(\?|$)/i.test(finalLink) || /\.mp4(\?|$)/i.test(finalLink)) {
-    return { source: finalLink, subtitles: [], headers: {} };
-  }
-
   const compareUrl = normalizeCompareUrl(finalLink);
   let found: ExtractorDef | null = null;
 
-  if (serverName) {
-    found = EXTRACTORS.find((e) => serverName.toLowerCase().includes(e.name.toLowerCase())) ?? null;
-  }
-
-  if (!found && /\/api\/(movie|tv)\//.test(finalLink) && compareUrl.includes("vixsrc")) {
-    found = EXTRACTORS.find((e) => e.name === "VixSrc") ?? null;
-  }
-
-  if (!found) {
-    for (const ext of EXTRACTORS) {
-      if (compareUrl.startsWith(normalizeCompareUrl(ext.mainUrl))) { found = ext; break; }
-      for (const alias of ext.aliasUrls ?? []) {
-        if (compareUrl.startsWith(normalizeCompareUrl(alias))) { found = ext; break; }
-      }
-      if (found) break;
+  for (const ext of EXTRACTORS) {
+    if (compareUrl.startsWith(normalizeCompareUrl(ext.mainUrl))) { found = ext; break; }
+    for (const alias of ext.aliasUrls ?? []) {
+      if (compareUrl.startsWith(normalizeCompareUrl(alias))) { found = ext; break; }
     }
+    if (found) break;
   }
 
   if (!found) {
@@ -270,6 +257,10 @@ export async function extractVideo(link: string, serverName?: string): Promise<E
       }
       if (found) break;
     }
+  }
+
+  if (!found && serverName) {
+    found = EXTRACTORS.find((e) => serverName.toLowerCase().includes(e.name.toLowerCase())) ?? null;
   }
 
   if (!found) throw new Error(`No extractor found for URL: ${finalLink}`);

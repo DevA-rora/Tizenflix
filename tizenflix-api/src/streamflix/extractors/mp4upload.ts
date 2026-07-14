@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from Mp4UploadExtractor */
+/** Ported from Mp4UploadExtractor (GenericPackedSourceExtractor) */
 export const mp4uploadExtractor: ExtractorDef = {
   name: "Mp4Upload",
   mainUrl: "https://example.com",
-  
-  extract: notImplementedExtract("Mp4Upload"),
+  extract: (link) => extractGenericPacked(link),
 };

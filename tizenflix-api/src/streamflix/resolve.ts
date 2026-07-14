@@ -1,7 +1,9 @@
 import { detectStreamType, slugify } from "../normalize/detect-type.js";
 import { tagPlayableSource } from "../normalize/audio-metadata.js";
 import type { PlayResponse } from "../types.js";
-import { getEnabledProviders } from "./providers/registry.js";
+import { findProviderById, getEnabledProviders } from "./providers/registry.js";
+import { orderProviders, firstAutoProviderId, MAX_AUTO_PROVIDER_ATTEMPTS, AUTO_PROVIDER_TIMEOUT_MS, EN_PROVIDER_ORDER, ANIME_PROVIDER_ORDER } from "./provider-order.js";
+import { resolveAnimeProviders } from "./anime-resolve.js";
 import type { ContentProvider } from "./providers/types.js";
 import type { ExtractedVideo, StreamServer } from "./types.js";
 import { getCfBypassUsedInContext, runWithCfContext } from "./network/client.js";
@@ -14,6 +16,13 @@ export interface StreamflixResolveOptions {
   title: string;
   fetchImpl?: typeof fetch;
   providerTimeoutMs?: number;
+  lang?: string;
+  isAnime?: boolean;
+  providerId?: string;
+  preferredProviderId?: string;
+  raceProviders?: boolean;
+  /** Streamflix-first single provider + capped scan (backend=auto step 1). */
+  autoMode?: boolean;
 }
 
 export interface ProviderResolveResult {
@@ -33,10 +42,12 @@ export interface ProviderResolveResult {
 type ResolvedEntry = {
   serverName: string;
   provider: string;
+  providerId: string;
   video: ExtractedVideo;
 };
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 15_000;
+const ORDERED_PROVIDER_TIMEOUT_MS = 8_000;
 
 function preferHls(sources: PlayResponse["sources"]): PlayResponse["sources"] {
   const hls = sources.filter((s) => s.type === "m3u8");
@@ -52,8 +63,9 @@ function toPlayResponse(opts: StreamflixResolveOptions, servers: ResolvedEntry[]
     sources.push(
       tagPlayableSource(
         {
-          id: `streamflix-${slugify(entry.provider)}-${slugify(entry.serverName)}-${sources.length}`,
+          id: `streamflix-${slugify(entry.providerId)}-${slugify(entry.serverName)}-${sources.length}`,
           provider: `${entry.provider}/${entry.serverName}`,
+          providerId: entry.providerId,
           label: entry.serverName,
           type,
           url: entry.video.source,
@@ -114,7 +126,7 @@ function dedupeServers(servers: StreamServer[]): StreamServer[] {
   return out;
 }
 
-async function resolveProvider(
+export async function resolveProvider(
   provider: ContentProvider,
   opts: StreamflixResolveOptions,
   timeoutMs: number
@@ -153,7 +165,12 @@ async function resolveProvider(
           try {
             const video = await provider.getVideo(server);
             if (!video.source) continue;
-            entries.push({ serverName: server.name, provider: provider.name, video });
+            entries.push({
+              serverName: server.name,
+              provider: provider.name,
+              providerId: provider.id,
+              video,
+            });
           } catch (err) {
             errors.push(
               `${server.name}: ${err instanceof Error ? err.message : String(err)}`
@@ -204,17 +221,23 @@ async function resolveProvider(
   }
 }
 
-export async function resolveStreamflixPlay(
-  opts: StreamflixResolveOptions
-): Promise<PlayResponse & { providerResults?: ProviderResolveResult[] }> {
-  const providers = getEnabledProviders(opts.type);
-  const timeoutMs = opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+function buildPlayFromResults(
+  opts: StreamflixResolveOptions,
+  results: ProviderResolveResult[],
+  merged: ResolvedEntry[]
+): PlayResponse & { providerResults?: ProviderResolveResult[] } {
+  const play = toPlayResponse(opts, merged);
+  play.providerResults = results;
 
-  const results = await Promise.all(
-    providers.map((p) => resolveProvider(p, opts, timeoutMs))
-  );
+  const warnings = results
+    .filter((r) => !r.ok)
+    .map((r) => `${r.provider}: ${r.error}`);
+  if (warnings.length) play.warnings = warnings;
 
-  const successful = results.filter((r) => r.ok && r.entries?.length);
+  return play;
+}
+
+function mergeParallelEntries(successful: ProviderResolveResult[]): ResolvedEntry[] {
   const merged: ResolvedEntry[] = [];
   const seenHosts = new Set<string>();
 
@@ -232,13 +255,132 @@ export async function resolveStreamflixPlay(
     }
   }
 
-  const play = toPlayResponse(opts, merged);
-  play.providerResults = results;
+  return merged;
+}
 
-  const warnings = results
-    .filter((r) => !r.ok)
-    .map((r) => `${r.provider}: ${r.error}`);
-  if (warnings.length) play.warnings = warnings;
+export async function resolveStreamflixSingleProvider(
+  opts: StreamflixResolveOptions,
+  providerId: string,
+  timeoutMs?: number
+): Promise<PlayResponse & { providerResults?: ProviderResolveResult[] }> {
+  const provider = findProviderById(providerId);
+  if (!provider || provider.enabled === false) {
+    throw new Error(`Provider not found or disabled: ${providerId}`);
+  }
+
+  const ms = timeoutMs ?? opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+  const result = await resolveProvider(provider, opts, ms);
+
+  if (!result.ok || !result.entries?.length) {
+    const err = new Error(result.error ?? `${provider.name}: no playable sources`) as Error & {
+      providerResults?: ProviderResolveResult[];
+    };
+    err.providerResults = [result];
+    throw err;
+  }
+
+  return buildPlayFromResults(opts, [result], result.entries);
+}
+
+export async function resolveStreamflixAuto(
+  opts: StreamflixResolveOptions
+): Promise<PlayResponse & { providerResults?: ProviderResolveResult[] }> {
+  const timeoutMs = opts.providerTimeoutMs ?? AUTO_PROVIDER_TIMEOUT_MS;
+  const lang = opts.lang ?? "en";
+  const isAnime = Boolean(opts.isAnime);
+  const enabled = getEnabledProviders(opts.type);
+  const ordered = orderProviders(
+    enabled,
+    lang,
+    isAnime,
+    opts.preferredProviderId
+  );
+
+  const results: ProviderResolveResult[] = [];
+
+  if (isAnime) {
+    const raced = await resolveAnimeProviders(opts, timeoutMs);
+    if (raced?.sources?.length) return raced;
+    if (raced?.providerResults?.length) {
+      results.push(...raced.providerResults);
+    }
+  }
+
+  const tried = new Set<string>();
+
+  const tryProvider = async (provider: ContentProvider): Promise<boolean> => {
+    if (tried.has(provider.id)) return false;
+    tried.add(provider.id);
+    const result = await resolveProvider(provider, opts, timeoutMs);
+    results.push(result);
+    return Boolean(result.ok && result.entries?.length);
+  };
+
+  const firstId = firstAutoProviderId(isAnime, opts.preferredProviderId);
+  const first = findProviderById(firstId);
+  if (first && first.enabled !== false && (await tryProvider(first))) {
+    const last = results[results.length - 1]!;
+    return buildPlayFromResults(opts, results, last.entries!);
+  }
+
+  for (const provider of ordered) {
+    if (results.length >= MAX_AUTO_PROVIDER_ATTEMPTS) break;
+    if (await tryProvider(provider)) {
+      const last = results[results.length - 1]!;
+      return buildPlayFromResults(opts, results, last.entries!);
+    }
+  }
+
+  const err = new Error(
+    results.map((r) => `${r.provider}: ${r.error ?? "unknown"}`).join("; ") || "no providers"
+  ) as Error & { providerResults?: ProviderResolveResult[] };
+  err.providerResults = results;
+  throw err;
+}
+
+export async function resolveStreamflixOrdered(
+  opts: StreamflixResolveOptions
+): Promise<PlayResponse & { providerResults?: ProviderResolveResult[] }> {
+  const lang = opts.lang ?? "en";
+  const timeoutMs = opts.providerTimeoutMs ?? ORDERED_PROVIDER_TIMEOUT_MS;
+  const enabled = getEnabledProviders(opts.type);
+  const ordered = orderProviders(
+    enabled,
+    lang,
+    Boolean(opts.isAnime),
+    opts.preferredProviderId
+  );
+
+  const results: ProviderResolveResult[] = [];
+
+  for (const provider of ordered) {
+    const result = await resolveProvider(provider, opts, timeoutMs);
+    results.push(result);
+    if (result.ok && result.entries?.length) {
+      return buildPlayFromResults(opts, results, result.entries);
+    }
+  }
+
+  const err = new Error(
+    results.map((r) => `${r.provider}: ${r.error ?? "unknown"}`).join("; ") || "no providers"
+  ) as Error & { providerResults?: ProviderResolveResult[] };
+  err.providerResults = results;
+  throw err;
+}
+
+export async function resolveStreamflixPlayParallel(
+  opts: StreamflixResolveOptions
+): Promise<PlayResponse & { providerResults?: ProviderResolveResult[] }> {
+  const providers = getEnabledProviders(opts.type);
+  const timeoutMs = opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+
+  const results = await Promise.all(
+    providers.map((p) => resolveProvider(p, opts, timeoutMs))
+  );
+
+  const successful = results.filter((r) => r.ok && r.entries?.length);
+  const merged = mergeParallelEntries(successful);
+  const play = buildPlayFromResults(opts, results, merged);
 
   if (!merged.length) {
     const err = new Error(
@@ -251,12 +393,37 @@ export async function resolveStreamflixPlay(
   return play;
 }
 
+export async function resolveStreamflixPlay(
+  opts: StreamflixResolveOptions
+): Promise<PlayResponse & { providerResults?: ProviderResolveResult[] }> {
+  if (opts.providerId) {
+    return resolveStreamflixSingleProvider(opts, opts.providerId);
+  }
+  if (opts.raceProviders) {
+    return resolveStreamflixPlayParallel(opts);
+  }
+  if (opts.isAnime && !opts.autoMode) {
+    const timeoutMs = opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+    const raced = await resolveAnimeProviders(opts, timeoutMs);
+    if (raced?.sources?.length) return raced;
+  }
+  if (opts.autoMode) {
+    return resolveStreamflixAuto(opts);
+  }
+  return resolveStreamflixOrdered(opts);
+}
+
+/** @deprecated use resolveStreamflixPlayParallel */
+export { resolveStreamflixPlayParallel as resolveStreamflixPlayRace };
+
 export async function resolveStreamflixFromOptions(
   options: import("../types.js").ResolveOptions & { title?: string },
   fetchImpl: typeof fetch = fetch
 ): Promise<PlayResponse> {
   const { fetchMetadata } = await import("../api/metadata.js");
+  const { isAnime } = await import("../tmdb/is-anime.js");
   const meta = await fetchMetadata(options.type, options.tmdbId, fetchImpl);
+  const anime = options.isAnime ?? isAnime(meta);
 
   return resolveStreamflixPlay({
     type: options.type,
@@ -265,5 +432,14 @@ export async function resolveStreamflixFromOptions(
     episode: options.episode,
     title: meta.title,
     fetchImpl,
+    lang: options.lang,
+    isAnime: anime,
+    providerId: options.providerId,
+    preferredProviderId: options.preferredProviderId,
+    raceProviders: options.raceProviders,
+    autoMode: options.autoMode,
+    providerTimeoutMs: options.sourceTimeoutMs,
   });
 }
+
+export { EN_PROVIDER_ORDER, ANIME_PROVIDER_ORDER, firstAutoProviderId, MAX_AUTO_PROVIDER_ATTEMPTS, AUTO_PROVIDER_TIMEOUT_MS };

@@ -1,11 +1,9 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from HxfileExtractor */
+/** Ported from HxfileExtractor (GenericPackedSourceExtractor) */
 export const hxfileExtractor: ExtractorDef = {
   name: "Hxfile",
   mainUrl: "https://hxfile.co",
-  
-  extract: notImplementedExtract("Hxfile"),
+  extract: (link) => extractGenericPacked(link),
 };

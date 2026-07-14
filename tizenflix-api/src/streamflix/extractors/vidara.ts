@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from VidaraExtractor */
+/** Ported from VidaraExtractor — fallback generic packed */
 export const vidaraExtractor: ExtractorDef = {
   name: "Vidara",
   mainUrl: "https://vidara.to",
   aliasUrls: ["https://vidara.so"],
-  extract: notImplementedExtract("Vidara"),
+  extract: (link) => extractGenericPacked(link),
 };

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { getAllProviders, getEnabledProviders } from "../src/streamflix/providers/registry.js";
+import { getAllIptvProviders } from "../src/streamflix/iptv/registry.js";
 import { listExtractors } from "../src/streamflix/extractors/registry.js";
 
 describe("streamflix registry", () => {
-  it("registers all providers (63 Android + SuperStream)", () => {
-    expect(getAllProviders().length).toBeGreaterThanOrEqual(63);
+  it("registers all VOD providers (51) + IPTV providers (19)", () => {
+    expect(getAllProviders().length).toBeGreaterThanOrEqual(51);
+    expect(getAllIptvProviders().length).toBeGreaterThanOrEqual(19);
+    expect(getAllProviders().length + getAllIptvProviders().length).toBeGreaterThanOrEqual(70);
   });
 
   it("has enabled English movie providers", () => {

@@ -28,6 +28,16 @@ function parseResolutionHeight(inf: string): number {
   return match ? parseInt(match[1], 10) : 0;
 }
 
+/** Highest RESOLUTION= height in a master or media playlist (0 if unknown). */
+export function parseMaxManifestHeight(content: string): number {
+  let max = 0;
+  for (const line of content.split(/\r?\n/)) {
+    const h = parseResolutionHeight(line.trim());
+    if (h > max) max = h;
+  }
+  return max;
+}
+
 /** One preferred audio track + up to 3 video rungs for ABR and quality settings. */
 export interface SimplifyMasterOptions {
   maxRungs?: number;

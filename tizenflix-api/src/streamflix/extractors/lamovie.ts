@@ -1,11 +1,10 @@
-import type { ExtractedVideo } from "../types.js";
 import type { ExtractorDef } from "../types.js";
-import { notImplementedExtract } from "./base/not-implemented.js";
+import { extractGenericPacked } from "./base/generic-packed.js";
 
-/** Auto-generated from LamovieExtractor */
+/** Ported from LamovieExtractor (GenericPackedSourceExtractor) */
 export const lamovieExtractor: ExtractorDef = {
   name: "Lamovie",
   mainUrl: "https://lamovie.link",
   aliasUrls: ["https://vimeos.net"],
-  extract: notImplementedExtract("Lamovie"),
+  extract: (link) => extractGenericPacked(link),
 };

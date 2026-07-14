@@ -18,6 +18,8 @@ export interface PlayResolveCacheKeyInput {
   backend?: string;
   onlySourceId?: string;
   server?: string;
+  providerId?: string;
+  preferredProviderId?: string;
   /** Comma-separated TMDB-native source ids (e.g. twoembed,vidrock). */
   sources?: string;
   lang?: string;
@@ -33,6 +35,8 @@ export function playResolveCacheKey(input: PlayResolveCacheKeyInput): string {
     input.backend ?? "auto",
     input.onlySourceId ?? "",
     input.server ?? "",
+    input.providerId ?? "",
+    input.preferredProviderId ?? "",
     input.sources ?? "",
     input.lang ?? "",
     input.audioLang ?? "",
@@ -74,4 +78,8 @@ export function invalidatePlayCacheForTmdb(tmdbId: string): void {
       cache.delete(key);
     }
   }
+}
+
+export function invalidatePlayCacheKey(key: string): void {
+  cache.delete(key);
 }

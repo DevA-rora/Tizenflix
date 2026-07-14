@@ -110,6 +110,12 @@ body.is-playing .debug-overlay {
   pointer-events: none;
 }
 
+.player-chrome-rail-open,
+.player-chrome-rail-open.player-chrome-hidden {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .player-vignette-top,
 .player-vignette-bottom {
   position: absolute;
