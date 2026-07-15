@@ -1,6 +1,10 @@
 import { VIDKING_HEADERS } from "../constants/headers.js";
 import { fetchWithTimeout } from "../fetch-timeout.js";
 import {
+  IRONBUBBLE_SITE_REFERERS,
+  type ProxyHeaderParams,
+} from "./proxy-header-options.js";
+import {
   rewriteM3u8,
   shouldRewriteAsM3u8,
   looksLikeM3u8Url,
@@ -31,34 +35,48 @@ interface ManifestCacheEntry {
 
 const manifestCache = new Map<string, ManifestCacheEntry>();
 
-function manifestCacheKey(
-  targetUrl: string,
-  preferredAudioLang?: string,
-  maxHeight?: number
-): string {
-  return `${targetUrl}::${preferredAudioLang ?? ""}::${maxHeight ?? 1080}`;
-}
-
-export interface UpstreamHeaderOptions {
-  referer?: string;
+export interface UpstreamHeaderOptions extends ProxyHeaderParams {
   preferredAudioLang?: string;
   maxHeight?: number;
 }
 
+function manifestCacheKey(
+  targetUrl: string,
+  headerOptions?: UpstreamHeaderOptions
+): string {
+  const h = headerOptions;
+  return [
+    targetUrl,
+    h?.referer ?? "",
+    h?.userAgent ?? "",
+    h?.origin ?? "",
+    h?.cookie ?? "",
+    h?.preferredAudioLang ?? "",
+    h?.maxHeight ?? 1080,
+  ].join("::");
+}
+
 export function buildUpstreamHeaders(options?: UpstreamHeaderOptions): HeadersInit {
-  if (!options?.referer) return UPSTREAM_HEADERS;
-  const base = VIDKING_HEADERS as Record<string, string>;
-  let origin = base.Origin;
-  try {
-    origin = new URL(options.referer).origin;
-  } catch {
-    /* keep default */
+  const base = { ...(VIDKING_HEADERS as Record<string, string>) };
+  if (!options) return base;
+
+  if (options.userAgent) base["User-Agent"] = options.userAgent;
+  if (options.cookie) base.Cookie = options.cookie;
+
+  if (options.referer) {
+    base.Referer = options.referer;
+    base.Origin = options.origin ?? (() => {
+      try {
+        return new URL(options.referer!).origin;
+      } catch {
+        return base.Origin;
+      }
+    })();
+  } else if (options.origin) {
+    base.Origin = options.origin;
   }
-  return {
-    ...base,
-    Referer: options.referer,
-    Origin: origin,
-  };
+
+  return base;
 }
 
 function headersIncludeOriginOrReferer(headers: HeadersInit): boolean {
@@ -67,41 +85,102 @@ function headersIncludeOriginOrReferer(headers: HeadersInit): boolean {
 }
 
 /**
- * Fetch upstream with Vidking (or custom referer) headers.
- * On HTTP 403, retry once without Origin/Referer — needed for Hydrogen/ironbubble CDNs
- * that reject forged vidking.net referers while accepting bare browser UA requests.
+ * Hydrogen / Yoru CDNs (moon.ironbubble.site and sibling hosts) reject forged
+ * vidking.net Origin/Referer. Detect for ladder fetch policy.
+ */
+export function prefersBareUpstreamHeaders(targetUrl: string): boolean {
+  try {
+    const host = new URL(targetUrl).hostname.toLowerCase();
+    return (
+      host.includes("ironbubble") ||
+      host.includes("cartlegion") ||
+      /^losangeles\d*\.site$/i.test(host)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function drainResponseBody(res: globalThis.Response): Promise<void> {
+  try {
+    if (typeof res.arrayBuffer === "function") await res.arrayBuffer();
+    else if (typeof res.text === "function") await res.text();
+  } catch {
+    /* ignore */
+  }
+}
+
+async function fetchOnce(
+  targetUrl: string,
+  headers: HeadersInit,
+  fetchImpl: typeof fetch
+): Promise<globalThis.Response> {
+  return fetchWithTimeout(
+    targetUrl,
+    { headers, redirect: "follow" },
+    UPSTREAM_TIMEOUT_MS,
+    fetchImpl
+  );
+}
+
+function refererAttemptsForIronbubble(headerOptions?: UpstreamHeaderOptions): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (ref?: string) => {
+    if (!ref || seen.has(ref)) return;
+    seen.add(ref);
+    out.push(ref);
+  };
+  add(headerOptions?.referer);
+  for (const ref of IRONBUBBLE_SITE_REFERERS) add(ref);
+  return out;
+}
+
+/**
+ * Fetch upstream with per-source headers (Referer, UA, Cookie).
+ * Ironbubble: bare UA → site-referer ladder (fmovies, cineby, videasy, …).
+ * Other hosts: full headers → bare UA on 403.
  */
 export async function fetchUpstreamWithRefererFallback(
   targetUrl: string,
   fetchImpl: typeof fetch = fetch,
   headerOptions?: UpstreamHeaderOptions
 ): Promise<globalThis.Response> {
+  if (prefersBareUpstreamHeaders(targetUrl)) {
+    const bare = await fetchOnce(targetUrl, BARE_UPSTREAM_HEADERS, fetchImpl);
+    if (bare.status !== 403) return bare;
+    await drainResponseBody(bare);
+
+    for (const referer of refererAttemptsForIronbubble(headerOptions)) {
+      const headers = buildUpstreamHeaders({
+        ...headerOptions,
+        referer,
+        origin: (() => {
+          try {
+            return new URL(referer).origin;
+          } catch {
+            return headerOptions?.origin;
+          }
+        })(),
+      });
+      const attempt = await fetchOnce(targetUrl, headers, fetchImpl);
+      if (attempt.status !== 403) return attempt;
+      await drainResponseBody(attempt);
+    }
+
+    return bare;
+  }
+
   const primary = buildUpstreamHeaders(headerOptions);
-  const first = await fetchWithTimeout(
-    targetUrl,
-    { headers: primary, redirect: "follow" },
-    UPSTREAM_TIMEOUT_MS,
-    fetchImpl
-  );
+  const first = await fetchOnce(targetUrl, primary, fetchImpl);
 
   if (first.status !== 403 || !headersIncludeOriginOrReferer(primary)) {
     return first;
   }
 
-  // Drain body so the connection can close before retry (mocks may omit arrayBuffer).
-  try {
-    if (typeof first.arrayBuffer === "function") await first.arrayBuffer();
-    else if (typeof first.text === "function") await first.text();
-  } catch {
-    /* ignore */
-  }
+  await drainResponseBody(first);
 
-  return fetchWithTimeout(
-    targetUrl,
-    { headers: BARE_UPSTREAM_HEADERS, redirect: "follow" },
-    UPSTREAM_TIMEOUT_MS,
-    fetchImpl
-  );
+  return fetchOnce(targetUrl, BARE_UPSTREAM_HEADERS, fetchImpl);
 }
 
 export interface ProxyStreamResult {
@@ -161,11 +240,7 @@ export async function fetchProxiedStream(
     looksLikeM3u8Url(targetUrl) || looksLikeM3u8ContentType(contentType);
 
   if (mightBeM3u8) {
-    const cacheKey = manifestCacheKey(
-      targetUrl,
-      headerOptions?.preferredAudioLang,
-      headerOptions?.maxHeight
-    );
+    const cacheKey = manifestCacheKey(targetUrl, headerOptions);
     const cached = manifestCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return {
@@ -178,7 +253,15 @@ export async function fetchProxiedStream(
 
     const text = await upstream.text();
     if (upstream.ok && shouldRewriteAsM3u8(targetUrl, contentType, text)) {
-      const rewritten = rewriteM3u8(text, targetUrl, publicBase, headerOptions?.referer, {
+      const proxyHeaders: ProxyHeaderParams | undefined = headerOptions
+        ? {
+            referer: headerOptions.referer,
+            userAgent: headerOptions.userAgent,
+            origin: headerOptions.origin,
+            cookie: headerOptions.cookie,
+          }
+        : undefined;
+      const rewritten = rewriteM3u8(text, targetUrl, publicBase, proxyHeaders, {
         preferredAudioLang: headerOptions?.preferredAudioLang,
         maxHeight: headerOptions?.maxHeight,
       });

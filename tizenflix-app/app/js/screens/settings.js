@@ -210,6 +210,7 @@ function render(container) {
     '<p class="settings-hint">Play backend: <strong>' +
     config.getPlayBackend() +
     '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p>' +
+    '<p class="settings-hint">auto = Vidking CDN → Streamflix scrapers → embed backups. vidking / streamflix force one engine.</p>' +
     '<button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button>' +
     '<p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
   container.appendChild(el);
@@ -291,7 +292,7 @@ function render(container) {
 
   if (backendBtn) {
     backendBtn.addEventListener("click", function () {
-      var order = ["streamflix", "auto", "vidking"];
+      var order = ["auto", "vidking", "streamflix"];
       var current = config.getPlayBackend();
       var idx = order.indexOf(current);
       var next = order[(idx + 1) % order.length];

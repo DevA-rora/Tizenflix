@@ -1,4 +1,5 @@
 import { buildProxyUrl, resolvePlaylistUrl } from "./proxy-url.js";
+import type { ProxyHeaderParams } from "./proxy-header-options.js";
 
 const URI_ATTR_RE = /URI="([^"]+)"/g;
 
@@ -139,7 +140,7 @@ export function rewriteM3u8(
   content: string,
   manifestUrl: string,
   publicBase: string,
-  referer?: string,
+  headers?: ProxyHeaderParams,
   options?: SimplifyMasterOptions
 ): string {
   const simplified = simplifyMasterForTv(content, options ?? { maxRungs: 3 });
@@ -158,14 +159,14 @@ export function rewriteM3u8(
     if (trimmed.startsWith("#")) {
       const rewritten = trimmed.replace(URI_ATTR_RE, (_match, uri: string) => {
         const absolute = resolvePlaylistUrl(manifestUrl, uri);
-        return `URI="${buildProxyUrl(publicBase, absolute, referer, options?.preferredAudioLang, maxHeight)}"`;
+        return `URI="${buildProxyUrl(publicBase, absolute, headers, options?.preferredAudioLang, maxHeight)}"`;
       });
       out.push(rewritten);
       continue;
     }
 
     const absolute = resolvePlaylistUrl(manifestUrl, trimmed);
-    out.push(buildProxyUrl(publicBase, absolute, referer, options?.preferredAudioLang, maxHeight));
+    out.push(buildProxyUrl(publicBase, absolute, headers, options?.preferredAudioLang, maxHeight));
   }
 
   return out.join("\n");

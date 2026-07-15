@@ -174,12 +174,14 @@ function getPlayBackend() {
   } catch (err) {
     /* TV may block storage */
   }
-  return "streamflix";
+  return "auto";
 }
 
 function setPlayBackend(mode) {
   var m =
-    mode === "streamflix" || mode === "auto" || mode === "tmdb-native" ? mode : "vidking";
+    mode === "streamflix" || mode === "auto" || mode === "tmdb-native" || mode === "vidking"
+      ? mode
+      : "auto";
   try {
     localStorage.setItem(BACKEND_KEY, m);
   } catch (err) {

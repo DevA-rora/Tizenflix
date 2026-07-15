@@ -28,6 +28,6 @@ Generates skeleton TS from upstream Kotlin registry. Fill in scrape/extract logi
 
 ## Do not duplicate maintenance
 
-- **Primary fixes**: upstream provider/scraper changes
-- **TMDB-native**: silent fallback only — fix embed extractors only when step 2 of the waterfall fails broadly
-- **Vidking**: last-resort CDN — update via `npm run capture` when player crypto changes
+- **Primary CDN**: Vidking (WingsDatabase) via `backend=auto` step 1 — update via `npm run capture` when player crypto changes
+- **Streamflix scrapers**: sync upstream when step 2 breaks — see this doc
+- **TMDB-native**: auto step 3 / quality upgrade — fix embed extractors when VixSrc/embeds fail broadly

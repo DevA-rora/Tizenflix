@@ -1,5 +1,12 @@
 import { parseMaxManifestHeight } from "./rewrite-m3u8.js";
-import { fetchProxiedStream } from "./upstream.js";
+import { resolvePlaylistUrl } from "./proxy-url.js";
+import {
+  proxyHeadersFromSource,
+} from "./proxy-header-options.js";
+import {
+  fetchUpstreamWithRefererFallback,
+  type UpstreamHeaderOptions,
+} from "./upstream.js";
 import type { PlayResponse, PlayableSource } from "../types.js";
 
 export interface ManifestProbe {
@@ -58,18 +65,23 @@ function firstSegmentUrl(manifestBody: string): string | null {
 /** Fetch upstream manifest and confirm it is a real HLS playlist. */
 export async function probeHlsManifest(
   upstreamUrl: string,
-  publicBase: string,
-  fetchImpl: typeof fetch = fetch
+  _publicBase: string,
+  fetchImpl: typeof fetch = fetch,
+  headerOptions?: UpstreamHeaderOptions
 ): Promise<ManifestProbe> {
   try {
-    const result = await fetchProxiedStream(upstreamUrl, publicBase, fetchImpl);
-    const body = typeof result.body === "string" ? result.body : "";
+    const upstream = await fetchUpstreamWithRefererFallback(
+      upstreamUrl,
+      fetchImpl,
+      headerOptions
+    );
+    const body = await upstream.text();
 
-    if (result.status < 200 || result.status >= 300) {
+    if (upstream.status < 200 || upstream.status >= 300) {
       return {
         ok: false,
-        status: result.status,
-        reason: `CDN returned HTTP ${result.status}`,
+        status: upstream.status,
+        reason: `CDN returned HTTP ${upstream.status}`,
       };
     }
 
@@ -77,20 +89,22 @@ export async function probeHlsManifest(
       const preview = body.trim().slice(0, 40).replace(/\s+/g, " ");
       return {
         ok: false,
-        status: result.status,
+        status: upstream.status,
         reason: preview ? `not HLS (${preview})` : "not an HLS manifest",
       };
     }
 
     const maxHeight = parseMaxManifestHeight(body);
     let segmentMs: number | undefined;
-    const segUrl = firstSegmentUrl(body);
-    if (segUrl) {
+    const segRef = firstSegmentUrl(body);
+    if (segRef) {
+      const segUrl = resolvePlaylistUrl(upstreamUrl, segRef);
       const t0 = Date.now();
       try {
-        const seg = await fetchImpl(segUrl, { method: "GET" });
+        const seg = await fetchUpstreamWithRefererFallback(segUrl, fetchImpl, headerOptions);
         segmentMs = Date.now() - t0;
-        if (!seg.ok) {
+        if (seg.status < 200 || seg.status >= 300) {
+          await drainProbeBody(seg);
           return {
             ok: false,
             status: seg.status,
@@ -99,6 +113,7 @@ export async function probeHlsManifest(
             maxHeight: maxHeight > 0 ? maxHeight : undefined,
           };
         }
+        await drainProbeBody(seg);
       } catch (err) {
         return {
           ok: false,
@@ -112,7 +127,7 @@ export async function probeHlsManifest(
 
     return {
       ok: true,
-      status: result.status,
+      status: upstream.status,
       segmentMs,
       maxHeight: maxHeight > 0 ? maxHeight : undefined,
     };
@@ -123,6 +138,21 @@ export async function probeHlsManifest(
       reason: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+async function drainProbeBody(res: globalThis.Response): Promise<void> {
+  try {
+    if (typeof res.arrayBuffer === "function") await res.arrayBuffer();
+    else if (typeof res.text === "function") await res.text();
+  } catch {
+    /* ignore */
+  }
+}
+
+function headerOptionsForSource(source: PlayableSource): UpstreamHeaderOptions | undefined {
+  const params = proxyHeadersFromSource(source);
+  if (!params) return undefined;
+  return { ...params };
 }
 
 export interface ValidatedPlayResponse extends PlayResponse {
@@ -211,7 +241,12 @@ async function probeSource(
     return { source };
   }
 
-  const probe = await probeHlsManifest(source.url, publicBase, fetchImpl);
+  const probe = await probeHlsManifest(
+    source.url,
+    publicBase,
+    fetchImpl,
+    headerOptionsForSource(source)
+  );
   if (probe.ok) {
     options.reportProvider?.(source.provider, true);
     return {
@@ -225,6 +260,25 @@ async function probeSource(
   }
 
   options.reportProvider?.(source.provider, false);
+
+  const hasUpstreamHeaders = Boolean(
+    source.upstreamHeaders && Object.keys(source.upstreamHeaders).length
+  );
+  if (options.tizenProfile && hasUpstreamHeaders) {
+    console.warn(
+      `[validate] ${source.provider} ${source.label}: unverified (${probe.reason ?? "manifest unavailable"})`
+    );
+    return {
+      source,
+      ranked: {
+        source,
+        probe,
+        healthScore: (options.providerScore?.(source.provider) ?? 0.5) * 0.35,
+      },
+      warning: `${source.provider} ${source.label}: unverified (${probe.reason ?? "manifest unavailable"})`,
+    };
+  }
+
   if (options.tizenProfile) {
     console.warn(
       `[validate] ${source.provider} ${source.label}: ${probe.reason ?? "manifest unavailable"}`
@@ -284,6 +338,7 @@ export async function validatePlaySources(
   for (const result of probeResults) {
     if (result.ranked) {
       rankedPlayable.push(result.ranked);
+      if (result.warning) warnings.push(result.warning);
     } else if (result.warning) {
       warnings.push(result.warning);
       blocked.push(result.source);

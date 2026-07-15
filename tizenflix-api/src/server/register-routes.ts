@@ -15,7 +15,9 @@ import {
 } from "../cache/play-resolve-cache.js";
 import { getInlineManifest, isInlineManifestSource } from "../cache/inline-manifest-cache.js";
 import { DownloadService, pickSource } from "../download/jobs.js";
-import { buildProxyUrl } from "../proxy/proxy-url.js";
+import { buildProxyUrl, parseProxyHeaderQuery } from "../proxy/proxy-url.js";
+import { proxyHeadersFromSource } from "../proxy/proxy-header-options.js";
+import type { ProxyHeaderParams } from "../proxy/proxy-header-options.js";
 import { fetchProxiedStream, looksLikeBinarySegment, pipeProxiedStream } from "../proxy/upstream.js";
 import { rewriteM3u8 } from "../proxy/rewrite-m3u8.js";
 import { validatePlaySources } from "../proxy/validate-sources.js";
@@ -57,7 +59,7 @@ export interface RouteContext {
 function proxyWrap(
   publicBase: string,
   url: string,
-  referer?: string,
+  headers?: ProxyHeaderParams,
   audioLang?: string,
   maxHeight?: number
 ): string {
@@ -71,7 +73,7 @@ function proxyWrap(
     if (qs) inlineUrl += `?${qs}`;
     return inlineUrl;
   }
-  return buildProxyUrl(publicBase, url, referer, audioLang, maxHeight);
+  return buildProxyUrl(publicBase, url, headers, audioLang, maxHeight);
 }
 
 function withProxiedUrls(
@@ -86,7 +88,7 @@ function withProxiedUrls(
     ...play,
     sources: play.sources.map((s) => ({
       ...s,
-      url: proxyWrap(publicBase, s.url, s.upstreamHeaders?.Referer, audioLang, maxHeight),
+      url: proxyWrap(publicBase, s.url, proxyHeadersFromSource(s), audioLang, maxHeight),
     })),
     subtitles: play.subtitles.map((sub) => ({
       ...sub,
@@ -758,8 +760,14 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     }
     const cached = noCache ? null : getCachedPlay(cacheKey);
     const fastResolve = req.query.fast === "1";
-    const autoBackend = (options.backend ?? "auto") === "auto";
-    const probeLimit = autoBackend ? 3 : 1;
+    const backendName = options.backend ?? "auto";
+    // Probe enough Vidking/auto CDN rungs that Hydrogen 403s don't slip through as "OK".
+    const probeLimit =
+      backendName === "vidking" || backendName === "auto"
+        ? 5
+        : backendName === "streamflix"
+          ? 3
+          : 1;
     if (cached) {
       await validateAndRespond(cached, res, tizenProfile, {
         includeSubtitles,
@@ -1209,7 +1217,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       entry.body,
       entry.upstreamUrl,
       publicBase,
-      entry.referer,
+      entry.referer ? { referer: entry.referer } : undefined,
       { preferredAudioLang, maxHeight }
     );
     res.status(200);
@@ -1224,8 +1232,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     if (typeof target !== "string" || !target.startsWith("http")) {
       return res.status(400).json({ error: "url query param required" });
     }
-    const referer =
-      typeof req.query.referer === "string" ? req.query.referer : undefined;
+    const proxyHeaders = parseProxyHeaderQuery(req.query);
     const preferredAudioLang =
       typeof req.query.audioLang === "string" && req.query.audioLang !== "original"
         ? req.query.audioLang.split("-")[0]
@@ -1234,17 +1241,18 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       typeof req.query.maxHeight === "string" ? parseInt(req.query.maxHeight, 10) : undefined;
     const maxHeight =
       maxHeightRaw && Number.isFinite(maxHeightRaw) && maxHeightRaw > 0 ? maxHeightRaw : undefined;
+    const headerOptions = {
+      ...proxyHeaders,
+      preferredAudioLang,
+      maxHeight,
+    };
     try {
       if (looksLikeBinarySegment(target)) {
-        await pipeProxiedStream(target, res, fetch, { referer });
+        await pipeProxiedStream(target, res, fetch, headerOptions);
         return;
       }
 
-      const result = await fetchProxiedStream(target, publicBase, fetch, {
-        referer,
-        preferredAudioLang,
-        maxHeight,
-      });
+      const result = await fetchProxiedStream(target, publicBase, fetch, headerOptions);
       res.status(result.status);
       if (result.contentType) res.setHeader("content-type", result.contentType);
       res.setHeader("access-control-allow-origin", "*");

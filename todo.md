@@ -10,10 +10,10 @@ opensubtitles is best for western movies, and subDL for non-western showings.
 - [ ] Add ease in animation when the lefthandside toolbar/drawer is opened up.
 - [ ] Add a loading ring when the source stuff is being loaded.
 - [ ] Add settings for user to change default resolution + resolution while streaming.
-- [ ] Consistent streams
+- [ ] Apply anchor effect from the homepage to episode selector.
 
 # Doing
-- [ ] Apply anchor effect from the homepage to episode selector.
+- [ ] Consistent streams
 
 # Done
 - [x] Let the user select which language they want streams to play in (native or specific)

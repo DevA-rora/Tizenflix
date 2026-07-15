@@ -47,6 +47,6 @@ describe("provider-order", () => {
   });
 
   it("caps auto attempts at MAX_AUTO_PROVIDER_ATTEMPTS", () => {
-    expect(MAX_AUTO_PROVIDER_ATTEMPTS).toBe(3);
+    expect(MAX_AUTO_PROVIDER_ATTEMPTS).toBe(5);
   });
 });

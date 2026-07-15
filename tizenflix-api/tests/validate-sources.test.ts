@@ -119,7 +119,7 @@ describe("validatePlaySources tizen profile", () => {
     expect(result.recommended).toBeNull();
     expect(result.warnings).toEqual([
       "Hydrogen 480p: CDN returned HTTP 403",
-      "Oxygen 720p: first segment HTTP 403",
+      "Oxygen 720p: CDN returned HTTP 403",
       "No playable HLS stream for this title right now. Try again later.",
     ]);
   });
@@ -213,6 +213,97 @@ describe("validatePlaySources tizen profile", () => {
 
     expect(result.sources).toHaveLength(2);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps unverified Hydrogen when upstreamHeaders are present on tizen profile", async () => {
+    const fetchImpl = mockFetch();
+    const play: PlayResponse = {
+      ...samplePlay(),
+      sources: [
+        {
+          id: "hydrogen-480p-0",
+          provider: "Hydrogen",
+          label: "480p",
+          type: "m3u8",
+          url: "https://cdn.example/hydrogen/480p.m3u8",
+          priority: 0,
+          upstreamHeaders: {
+            Referer: "https://www.fmovies.gd/",
+            Origin: "https://www.fmovies.gd",
+          },
+        },
+        {
+          id: "oxygen-720p-0",
+          provider: "Oxygen",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/oxygen/720p.m3u8",
+          priority: 2,
+        },
+      ],
+      recommended: "hydrogen-480p-0",
+    };
+
+    const result = await validatePlaySources(play, PUBLIC_BASE, fetchImpl, {
+      tizenProfile: true,
+    });
+
+    expect(result.sources).toHaveLength(2);
+    expect(result.sources.some((s) => s.provider === "Hydrogen")).toBe(true);
+    expect(result.warnings?.some((w) => w.includes("unverified"))).toBe(true);
+  });
+
+  it("sends Referer from upstreamHeaders during probe", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      const h = (init?.headers as Record<string, string>) ?? {};
+      if (h.Referer === "https://embed.example/") {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => "application/vnd.apple.mpegurl" },
+          text: async () => "#EXTM3U\n#EXTINF:8,\nhttps://cdn.example/seg.ts",
+          arrayBuffer: async () => new ArrayBuffer(0),
+        };
+      }
+      return {
+        ok: false,
+        status: 403,
+        headers: { get: () => "text/html" },
+        text: async () => "<html>403</html>",
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    }) as unknown as typeof fetch;
+
+    const play: PlayResponse = {
+      ...samplePlay(),
+      sources: [
+        {
+          id: "embed-720p-0",
+          provider: "SFlix",
+          label: "720p",
+          type: "m3u8",
+          url: "https://cdn.example/embed/720p.m3u8",
+          priority: 0,
+          upstreamHeaders: {
+            Referer: "https://embed.example/",
+            "User-Agent": "EmbedUA/1.0",
+          },
+        },
+      ],
+      recommended: "embed-720p-0",
+    };
+
+    const result = await validatePlaySources(play, PUBLIC_BASE, fetchImpl, {
+      tizenProfile: true,
+    });
+
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.provider).toBe("SFlix");
+    const withReferer = fetchImpl.mock.calls.some((call) => {
+      const h = (call[1] as RequestInit)?.headers as Record<string, string>;
+      return h?.Referer === "https://embed.example/";
+    });
+    expect(withReferer).toBe(true);
   });
 });
 

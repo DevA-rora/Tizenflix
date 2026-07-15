@@ -12,11 +12,11 @@ export const ANIME_PROVIDER_ORDER = ["hianime", "anikoto", "ani-world", "anime-w
 
 export const DE_PROVIDER_ORDER = ["film-palast", "hd-filme", "mega-kino", "serien-stream"];
 
-/** Per-provider timeout for auto waterfall step 1. */
-export const AUTO_PROVIDER_TIMEOUT_MS = 15_000;
+/** Per-provider timeout for auto waterfall Streamflix tier. */
+export const AUTO_PROVIDER_TIMEOUT_MS = 20_000;
 
-/** Max scraper attempts during backend=auto step 1 (first + fallbacks). */
-export const MAX_AUTO_PROVIDER_ATTEMPTS = 3;
+/** Max scraper attempts during Streamflix auto waterfall (first + fallbacks). */
+export const MAX_AUTO_PROVIDER_ATTEMPTS = 5;
 
 export function firstAutoProviderId(
   isAnime: boolean,

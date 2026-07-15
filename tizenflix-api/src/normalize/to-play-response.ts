@@ -3,6 +3,7 @@ import { fetchMetadata } from "../api/metadata.js";
 import { fetchServerSources, fetchServerSourcesDirect } from "../api/sources.js";
 import { detectStreamType, slugify } from "./detect-type.js";
 import { tagPlayableSource } from "./audio-metadata.js";
+import { defaultUpstreamHeadersForProvider } from "../proxy/proxy-header-options.js";
 import type {
   DecryptedSourceResponse,
   MediaType,
@@ -60,6 +61,7 @@ function sourcesFromServer(
         url: s.url,
         priority: priorityBase + out.length,
         audioVariant: "unknown",
+        upstreamHeaders: defaultUpstreamHeadersForProvider(serverName),
       })
     );
   }
@@ -223,9 +225,18 @@ export async function resolvePlayableSources(
       .map((r) => r.error)
       .filter(Boolean)
       .join("; ");
-    throw new Error(
-      errors || "No playable sources found from any server"
-    );
+    const message = errors || "No playable sources found from any server";
+    // Forced single CDN: hard-fail so the Server panel / ?server= gets a clear 502.
+    if (server) {
+      throw new Error(message);
+    }
+    // Soft-fail so backend=vidking / auto can escalate to Streamflix / TMDB.
+    return {
+      ...play,
+      sources: [],
+      recommended: null,
+      warnings: [message],
+    };
   }
 
   return play;

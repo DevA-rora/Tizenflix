@@ -1,10 +1,12 @@
 import { fetchMetadata } from "../api/metadata.js";
 import { resolvePlayableSources } from "../normalize/to-play-response.js";
+import { AUTO_PROVIDER_TIMEOUT_MS } from "../streamflix/provider-order.js";
+import { AUTO_TMDB_SOURCE_IDS } from "../streamflix/tmdb-native/auto-sources.js";
 import { resolveTmdbNativeFromOptions } from "../streamflix/tmdb-native/resolve.js";
 import { isAnime } from "../tmdb/is-anime.js";
 import type { Metadata, PlayResponse, ResolveOptions } from "../types.js";
 
-const STREAMFLIX_AUTO_TIMEOUT_MS = 15_000;
+const STREAMFLIX_AUTO_TIMEOUT_MS = AUTO_PROVIDER_TIMEOUT_MS;
 
 function tagBackend(play: PlayResponse, backend: PlayResponse["backend"], ms: number): PlayResponse {
   return { ...play, backend, resolveMs: ms };
@@ -34,11 +36,7 @@ function basePlayFromMeta(
   };
 }
 
-function emptyStreamflixPlay(
-  options: ResolveOptions,
-  meta: Metadata,
-  warnings: string[]
-): PlayResponse {
+function emptyAutoPlay(options: ResolveOptions, meta: Metadata, warnings: string[]): PlayResponse {
   return {
     ...basePlayFromMeta(options, meta),
     sources: [],
@@ -50,7 +48,14 @@ function emptyStreamflixPlay(
   };
 }
 
-/** backend=auto is Streamflix-only (alias for scraper-first playback). */
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * backend=auto: Vidking CDN → Streamflix scrapers → TMDB-native embeds.
+ * Matches fmovies-style CDN first, then Android Streamflix try-next, then embeds.
+ */
 async function resolveAutoTiered(
   options: ResolveOptions,
   fetchImpl: typeof fetch
@@ -60,6 +65,33 @@ async function resolveAutoTiered(
   const meta = await fetchMetadata(options.type, options.tmdbId, fetchImpl);
   const baseMeta = basePlayFromMeta(options, meta);
   const anime = isAnime(meta);
+  const warnings: string[] = [];
+
+  try {
+    const vidkingPlay = await resolvePlayableSources(
+      {
+        ...options,
+        allServers: true,
+        firstSuccessOnly: false,
+      },
+      fetchImpl
+    );
+    if (hasPlayableSources(vidkingPlay)) {
+      return tagBackend(
+        {
+          ...vidkingPlay,
+          ...baseMeta,
+          backend: "auto",
+          warnings: vidkingPlay.warnings?.length ? vidkingPlay.warnings : undefined,
+        },
+        "auto",
+        Date.now() - t0
+      );
+    }
+    warnings.push("vidking: no sources");
+  } catch (err) {
+    warnings.push(`vidking: ${errMessage(err)}`);
+  }
 
   const { resolveStreamflixFromOptions } = await import("../streamflix/resolve.js");
   try {
@@ -75,23 +107,63 @@ async function resolveAutoTiered(
       fetchImpl
     );
     if (hasPlayableSources(streamflixPlay)) {
-      return tagBackend({ ...streamflixPlay, ...baseMeta, backend: "auto" }, "auto", Date.now() - t0);
+      const mergedWarnings = [...warnings, ...(streamflixPlay.warnings ?? [])];
+      return tagBackend(
+        {
+          ...streamflixPlay,
+          ...baseMeta,
+          backend: "auto",
+          warnings: mergedWarnings.length ? mergedWarnings : undefined,
+        },
+        "auto",
+        Date.now() - t0
+      );
     }
-    return tagBackend(
-      { ...streamflixPlay, ...baseMeta, backend: "auto" },
-      "auto",
-      Date.now() - t0
-    );
+    if (streamflixPlay.warnings?.length) warnings.push(...streamflixPlay.warnings);
+    else warnings.push("streamflix: no sources");
   } catch (err) {
     const providerResults =
       err instanceof Error && "providerResults" in err
-        ? (err as Error & { providerResults?: { provider: string; error?: string }[] }).providerResults
+        ? (err as Error & { providerResults?: { provider: string; error?: string }[] })
+            .providerResults
         : undefined;
-    const warnings =
-      providerResults?.map((r) => `${r.provider}: ${r.error ?? "unknown"}`) ??
-      [err instanceof Error ? err.message : String(err)];
-    return tagBackend(emptyStreamflixPlay(options, meta, warnings), "auto", Date.now() - t0);
+    if (providerResults?.length) {
+      warnings.push(
+        ...providerResults.map((r) => `${r.provider}: ${r.error ?? "unknown"}`)
+      );
+    } else {
+      warnings.push(`streamflix: ${errMessage(err)}`);
+    }
   }
+
+  try {
+    const tmdbPlay = await resolveTmdbNativeFromOptions(
+      {
+        ...options,
+        onePerSource: true,
+        mergeOrder: [...AUTO_TMDB_SOURCE_IDS],
+      },
+      fetchImpl
+    );
+    if (hasPlayableSources(tmdbPlay)) {
+      const mergedWarnings = [...warnings, ...(tmdbPlay.warnings ?? [])];
+      return tagBackend(
+        {
+          ...tmdbPlay,
+          ...baseMeta,
+          backend: "auto",
+          warnings: mergedWarnings.length ? mergedWarnings : undefined,
+        },
+        "auto",
+        Date.now() - t0
+      );
+    }
+    warnings.push("tmdb-native: no sources");
+  } catch (err) {
+    warnings.push(`tmdb-native: ${errMessage(err)}`);
+  }
+
+  return tagBackend(emptyAutoPlay(options, meta, warnings), "auto", Date.now() - t0);
 }
 
 export async function resolveWithBackend(

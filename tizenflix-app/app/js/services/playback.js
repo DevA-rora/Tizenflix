@@ -9,7 +9,7 @@ var debug = require("../core/debug.js");
 var playbackSession = require("./playback-session.js");
 var playerChrome = require("../components/player-chrome.js");
 
-/** Vidking CDN — manual only (Settings backend=vidking or Server panel). Aligns with API TIZEN_SERVER_PRIORITY. */
+/** Vidking CDN order — aligns with API TIZEN_SERVER_PRIORITY. */
 var VIDKING_SERVER_FALLBACKS = [
   { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15000 },
   { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15000 },
@@ -17,6 +17,7 @@ var VIDKING_SERVER_FALLBACKS = [
   { label: "Hydrogen", query: "server=Hydrogen&backend=vidking", timeoutMs: 15000 },
   { label: "Lithium", query: "server=Lithium&backend=vidking", timeoutMs: 15000 },
 ];
+var VIDKING_SERVER_NAMES = ["Oxygen", "Titanium", "Helium", "Hydrogen", "Lithium"];
 var PRIMARY_RESOLVE_TIMEOUT_MS = 90000;
 var ANIME_PROVIDER_ORDER = ["hianime", "anikoto", "ani-world", "anime-world"];
 var EN_PROVIDER_ORDER = ["sflix", "ridomovies", "superstream", "streaming-community-en", "anymovie"];
@@ -712,13 +713,27 @@ function loadSubtitlesAsync(play, video) {
 function buildPrimaryResolveQuery() {
   var parts = [];
   var backend = config.getPlayBackend();
-  if (backend === "auto") backend = "streamflix";
   parts.push("backend=" + backend);
   var preferred = config.getPreferredProviderId();
   if (preferred) {
     parts.push("preferredProviderId=" + encodeURIComponent(preferred));
   }
   return parts.join("&");
+}
+
+function isVidkingProviderName(name) {
+  if (!name) return false;
+  var lower = String(name).toLowerCase();
+  for (var i = 0; i < VIDKING_SERVER_NAMES.length; i++) {
+    if (VIDKING_SERVER_NAMES[i].toLowerCase() === lower) return true;
+  }
+  return false;
+}
+
+function currentPlayProvider(play) {
+  if (!play || !play.sources || !play.sources[0]) return null;
+  var s = play.sources[0];
+  return s.provider || s.providerId || null;
 }
 
 function isAnimeProviderId(providerId) {
@@ -865,16 +880,42 @@ function buildNextProviderFallbacks(currentProviderId, tmdbId, type, season, epi
   return buildStreamflixProviderFallbacks(tmdbId, type, season, episode, currentProviderId);
 }
 
-function buildPlaybackFallbacks(play, tmdbId, type, season, episode) {
-  var currentProviderId =
-    play && play.sources && play.sources[0] ? play.sources[0].providerId : null;
-  return buildNextProviderFallbacks(currentProviderId, tmdbId, type, season, episode);
-}
-
 function buildVidkingFallbacks(tmdbId, type, season, episode) {
   return type === "tv"
     ? buildTvVidkingFallbacks(tmdbId, season, episode)
     : buildMovieVidkingFallbacks(tmdbId);
+}
+
+function buildVidkingFallbacksExcluding(tmdbId, type, season, episode, excludeServer) {
+  var all = buildVidkingFallbacks(tmdbId, type, season, episode);
+  if (!excludeServer) return all;
+  var lower = String(excludeServer).toLowerCase();
+  return all.filter(function (attempt) {
+    return String(attempt.label).toLowerCase() !== lower;
+  });
+}
+
+function buildPlaybackFallbacks(play, tmdbId, type, season, episode) {
+  var current = currentPlayProvider(play);
+  var backend = play && play.backend;
+  if (backend === "vidking" || isVidkingProviderName(current)) {
+    var vidkingNext = buildVidkingFallbacksExcluding(
+      tmdbId,
+      type,
+      season,
+      episode,
+      current
+    );
+    var streamflixAfter = buildStreamflixProviderFallbacks(
+      tmdbId,
+      type,
+      season,
+      episode,
+      null
+    );
+    return vidkingNext.concat(streamflixAfter);
+  }
+  return buildNextProviderFallbacks(current, tmdbId, type, season, episode);
 }
 
 function buildReResolveQuery(overrides) {
@@ -909,6 +950,50 @@ function handlePlaybackFailure(session, err) {
   throw new Error(formatPlaybackError(err));
 }
 
+function buildEmptyResolveAttempts(tmdbId, type, season, episode, preferred) {
+  var backend = config.getPlayBackend();
+  var emptyAttempts = [];
+  if (backend === "vidking" || backend === "auto") {
+    emptyAttempts = emptyAttempts.concat(
+      buildVidkingFallbacks(tmdbId, type, season, episode)
+    );
+  }
+  if (backend === "streamflix" || backend === "auto" || backend === "vidking") {
+    emptyAttempts = emptyAttempts.concat(
+      buildStreamflixProviderFallbacks(tmdbId, type, season, episode, preferred)
+    );
+  }
+  emptyAttempts = emptyAttempts.concat(
+    buildQualityUpgradeAttempts(tmdbId, type, season, episode)
+  );
+  if (!emptyAttempts.length) {
+    emptyAttempts = buildStreamflixProviderFallbacks(
+      tmdbId,
+      type,
+      season,
+      episode,
+      preferred
+    );
+  }
+  return emptyAttempts;
+}
+
+function escalateEmptyOrFailedResolve(tmdbId, type, season, episode, onStatus, session, upgradeAttempts, preferred) {
+  var emptyAttempts = buildEmptyResolveAttempts(
+    tmdbId,
+    type,
+    season,
+    episode,
+    preferred
+  );
+  if (onStatus) onStatus("Trying alternate servers…");
+  return resolveWithTizenFallback(emptyAttempts, onStatus, session).then(function (result) {
+    result.fallbacks = [];
+    result._upgradeAttempts = upgradeAttempts;
+    return result;
+  });
+}
+
 function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
   var query = buildPrimaryResolveQuery();
   var preferred = config.getPreferredProviderId();
@@ -940,47 +1025,55 @@ function resolvePlayback(tmdbId, type, season, episode, onStatus, session) {
         ? api.resolveTvEpisode(tmdbId, season, episode, query, PRIMARY_RESOLVE_TIMEOUT_MS)
         : api.resolveMovie(tmdbId, query, PRIMARY_RESOLVE_TIMEOUT_MS);
 
-    return resolvePromise.then(function (play) {
-      if (!isActivePlaySession(session)) return { play: null, fallbacks: [] };
-      if (play && api.hasPlayableSources(play)) {
-        var via =
-          (play.sources[0] && play.sources[0].providerId) || play.backend || "auto";
-        debug.debugLog("Resolved via: " + via);
-        if (onStatus) onStatus("Resolved via: " + via);
-        if (play.warnings && play.warnings.length && onStatus) {
-          onStatus("Trying fallback…");
+    return resolvePromise
+      .then(function (play) {
+        if (!isActivePlaySession(session)) return { play: null, fallbacks: [] };
+        if (play && api.hasPlayableSources(play)) {
+          var via =
+            (play.sources[0] && play.sources[0].providerId) ||
+            (play.sources[0] && play.sources[0].provider) ||
+            play.backend ||
+            "auto";
+          debug.debugLog("Resolved via: " + via);
+          if (onStatus) onStatus("Resolved via: " + via);
+          if (play.warnings && play.warnings.length && onStatus) {
+            onStatus("Trying fallback…");
+          }
+          return {
+            play: play,
+            via: via,
+            fallbacks: buildPlaybackFallbacks(play, tmdbId, type, season, episode),
+            _upgradeAttempts: upgradeAttempts,
+          };
         }
-        return {
-          play: play,
-          via: via,
-          fallbacks: buildPlaybackFallbacks(play, tmdbId, type, season, episode),
-          _upgradeAttempts: upgradeAttempts,
-        };
-      }
-      var backend = config.getPlayBackend();
-      if (backend === "vidking") {
-        var vidking = buildVidkingFallbacks(tmdbId, type, season, episode);
-        if (onStatus) onStatus("Trying CDN fallback…");
-        return resolveWithTizenFallback(vidking, onStatus, session).then(function (vkResult) {
-          vkResult.fallbacks = [];
-          vkResult._upgradeAttempts = upgradeAttempts;
-          return vkResult;
-        });
-      }
-      var streamflix = buildStreamflixProviderFallbacks(
-        tmdbId,
-        type,
-        season,
-        episode,
-        preferred
-      );
-      if (onStatus) onStatus("Trying alternate providers…");
-      return resolveWithTizenFallback(streamflix, onStatus, session).then(function (sfResult) {
-        sfResult.fallbacks = [];
-        sfResult._upgradeAttempts = upgradeAttempts;
-        return sfResult;
+        return escalateEmptyOrFailedResolve(
+          tmdbId,
+          type,
+          season,
+          episode,
+          onStatus,
+          session,
+          upgradeAttempts,
+          preferred
+        );
+      })
+      .catch(function (err) {
+        if (!isActivePlaySession(session)) return { play: null, fallbacks: [] };
+        debug.debugLog(
+          "Primary resolve failed — escalating: " +
+            (err && err.message ? err.message : String(err))
+        );
+        return escalateEmptyOrFailedResolve(
+          tmdbId,
+          type,
+          season,
+          episode,
+          onStatus,
+          session,
+          upgradeAttempts,
+          preferred
+        );
       });
-    });
   });
 }
 
