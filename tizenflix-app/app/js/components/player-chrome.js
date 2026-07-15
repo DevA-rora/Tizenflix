@@ -591,11 +591,12 @@ function getZones() {
 }
 
 function mount(session, h) {
-  handlers = h || {};
   var wrap = document.getElementById("videoWrap");
   if (!wrap) return;
 
   destroy();
+  
+  handlers = h || {};
 
   var isTv = session && session.type === "tv";
   var hasNext = session && session.nextEpisode;

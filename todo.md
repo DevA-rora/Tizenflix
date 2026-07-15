@@ -1,7 +1,6 @@
 # Todo
 - [ ] In the "my list" section, there should be a top bar (apple TV style) to switch between the users liked, disliked, and loved movies
 - [ ] Change focused button UI (to match youtube TV / netflix)
-- [ ] Fix the episode picker in the player view (clicking on an episode doesn't )
 - [ ] Fix the back button in the player.
 - [ ] When the user clicks the search button, 
 - [ ] Revamp player UI (it looks like ass rn)
@@ -14,6 +13,7 @@ opensubtitles is best for western movies, and subDL for non-western showings.
 
 
 # Doing
+- [ ] Fix the episode picker in the player view (clicking on an episode doesn't play that episode...)
 
 # Done
 - [x] Test stream playback with videasy.
