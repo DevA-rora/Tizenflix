@@ -21,6 +21,7 @@
     "build": "npm run build:app && npm run build:gate",
     "build:app": "esbuild app/js/app.js --bundle --outfile=app/dist/app.bundle.js --target=es2015 --format=iife --global-name=TizenflixApp",
     "build:gate": "esbuild app/js/gate/main.js --bundle --outfile=app/dist/gate.bundle.js --target=es2015 --format=iife --global-name=TizenflixGate",
+    "dev": "npm run build && node scripts/dev.mjs",
     "start": "npm run build && node scripts/dev.mjs",
     "prepublishOnly": "npm run build"
   },

@@ -160,13 +160,15 @@ var TizenflixApp = (() => {
       function getPlayBackend() {
         try {
           var stored = localStorage.getItem(BACKEND_KEY);
-          if (stored === "vidking" || stored === "streamflix" || stored === "auto" || stored === "tmdb-native") return stored;
+          if (stored === "vidking" || stored === "videasy" || stored === "streamflix" || stored === "auto" || stored === "tmdb-native") {
+            return stored;
+          }
         } catch (err) {
         }
         return "auto";
       }
       function setPlayBackend(mode) {
-        var m = mode === "streamflix" || mode === "auto" || mode === "tmdb-native" || mode === "vidking" ? mode : "auto";
+        var m = mode === "streamflix" || mode === "auto" || mode === "tmdb-native" || mode === "vidking" || mode === "videasy" ? mode : "auto";
         try {
           localStorage.setItem(BACKEND_KEY, m);
         } catch (err) {
@@ -3648,6 +3650,7 @@ var TizenflixApp = (() => {
       var panelOpen = null;
       var providersCache = null;
       var HIDE_MS = 5e3;
+      var VIDEASY_SERVERS = ["Neon", "Yoru", "Tejo", "Sage", "Cypher"];
       var VIDKING_SERVERS = ["Oxygen", "Titanium", "Helium", "Hydrogen", "Lithium"];
       function escapeHtml(text) {
         if (!text) return "";
@@ -3880,6 +3883,11 @@ var TizenflixApp = (() => {
           var active = session && session.currentSourceIndex === i ? " is-active" : "";
           html += '<button type="button" class="player-panel-item focusable' + active + '" data-source-index="' + i + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(label) + "</button>";
         }
+        html += '<p class="player-panel-hint">CDN (Videasy)</p>';
+        for (var ve = 0; ve < VIDEASY_SERVERS.length; ve++) {
+          var vServer = VIDEASY_SERVERS[ve];
+          html += '<button type="button" class="player-panel-item focusable" data-videasy="' + escapeHtml(vServer) + '" aria-label="Videasy ' + escapeHtml(vServer) + '">' + escapeHtml(vServer) + "</button>";
+        }
         html += '<p class="player-panel-hint">CDN fallback (Vidking)</p>';
         for (var v = 0; v < VIDKING_SERVERS.length; v++) {
           var server = VIDKING_SERVERS[v];
@@ -3891,6 +3899,11 @@ var TizenflixApp = (() => {
           if (btn.hasAttribute("data-source-index")) {
             var idx = parseInt(btn.getAttribute("data-source-index"), 10);
             if (!isNaN(idx) && handlers.onSourceSwitch) handlers.onSourceSwitch(idx);
+            return;
+          }
+          var vs = btn.getAttribute("data-videasy");
+          if (vs && handlers.onReResolve) {
+            handlers.onReResolve({ server: vs, backend: "videasy" });
             return;
           }
           var vk = btn.getAttribute("data-vidking");
@@ -4210,6 +4223,14 @@ var TizenflixApp = (() => {
       var debug = require_debug();
       var playbackSession = require_playback_session();
       var playerChrome = require_player_chrome();
+      var VIDEASY_SERVER_FALLBACKS = [
+        { label: "Neon", query: "server=Neon&backend=videasy", timeoutMs: 15e3 },
+        { label: "Yoru", query: "server=Yoru&backend=videasy", timeoutMs: 15e3 },
+        { label: "Tejo", query: "server=Tejo&backend=videasy", timeoutMs: 15e3 },
+        { label: "Sage", query: "server=Sage&backend=videasy", timeoutMs: 15e3 },
+        { label: "Cypher", query: "server=Cypher&backend=videasy", timeoutMs: 15e3 }
+      ];
+      var VIDEASY_SERVER_NAMES = ["Neon", "Yoru", "Tejo", "Sage", "Cypher", "Vyse", "Breach", "Jett", "Killjoy"];
       var VIDKING_SERVER_FALLBACKS = [
         { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15e3 },
         { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15e3 },
@@ -4222,6 +4243,7 @@ var TizenflixApp = (() => {
       var ANIME_PROVIDER_ORDER = ["hianime", "anikoto", "ani-world", "anime-world"];
       var EN_PROVIDER_ORDER = ["sflix", "ridomovies", "superstream", "streaming-community-en", "anymovie"];
       var TMDB_BACKUP_QUERY = "backend=tmdb-native&sources=twoembed,vidrock,vidsrcnet,vidzee";
+      var VIXSRC_QUERY = "backend=tmdb-native&sources=vixsrc";
       var playSession = 0;
       var progressSaveTimer = null;
       var lastProgressSaveAt = 0;
@@ -4701,6 +4723,14 @@ var TizenflixApp = (() => {
         }
         return false;
       }
+      function isVideasyProviderName(name) {
+        if (!name) return false;
+        var lower = String(name).toLowerCase();
+        for (var i = 0; i < VIDEASY_SERVER_NAMES.length; i++) {
+          if (VIDEASY_SERVER_NAMES[i].toLowerCase() === lower) return true;
+        }
+        return false;
+      }
       function currentPlayProvider(play) {
         if (!play || !play.sources || !play.sources[0]) return null;
         var s = play.sources[0];
@@ -4830,6 +4860,31 @@ var TizenflixApp = (() => {
       function buildNextProviderFallbacks(currentProviderId, tmdbId, type, season, episode) {
         return buildStreamflixProviderFallbacks(tmdbId, type, season, episode, currentProviderId);
       }
+      function buildVideasyFallbacks(tmdbId, type, season, episode) {
+        var attempts = [];
+        for (var i = 0; i < VIDEASY_SERVER_FALLBACKS.length; i++) {
+          (function(fb) {
+            attempts.push({
+              label: fb.label,
+              run: function() {
+                if (type === "tv") {
+                  return api.resolveTvEpisode(tmdbId, season, episode, fb.query, fb.timeoutMs);
+                }
+                return api.resolveMovie(tmdbId, fb.query, fb.timeoutMs);
+              }
+            });
+          })(VIDEASY_SERVER_FALLBACKS[i]);
+        }
+        return attempts;
+      }
+      function buildVideasyFallbacksExcluding(tmdbId, type, season, episode, excludeServer) {
+        var all = buildVideasyFallbacks(tmdbId, type, season, episode);
+        if (!excludeServer) return all;
+        var lower = String(excludeServer).toLowerCase();
+        return all.filter(function(attempt) {
+          return String(attempt.label).toLowerCase() !== lower;
+        });
+      }
       function buildVidkingFallbacks(tmdbId, type, season, episode) {
         return type === "tv" ? buildTvVidkingFallbacks(tmdbId, season, episode) : buildMovieVidkingFallbacks(tmdbId);
       }
@@ -4841,9 +4896,36 @@ var TizenflixApp = (() => {
           return String(attempt.label).toLowerCase() !== lower;
         });
       }
+      function buildVixsrcFallback(tmdbId, type, season, episode) {
+        return {
+          label: "VixSrc",
+          run: function() {
+            if (type === "tv") {
+              return api.resolveTvEpisode(
+                tmdbId,
+                season,
+                episode,
+                VIXSRC_QUERY,
+                PRIMARY_RESOLVE_TIMEOUT_MS
+              );
+            }
+            return api.resolveMovie(tmdbId, VIXSRC_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+          }
+        };
+      }
       function buildPlaybackFallbacks(play, tmdbId, type, season, episode) {
         var current = currentPlayProvider(play);
         var backend = play && play.backend;
+        if (backend === "videasy" || isVideasyProviderName(current) || backend === "auto" && isVideasyProviderName(current)) {
+          var videasyNext = buildVideasyFallbacksExcluding(
+            tmdbId,
+            type,
+            season,
+            episode,
+            current
+          );
+          return videasyNext.concat([buildVixsrcFallback(tmdbId, type, season, episode)]).concat(buildStreamflixProviderFallbacks(tmdbId, type, season, episode, null)).concat(buildVidkingFallbacks(tmdbId, type, season, episode));
+        }
         if (backend === "vidking" || isVidkingProviderName(current)) {
           var vidkingNext = buildVidkingFallbacksExcluding(
             tmdbId,
@@ -4868,13 +4950,17 @@ var TizenflixApp = (() => {
         var parts = [];
         if (overrides.server) {
           parts.push("server=" + encodeURIComponent(overrides.server));
-          parts.push("backend=vidking");
+          parts.push(
+            "backend=" + (isVideasyProviderName(overrides.server) ? "videasy" : "vidking")
+          );
         } else if (overrides.providerId) {
           parts.push("providerId=" + encodeURIComponent(overrides.providerId));
           parts.push("backend=streamflix");
         } else if (overrides.onlySourceId) {
           parts.push("onlySourceId=" + encodeURIComponent(overrides.onlySourceId));
-          parts.push("backend=tmdb-native");
+          parts.push(
+            "backend=" + (overrides.onlySourceId === "videasy" ? "videasy" : "tmdb-native")
+          );
         } else if (overrides.backend) {
           parts.push("backend=" + encodeURIComponent(overrides.backend));
         }
@@ -4896,14 +4982,20 @@ var TizenflixApp = (() => {
       function buildEmptyResolveAttempts(tmdbId, type, season, episode, preferred) {
         var backend = config.getPlayBackend();
         var emptyAttempts = [];
+        if (backend === "videasy" || backend === "auto") {
+          emptyAttempts = emptyAttempts.concat(
+            buildVideasyFallbacks(tmdbId, type, season, episode)
+          );
+          emptyAttempts.push(buildVixsrcFallback(tmdbId, type, season, episode));
+        }
+        if (backend === "streamflix" || backend === "auto" || backend === "videasy" || backend === "vidking") {
+          emptyAttempts = emptyAttempts.concat(
+            buildStreamflixProviderFallbacks(tmdbId, type, season, episode, preferred)
+          );
+        }
         if (backend === "vidking" || backend === "auto") {
           emptyAttempts = emptyAttempts.concat(
             buildVidkingFallbacks(tmdbId, type, season, episode)
-          );
-        }
-        if (backend === "streamflix" || backend === "auto" || backend === "vidking") {
-          emptyAttempts = emptyAttempts.concat(
-            buildStreamflixProviderFallbacks(tmdbId, type, season, episode, preferred)
           );
         }
         emptyAttempts = emptyAttempts.concat(
@@ -6944,7 +7036,7 @@ var TizenflixApp = (() => {
         var targetRes = config.getTargetResolution();
         var el = document.createElement("div");
         el.className = "screen screen-settings";
-        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button></div><div class="settings-field settings-toggle" data-focus-row="settings-anim"><button type="button" id="uiAnimBtn" class="btn btn-info focusable">TV animation effects: ' + (uiAnimations ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-grid"><label for="gridScaleInput">Grid size: ' + gridScale + '%</label><input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' + gridScale + '" /></div><div class="settings-field" data-focus-row="settings-lang"><label for="catalogLangInput">Catalog language</label><select id="catalogLangInput" class="focusable"><option value="en"' + (catalogLang === "en" ? " selected" : "") + '>English</option><option value="de"' + (catalogLang === "de" ? " selected" : "") + '>German</option><option value="fr"' + (catalogLang === "fr" ? " selected" : "") + '>French</option><option value="it"' + (catalogLang === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (catalogLang === "es" ? " selected" : "") + '>Spanish</option></select></div><div class="settings-field" data-focus-row="settings-audio"><label for="audioPrefInput">Audio / dubbing</label><select id="audioPrefInput" class="focusable"><option value="original"' + (audioPref === "original" ? " selected" : "") + '>Original voice acting</option><option value="en"' + (audioPref === "en" ? " selected" : "") + '>English</option><option value="de"' + (audioPref === "de" ? " selected" : "") + '>German</option><option value="fr"' + (audioPref === "fr" ? " selected" : "") + '>French</option><option value="it"' + (audioPref === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (audioPref === "es" ? " selected" : "") + '>Spanish</option><option value="ja"' + (audioPref === "ja" ? " selected" : "") + '>Japanese</option><option value="ko"' + (audioPref === "ko" ? " selected" : "") + '>Korean</option><option value="zh"' + (audioPref === "zh" ? " selected" : "") + `>Chinese</option></select><p class="settings-hint">Original uses each title's native language. Some sources may not report audio language and will play with a warning.</p></div><div class="settings-field" data-focus-row="settings-autoplay"><button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ` + (autoplay ? "ON" : "OFF") + '</button><label for="autoplayBufferInput">Countdown (sec): ' + bufferSec + '</label><input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' + bufferSec + '" /></div><div class="settings-field" data-focus-row="settings-buffer"><button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' + (extraBuf ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-resolution"><label for="targetResolutionInput">Default stream quality</label><select id="targetResolutionInput" class="focusable"><option value="auto"' + (targetRes === "auto" ? " selected" : "") + '>Auto</option><option value="720"' + (targetRes === "720" ? " selected" : "") + '>720p</option><option value="1080"' + (targetRes === "1080" ? " selected" : "") + '>1080p</option><option value="2160"' + (targetRes === "2160" ? " selected" : "") + '>4K</option></select><p class="settings-hint">Auto starts on the lowest rung and ramps up. Locked modes prefer matching sources. Quality depends on what each server offers; 4K may buffer heavily on some TVs.</p></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p><p class="settings-hint">auto = Vidking CDN \u2192 Streamflix scrapers \u2192 embed backups. vidking / streamflix force one engine.</p><button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
+        el.innerHTML = '<h2>Settings</h2><div class="settings-field" data-focus-row="settings-api"><label for="apiBaseInput">API URL</label><input type="text" id="apiBaseInput" class="focusable" value="' + (api.getBase() || "") + '" /></div><div data-focus-row="settings-save"><button type="button" id="saveApiBtn" class="btn btn-play focusable">Save &amp; test</button><p id="settingsStatus" class="loading-msg"></p></div><div class="settings-field settings-toggle" data-focus-row="settings-dev"><button type="button" id="devModeBtn" class="btn btn-info focusable">Dev mode: ' + (devOn ? "ON" : "OFF") + '</button></div><div class="settings-field settings-toggle" data-focus-row="settings-anim"><button type="button" id="uiAnimBtn" class="btn btn-info focusable">TV animation effects: ' + (uiAnimations ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-grid"><label for="gridScaleInput">Grid size: ' + gridScale + '%</label><input type="range" id="gridScaleInput" class="focusable" min="70" max="130" value="' + gridScale + '" /></div><div class="settings-field" data-focus-row="settings-lang"><label for="catalogLangInput">Catalog language</label><select id="catalogLangInput" class="focusable"><option value="en"' + (catalogLang === "en" ? " selected" : "") + '>English</option><option value="de"' + (catalogLang === "de" ? " selected" : "") + '>German</option><option value="fr"' + (catalogLang === "fr" ? " selected" : "") + '>French</option><option value="it"' + (catalogLang === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (catalogLang === "es" ? " selected" : "") + '>Spanish</option></select></div><div class="settings-field" data-focus-row="settings-audio"><label for="audioPrefInput">Audio / dubbing</label><select id="audioPrefInput" class="focusable"><option value="original"' + (audioPref === "original" ? " selected" : "") + '>Original voice acting</option><option value="en"' + (audioPref === "en" ? " selected" : "") + '>English</option><option value="de"' + (audioPref === "de" ? " selected" : "") + '>German</option><option value="fr"' + (audioPref === "fr" ? " selected" : "") + '>French</option><option value="it"' + (audioPref === "it" ? " selected" : "") + '>Italian</option><option value="es"' + (audioPref === "es" ? " selected" : "") + '>Spanish</option><option value="ja"' + (audioPref === "ja" ? " selected" : "") + '>Japanese</option><option value="ko"' + (audioPref === "ko" ? " selected" : "") + '>Korean</option><option value="zh"' + (audioPref === "zh" ? " selected" : "") + `>Chinese</option></select><p class="settings-hint">Original uses each title's native language. Some sources may not report audio language and will play with a warning.</p></div><div class="settings-field" data-focus-row="settings-autoplay"><button type="button" id="autoplayBtn" class="btn btn-info focusable">Autoplay next: ` + (autoplay ? "ON" : "OFF") + '</button><label for="autoplayBufferInput">Countdown (sec): ' + bufferSec + '</label><input type="range" id="autoplayBufferInput" class="focusable" min="0" max="15" value="' + bufferSec + '" /></div><div class="settings-field" data-focus-row="settings-buffer"><button type="button" id="extraBufferBtn" class="btn btn-info focusable">Extra buffering: ' + (extraBuf ? "ON" : "OFF") + '</button></div><div class="settings-field" data-focus-row="settings-resolution"><label for="targetResolutionInput">Default stream quality</label><select id="targetResolutionInput" class="focusable"><option value="auto"' + (targetRes === "auto" ? " selected" : "") + '>Auto</option><option value="720"' + (targetRes === "720" ? " selected" : "") + '>720p</option><option value="1080"' + (targetRes === "1080" ? " selected" : "") + '>1080p</option><option value="2160"' + (targetRes === "2160" ? " selected" : "") + '>4K</option></select><p class="settings-hint">Auto starts on the lowest rung and ramps up. Locked modes prefer matching sources. Quality depends on what each server offers; 4K may buffer heavily on some TVs.</p></div><p class="settings-hint">Play backend: <strong>' + config.getPlayBackend() + '</strong> <button type="button" id="backendCycleBtn" class="btn btn-info focusable">Cycle</button></p><p class="settings-hint">auto = Videasy CDN \u2192 VixSrc \u2192 Streamflix \u2192 embeds \u2192 Vidking. videasy / vidking / streamflix force one engine.</p><button type="button" id="providersBtn" class="btn btn-info focusable">Manage providers</button><p class="settings-hint">Gate test: <a href="gate/index.html">gate/index.html</a></p>';
         container.appendChild(el);
         var input = el.querySelector("#apiBaseInput");
         var saveBtn = el.querySelector("#saveApiBtn");
@@ -7014,7 +7106,7 @@ var TizenflixApp = (() => {
         }
         if (backendBtn) {
           backendBtn.addEventListener("click", function() {
-            var order = ["auto", "vidking", "streamflix"];
+            var order = ["auto", "videasy", "vidking", "streamflix"];
             var current = config.getPlayBackend();
             var idx = order.indexOf(current);
             var next = order[(idx + 1) % order.length];
