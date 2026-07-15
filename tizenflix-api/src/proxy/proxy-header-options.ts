@@ -30,18 +30,37 @@ export const IRONBUBBLE_SITE_REFERERS: string[] = [
   "https://fmovies.gd/",
   "https://www.cineby.app/",
   "https://cineby.app/",
+  "https://player.videasy.to/",
   "https://player.videasy.net/",
   "https://www.vidking.net/",
   "https://1movies.life/",
 ];
 
-/** Default CDN headers for Vidking server names when scraper did not attach any. */
+const VIDEASY_PROVIDER_NAMES = new Set([
+  "neon",
+  "tejo",
+  "yoru",
+  "sage",
+  "cypher",
+  "vyse",
+  "breach",
+  "jett",
+  "killjoy",
+]);
+
+/** Default CDN headers for Vidking/Videasy server names when scraper did not attach any. */
 export function defaultUpstreamHeadersForProvider(provider: string): Record<string, string> | undefined {
   const lower = provider.toLowerCase();
-  if (lower === "hydrogen") {
+  if (lower === "hydrogen" || lower === "yoru") {
     return {
       Referer: "https://www.fmovies.gd/",
       Origin: "https://www.fmovies.gd",
+    };
+  }
+  if (VIDEASY_PROVIDER_NAMES.has(lower)) {
+    return {
+      Referer: "https://player.videasy.to/",
+      Origin: "https://player.videasy.to",
     };
   }
   if (lower === "oxygen" || lower === "titanium" || lower === "helium" || lower === "lithium") {

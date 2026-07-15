@@ -181,8 +181,8 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         browseRows: "/browse/rows",
         browseRow: "/browse/row/:id",
         providers: "/providers",
-        playMovie: "/play/movie/:tmdbId?backend=vidking|tmdb-native|streamflix|auto",
-        playTv: "/play/tv/:tmdbId/:season/:episode?backend=vidking|tmdb-native|streamflix|auto",
+        playMovie: "/play/movie/:tmdbId?backend=videasy|vidking|tmdb-native|streamflix|auto",
+        playTv: "/play/tv/:tmdbId/:season/:episode?backend=videasy|vidking|tmdb-native|streamflix|auto",
         playTmdbNativeMovie: "/play/tmdb-native/movie/:tmdbId",
         playTmdbNativeTv: "/play/tmdb-native/tv/:tmdbId/:season/:episode",
         playStreamflixMovie: "/play/streamflix/movie/:tmdbId",
@@ -763,7 +763,7 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     const backendName = options.backend ?? "auto";
     // Probe enough Vidking/auto CDN rungs that Hydrogen 403s don't slip through as "OK".
     const probeLimit =
-      backendName === "vidking" || backendName === "auto"
+      backendName === "videasy" || backendName === "vidking" || backendName === "auto"
         ? 5
         : backendName === "streamflix"
           ? 3

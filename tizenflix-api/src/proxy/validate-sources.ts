@@ -189,6 +189,11 @@ function isVixSrcProvider(provider: string): boolean {
   return /^vixsrc/i.test(provider);
 }
 
+function isVideasySource(source: PlayableSource): boolean {
+  if (source.sourceId === "videasy") return true;
+  return /^(neon|tejo|yoru|sage|cypher|vyse|breach|jett|killjoy)$/i.test(source.provider);
+}
+
 function sortPlayableSources(
   ranked: RankedSource[],
   preferredQuality?: string
@@ -210,6 +215,9 @@ function sortPlayableSources(
       if (a.source.priority !== b.source.priority) {
         return a.source.priority - b.source.priority;
       }
+      const videasyA = isVideasySource(a.source);
+      const videasyB = isVideasySource(b.source);
+      if (videasyA !== videasyB) return videasyA ? -1 : 1;
       const vixA = isVixSrcProvider(a.source.provider);
       const vixB = isVixSrcProvider(b.source.provider);
       if (vixA !== vixB) return vixA ? -1 : 1;

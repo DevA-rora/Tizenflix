@@ -1,5 +1,5 @@
-import { extractVideo } from "../src/streamflix/extractors/registry.js";
-import { vixSrcExtractor } from "../src/streamflix/extractors/vix-src.js";
+import { extractVideo } from "../dist/streamflix/extractors/registry.js";
+import { vixSrcExtractor } from "../dist/streamflix/extractors/vix-src.js";
 
 async function main() {
   try {

@@ -1,4 +1,4 @@
-import { resolveStreamflixFromOptions } from "../src/streamflix/resolve.js";
+import { resolveStreamflixFromOptions } from "../dist/streamflix/resolve.js";
 
 try {
   const play = await resolveStreamflixFromOptions({ type: "movie", tmdbId: "27205" });

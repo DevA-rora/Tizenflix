@@ -68,7 +68,7 @@ export interface PlayResponse {
     default?: boolean;
   }>;
   nextEpisode: null | { season: string; episode: string };
-  backend?: "vidking" | "streamflix" | "tmdb-native" | "auto";
+  backend?: "videasy" | "vidking" | "streamflix" | "tmdb-native" | "auto";
   resolveMs?: number;
   audioPreference?: {
     mode: "original" | "specific";
@@ -102,7 +102,10 @@ export interface PlayResponse {
   }>;
 }
 
-export type PlayBackend = "vidking" | "streamflix" | "tmdb-native" | "auto";
+export type PlayBackend = "videasy" | "vidking" | "streamflix" | "tmdb-native" | "auto";
+
+/** WingsDatabase CDN player identity (headers + server map). */
+export type CdnIdentity = "vidking" | "videasy";
 
 export interface ResolveOptions {
   type: MediaType;
@@ -115,6 +118,8 @@ export interface ResolveOptions {
   profile?: "tizen" | "default";
   providerScore?: (provider: string) => number;
   backend?: PlayBackend;
+  /** Which WingsDatabase player identity to use (defaults from backend). */
+  cdnIdentity?: CdnIdentity;
   onlySourceId?: string;
   onlySourceIds?: string[];
   /** Override auto TMDB-native source list (comma-separated ids in query) */

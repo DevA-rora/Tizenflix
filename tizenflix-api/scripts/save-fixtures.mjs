@@ -2,9 +2,9 @@
 /** Save encrypted API payload + metadata for offline decrypt tests */
 
 import { writeFileSync } from "node:fs";
-import { fetchMetadata } from "../src/api/metadata.ts";
-import { fetchSeed } from "../src/api/seed.ts";
-import { VIDKING_HEADERS } from "../src/constants/headers.ts";
+import { fetchMetadata } from "../dist/api/metadata.js";
+import { fetchSeed } from "../dist/api/seed.js";
+import { VIDKING_HEADERS } from "../dist/constants/headers.js";
 
 const tmdbId = process.argv[2] ?? "27205";
 

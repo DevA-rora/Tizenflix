@@ -1,5 +1,6 @@
 import { API_BASE } from "../constants/servers.js";
-import { VIDKING_HEADERS } from "../constants/headers.js";
+import { VIDKING_HEADERS, VIDEASY_HEADERS } from "../constants/headers.js";
+import type { CdnIdentity } from "../types.js";
 
 const SEED_CACHE = new Map<string, { seed: string; expiresAt: number }>();
 const CACHE_SKEW_MS = 5000;
@@ -9,14 +10,19 @@ interface SeedResponse {
   ttlMs?: number;
 }
 
+function headersForIdentity(identity: CdnIdentity = "vidking"): HeadersInit {
+  return identity === "videasy" ? VIDEASY_HEADERS : VIDKING_HEADERS;
+}
+
 /** Of() — fetch and cache decryption seed */
 export async function fetchSeed(
   tmdbId: string,
   apiBase: string = API_BASE,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  identity: CdnIdentity = "vidking"
 ): Promise<string> {
   const origin = new URL(apiBase).origin;
-  const key = `${origin}|${tmdbId}`;
+  const key = `${identity}|${origin}|${tmdbId}`;
   const now = Date.now();
   const cached = SEED_CACHE.get(key);
   if (cached && cached.expiresAt - CACHE_SKEW_MS > now) {
@@ -25,7 +31,7 @@ export async function fetchSeed(
 
   const res = await fetchImpl(
     `${origin}/seed?mediaId=${encodeURIComponent(String(tmdbId))}`,
-    { headers: VIDKING_HEADERS }
+    { headers: headersForIdentity(identity) }
   );
   if (!res.ok) {
     throw new Error(`seed request failed: ${res.status}`);
@@ -42,10 +48,11 @@ export async function fetchSeed(
 /** Lf() — bust seed cache (on 401) */
 export function clearSeedCache(
   tmdbId: string,
-  apiBase: string = API_BASE
+  apiBase: string = API_BASE,
+  identity: CdnIdentity = "vidking"
 ): void {
   const origin = new URL(apiBase).origin;
-  SEED_CACHE.delete(`${origin}|${tmdbId}`);
+  SEED_CACHE.delete(`${identity}|${origin}|${tmdbId}`);
 }
 
 export function clearAllSeedCache(): void {

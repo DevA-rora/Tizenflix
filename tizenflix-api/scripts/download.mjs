@@ -10,9 +10,9 @@
 import { createWriteStream, writeFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { resolvePlayableSources } from "../src/index.ts";
-import { downloadHlsParallel } from "../src/download/hls-parallel.ts";
-import { UPSTREAM_HEADERS } from "../src/proxy/upstream.ts";
+import { resolvePlayableSources } from "../dist/index.js";
+import { downloadHlsParallel } from "../dist/download/hls-parallel.js";
+import { UPSTREAM_HEADERS } from "../dist/proxy/upstream.js";
 
 function parseArgs(argv) {
   const args = argv.slice(2);

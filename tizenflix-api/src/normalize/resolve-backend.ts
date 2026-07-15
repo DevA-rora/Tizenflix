@@ -8,6 +8,9 @@ import type { Metadata, PlayResponse, ResolveOptions } from "../types.js";
 
 const STREAMFLIX_AUTO_TIMEOUT_MS = AUTO_PROVIDER_TIMEOUT_MS;
 
+/** TMDB-native embeds after VixSrc was already tried as its own tier. */
+const REMAINING_TMDB_SOURCE_IDS = AUTO_TMDB_SOURCE_IDS.filter((id) => id !== "vixsrc");
+
 function tagBackend(play: PlayResponse, backend: PlayResponse["backend"], ms: number): PlayResponse {
   return { ...play, backend, resolveMs: ms };
 }
@@ -18,7 +21,7 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ result: T; ms: number }
   return { result, ms: Date.now() - t0 };
 }
 
-function hasPlayableSources(play: PlayResponse | null): play is PlayResponse {
+function hasPlayableSources(play: PlayResponse | null | undefined): boolean {
   return Boolean(play?.sources?.length);
 }
 
@@ -53,8 +56,7 @@ function errMessage(err: unknown): string {
 }
 
 /**
- * backend=auto: Vidking CDN → Streamflix scrapers → TMDB-native embeds.
- * Matches fmovies-style CDN first, then Android Streamflix try-next, then embeds.
+ * backend=auto: Videasy CDN → VixSrc → Streamflix scrapers → other TMDB embeds → Vidking last.
  */
 async function resolveAutoTiered(
   options: ResolveOptions,
@@ -68,29 +70,59 @@ async function resolveAutoTiered(
   const warnings: string[] = [];
 
   try {
-    const vidkingPlay = await resolvePlayableSources(
+    const videasyPlay = await resolvePlayableSources(
       {
         ...options,
-        allServers: true,
-        firstSuccessOnly: false,
+        backend: "videasy",
+        cdnIdentity: "videasy",
+        allServers: false,
+        firstSuccessOnly: true,
       },
       fetchImpl
     );
-    if (hasPlayableSources(vidkingPlay)) {
+    if (hasPlayableSources(videasyPlay)) {
       return tagBackend(
         {
-          ...vidkingPlay,
+          ...videasyPlay,
           ...baseMeta,
           backend: "auto",
-          warnings: vidkingPlay.warnings?.length ? vidkingPlay.warnings : undefined,
+          warnings: videasyPlay.warnings?.length ? videasyPlay.warnings : undefined,
         },
         "auto",
         Date.now() - t0
       );
     }
-    warnings.push("vidking: no sources");
+    warnings.push("videasy: no sources");
   } catch (err) {
-    warnings.push(`vidking: ${errMessage(err)}`);
+    warnings.push(`videasy: ${errMessage(err)}`);
+  }
+
+  try {
+    const vixPlay = await resolveTmdbNativeFromOptions(
+      {
+        ...options,
+        onePerSource: true,
+        mergeOrder: ["vixsrc"],
+        onlySourceId: "vixsrc",
+      },
+      fetchImpl
+    );
+    if (hasPlayableSources(vixPlay)) {
+      const mergedWarnings = [...warnings, ...(vixPlay.warnings ?? [])];
+      return tagBackend(
+        {
+          ...vixPlay,
+          ...baseMeta,
+          backend: "auto",
+          warnings: mergedWarnings.length ? mergedWarnings : undefined,
+        },
+        "auto",
+        Date.now() - t0
+      );
+    }
+    warnings.push("vixsrc: no sources");
+  } catch (err) {
+    warnings.push(`vixsrc: ${errMessage(err)}`);
   }
 
   const { resolveStreamflixFromOptions } = await import("../streamflix/resolve.js");
@@ -136,20 +168,51 @@ async function resolveAutoTiered(
     }
   }
 
+  if (REMAINING_TMDB_SOURCE_IDS.length) {
+    try {
+      const tmdbPlay = await resolveTmdbNativeFromOptions(
+        {
+          ...options,
+          onePerSource: true,
+          mergeOrder: [...REMAINING_TMDB_SOURCE_IDS],
+        },
+        fetchImpl
+      );
+      if (hasPlayableSources(tmdbPlay)) {
+        const mergedWarnings = [...warnings, ...(tmdbPlay.warnings ?? [])];
+        return tagBackend(
+          {
+            ...tmdbPlay,
+            ...baseMeta,
+            backend: "auto",
+            warnings: mergedWarnings.length ? mergedWarnings : undefined,
+          },
+          "auto",
+          Date.now() - t0
+        );
+      }
+      warnings.push("tmdb-native: no sources");
+    } catch (err) {
+      warnings.push(`tmdb-native: ${errMessage(err)}`);
+    }
+  }
+
   try {
-    const tmdbPlay = await resolveTmdbNativeFromOptions(
+    const vidkingPlay = await resolvePlayableSources(
       {
         ...options,
-        onePerSource: true,
-        mergeOrder: [...AUTO_TMDB_SOURCE_IDS],
+        backend: "vidking",
+        cdnIdentity: "vidking",
+        allServers: true,
+        firstSuccessOnly: false,
       },
       fetchImpl
     );
-    if (hasPlayableSources(tmdbPlay)) {
-      const mergedWarnings = [...warnings, ...(tmdbPlay.warnings ?? [])];
+    if (hasPlayableSources(vidkingPlay)) {
+      const mergedWarnings = [...warnings, ...(vidkingPlay.warnings ?? [])];
       return tagBackend(
         {
-          ...tmdbPlay,
+          ...vidkingPlay,
           ...baseMeta,
           backend: "auto",
           warnings: mergedWarnings.length ? mergedWarnings : undefined,
@@ -158,9 +221,9 @@ async function resolveAutoTiered(
         Date.now() - t0
       );
     }
-    warnings.push("tmdb-native: no sources");
+    warnings.push("vidking: no sources");
   } catch (err) {
-    warnings.push(`tmdb-native: ${errMessage(err)}`);
+    warnings.push(`vidking: ${errMessage(err)}`);
   }
 
   return tagBackend(emptyAutoPlay(options, meta, warnings), "auto", Date.now() - t0);
@@ -172,8 +235,23 @@ export async function resolveWithBackend(
 ): Promise<PlayResponse> {
   const backend = options.backend ?? "auto";
 
+  if (backend === "videasy") {
+    const { result, ms } = await timed(() =>
+      resolvePlayableSources(
+        { ...options, backend: "videasy", cdnIdentity: "videasy" },
+        fetchImpl
+      )
+    );
+    return tagBackend(result, "videasy", ms);
+  }
+
   if (backend === "vidking") {
-    const { result, ms } = await timed(() => resolvePlayableSources(options, fetchImpl));
+    const { result, ms } = await timed(() =>
+      resolvePlayableSources(
+        { ...options, backend: "vidking", cdnIdentity: "vidking" },
+        fetchImpl
+      )
+    );
     return tagBackend(result, "vidking", ms);
   }
 
@@ -199,6 +277,18 @@ export async function resolveWithBackend(
     return tagBackend(result, "streamflix", ms);
   }
 
+  const onlyIds =
+    options.onlySourceIds ?? (options.onlySourceId ? [options.onlySourceId] : undefined);
+  if (onlyIds?.length === 1 && onlyIds[0] === "videasy") {
+    const { result, ms } = await timed(() =>
+      resolvePlayableSources(
+        { ...options, backend: "videasy", cdnIdentity: "videasy" },
+        fetchImpl
+      )
+    );
+    return tagBackend({ ...result, backend: "auto" }, "auto", ms);
+  }
+
   if (options.onlySourceId || options.onlySourceIds?.length) {
     const { result, ms } = await timed(() =>
       resolveTmdbNativeFromOptions(
@@ -221,6 +311,7 @@ export function parseBackendParam(raw: unknown): ResolveOptions["backend"] {
     raw === "streamflix" ||
     raw === "auto" ||
     raw === "vidking" ||
+    raw === "videasy" ||
     raw === "tmdb-native"
   ) {
     return raw;

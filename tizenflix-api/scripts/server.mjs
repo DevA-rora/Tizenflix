@@ -4,15 +4,15 @@
  */
 
 import express from "express";
-import { loadConfig } from "../src/config.ts";
-import { registerRoutes } from "../src/server/register-routes.ts";
-import { ProgressService } from "../src/store/progress.ts";
-import { ProviderHealthService } from "../src/store/provider-health.ts";
-import { DownloadService } from "../src/download/jobs.ts";
+import { loadConfig } from "../dist/config.js";
+import { registerRoutes } from "../dist/server/register-routes.js";
+import { ProgressService } from "../dist/store/progress.js";
+import { ProviderHealthService } from "../dist/store/provider-health.js";
+import { DownloadService } from "../dist/download/jobs.js";
 import {
   checkPlaywrightReady,
   formatPlaywrightSetupHelp,
-} from "../src/streamflix/network/playwright-health.ts";
+} from "../dist/streamflix/network/playwright-health.js";
 
 const config = loadConfig();
 

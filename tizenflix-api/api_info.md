@@ -233,10 +233,20 @@ Subtitles arrive **inside the decrypted sources response** — same pipeline as 
 
 ## 5. Stream resolution pipeline
 
+Public Videasy docs only cover iframe embeds (`player.videasy.net` / `player.videasy.to`). This API does **not** embed those iframes — it resolves direct `.m3u8` / `.mp4` URLs from WingsDatabase using the **Videasy player identity** (`Origin`/`Referer: https://player.videasy.to/`), then proxies them.
+
+`backend=auto` order:
+
+1. **Videasy** CDN (Neon, Yoru, Tejo, …)
+2. **VixSrc**
+3. **Streamflix** scrapers
+4. Other TMDB-native embeds
+5. **Vidking** CDN (last resort)
+
 ```
 TMDB ID
   → fetchMetadata (title, year, imdbId)
-  → fetchSeed (cached ~30s TTL)
+  → fetchSeed (cached ~30s TTL, Videasy or Vidking headers)
   → fetch encrypted sources per server
   → decryptAndParse (mvm1)
   → normalize sources (mp4/m3u8) + dedupe subtitles
@@ -278,7 +288,7 @@ npm run api
 PUBLIC_BASE=http://192.168.1.10:8790 npm run api
 ```
 
-**Must use** `tsx` — plain `node scripts/server.mjs` fails on `.ts` imports.
+`npm run api` compiles TypeScript with `tsc` then starts the server with plain `node` (works on Linux and macOS without `tsx`).
 
 ### TV / LAN deployment checklist
 

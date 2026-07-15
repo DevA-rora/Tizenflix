@@ -21,7 +21,8 @@ export function tmdbSourceIdsForLanguage(
   if (code === "de") {
     const de: string[] = ["moflix"];
     if (type === "movie") de.push("einschalten");
-    de.push("videasy", ...base);
+    // Videasy German Killjoy server is handled by backend=videasy / auto tier-1.
+    de.push(...base);
     return de;
   }
 

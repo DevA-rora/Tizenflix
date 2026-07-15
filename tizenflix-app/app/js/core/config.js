@@ -170,7 +170,15 @@ function isBelowTargetResolution(play, target) {
 function getPlayBackend() {
   try {
     var stored = localStorage.getItem(BACKEND_KEY);
-    if (stored === "vidking" || stored === "streamflix" || stored === "auto" || stored === "tmdb-native") return stored;
+    if (
+      stored === "vidking" ||
+      stored === "videasy" ||
+      stored === "streamflix" ||
+      stored === "auto" ||
+      stored === "tmdb-native"
+    ) {
+      return stored;
+    }
   } catch (err) {
     /* TV may block storage */
   }
@@ -179,7 +187,11 @@ function getPlayBackend() {
 
 function setPlayBackend(mode) {
   var m =
-    mode === "streamflix" || mode === "auto" || mode === "tmdb-native" || mode === "vidking"
+    mode === "streamflix" ||
+    mode === "auto" ||
+    mode === "tmdb-native" ||
+    mode === "vidking" ||
+    mode === "videasy"
       ? mode
       : "auto";
   try {

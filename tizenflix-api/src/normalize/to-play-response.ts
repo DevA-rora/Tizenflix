@@ -1,10 +1,13 @@
-import { SERVER_PRIORITY, TIZEN_SERVER_PRIORITY } from "../constants/servers.js";
+import { SERVER_PRIORITY, TIZEN_SERVER_PRIORITY, API_BASE } from "../constants/servers.js";
+import { videasyServerPriorityFor } from "../constants/videasy-servers.js";
 import { fetchMetadata } from "../api/metadata.js";
+import { fetchSeed } from "../api/seed.js";
 import { fetchServerSources, fetchServerSourcesDirect } from "../api/sources.js";
 import { detectStreamType, slugify } from "./detect-type.js";
 import { tagPlayableSource } from "./audio-metadata.js";
 import { defaultUpstreamHeadersForProvider } from "../proxy/proxy-header-options.js";
 import type {
+  CdnIdentity,
   DecryptedSourceResponse,
   MediaType,
   PlayResponse,
@@ -43,7 +46,8 @@ function normalizeSubtitles(
 function sourcesFromServer(
   serverName: string,
   data: DecryptedSourceResponse,
-  priorityBase: number
+  priorityBase: number,
+  identity: CdnIdentity
 ): PlayableSource[] {
   const out: PlayableSource[] = [];
   const sources = data.sources ?? [];
@@ -61,6 +65,7 @@ function sourcesFromServer(
         url: s.url,
         priority: priorityBase + out.length,
         audioVariant: "unknown",
+        sourceId: identity === "videasy" ? "videasy" : undefined,
         upstreamHeaders: defaultUpstreamHeadersForProvider(serverName),
       })
     );
@@ -75,7 +80,8 @@ export function mergeServerResults(
   season?: string,
   episode?: string,
   title?: string,
-  imdbId?: string
+  imdbId?: string,
+  identity: CdnIdentity = "vidking"
 ): PlayResponse {
   const allSources: PlayableSource[] = [];
   let subtitles: PlayResponse["subtitles"] = [];
@@ -83,7 +89,7 @@ export function mergeServerResults(
   for (let i = 0; i < results.length; i++) {
     const r = results[i]!;
     if (!r.data) continue;
-    allSources.push(...sourcesFromServer(r.server, r.data, i * 100));
+    allSources.push(...sourcesFromServer(r.server, r.data, i * 100, identity));
     if (!subtitles.length && r.data.subtitles?.length) {
       subtitles = normalizeSubtitles(r.data.subtitles, tmdbId);
     }
@@ -111,11 +117,20 @@ export function mergeServerResults(
 function sortServersForProfile(
   names: string[],
   profile: ResolveOptions["profile"],
-  providerScore?: (provider: string) => number
+  providerScore?: (provider: string) => number,
+  tizenOrder: string[] = TIZEN_SERVER_PRIORITY
 ): string[] {
-  if (profile !== "tizen") return names;
+  if (profile !== "tizen") {
+    if (!providerScore) return names;
+    return names.slice().sort((a, b) => {
+      const scoreA = providerScore(a) ?? 0.5;
+      const scoreB = providerScore(b) ?? 0.5;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return names.indexOf(a) - names.indexOf(b);
+    });
+  }
 
-  const baseOrder = TIZEN_SERVER_PRIORITY.filter((n) => names.includes(n));
+  const baseOrder = tizenOrder.filter((n) => names.includes(n));
   for (const n of names) {
     if (baseOrder.indexOf(n) === -1) baseOrder.push(n);
   }
@@ -128,6 +143,18 @@ function sortServersForProfile(
     if (scoreA !== scoreB) return scoreB - scoreA;
     return baseOrder.indexOf(a) - baseOrder.indexOf(b);
   });
+}
+
+function serverListForOptions(options: ResolveOptions, identity: CdnIdentity): string[] {
+  if (options.server) return [options.server];
+  if (identity === "videasy") {
+    return videasyServerPriorityFor({
+      profile: options.profile,
+      mediaType: options.type,
+      lang: options.lang,
+    });
+  }
+  return [...SERVER_PRIORITY];
 }
 
 export async function resolvePlayableSources(
@@ -146,13 +173,30 @@ export async function resolvePlayableSources(
     providerScore,
   } = options;
 
+  const identity: CdnIdentity =
+    options.cdnIdentity ?? (options.backend === "videasy" ? "videasy" : "vidking");
+  const fetchOpts = { identity };
+
   const meta = await fetchMetadata(type, tmdbId, fetchImpl);
+  // Warm seed cache once so allServers parallel fan-out does not stampede /seed (429).
+  try {
+    await fetchSeed(tmdbId, API_BASE, fetchImpl, identity);
+  } catch {
+    /* individual server fetches will surface seed errors */
+  }
   const results: ServerResult[] = [];
 
+  const priorityNames = serverListForOptions(options, identity);
+  const tizenOrder =
+    identity === "videasy"
+      ? videasyServerPriorityFor({ profile: "tizen", mediaType: type, lang: options.lang })
+      : TIZEN_SERVER_PRIORITY;
+
   const serversToTry = sortServersForProfile(
-    server ? [server] : SERVER_PRIORITY,
+    priorityNames,
     profile,
-    providerScore
+    providerScore,
+    tizenOrder
   );
 
   const fetchOne = async (serverName: string): Promise<ServerResult> => {
@@ -170,7 +214,8 @@ export async function resolvePlayableSources(
               imdbId: meta.imdbId,
               timestamp: String(Date.now()),
             },
-            fetchImpl
+            fetchImpl,
+            fetchOpts
           )
         : await fetchServerSourcesDirect(
             serverName,
@@ -179,7 +224,8 @@ export async function resolvePlayableSources(
             meta,
             season,
             episode,
-            fetchImpl
+            fetchImpl,
+            fetchOpts
           );
 
       if (data) {
@@ -217,7 +263,8 @@ export async function resolvePlayableSources(
     type === "tv" ? season : undefined,
     type === "tv" ? episode : undefined,
     meta.title,
-    meta.imdbId
+    meta.imdbId,
+    identity
   );
 
   if (!play.sources.length) {
@@ -226,11 +273,9 @@ export async function resolvePlayableSources(
       .filter(Boolean)
       .join("; ");
     const message = errors || "No playable sources found from any server";
-    // Forced single CDN: hard-fail so the Server panel / ?server= gets a clear 502.
     if (server) {
       throw new Error(message);
     }
-    // Soft-fail so backend=vidking / auto can escalate to Streamflix / TMDB.
     return {
       ...play,
       sources: [],
@@ -246,10 +291,18 @@ export async function listProviders(): Promise<
   Array<{ id: string; name: string; endpoint: string; status: string }>
 > {
   const { getActiveServers } = await import("../constants/servers.js");
-  return getActiveServers().map((s) => ({
+  const { getActiveVideasyServers } = await import("../constants/videasy-servers.js");
+  const vidking = getActiveServers().map((s) => ({
     id: slugify(s.name),
     name: s.name,
     endpoint: s.endpoint,
     status: "unknown",
   }));
+  const videasy = getActiveVideasyServers({ mediaType: "movie", lang: "en" }).map((s) => ({
+    id: `videasy-${slugify(s.name)}`,
+    name: `${s.name} (Videasy)`,
+    endpoint: s.endpoint,
+    status: "unknown",
+  }));
+  return [...videasy, ...vidking];
 }

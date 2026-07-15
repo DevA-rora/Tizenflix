@@ -2,12 +2,15 @@ import {
   API_BASE,
   ENCRYPTION_VERSION,
   getServerByName,
+  type ServerConfig,
 } from "../constants/servers.js";
-import { NO_CACHE_HEADERS } from "../constants/headers.js";
+import { getVideasyServerByName } from "../constants/videasy-servers.js";
+import { NO_CACHE_HEADERS, VIDEASY_NO_CACHE_HEADERS } from "../constants/headers.js";
 import { fetchWithTimeout } from "../fetch-timeout.js";
 import { decryptAndParse } from "../crypto/decrypt.js";
 import { clearSeedCache, fetchSeed } from "./seed.js";
 import type {
+  CdnIdentity,
   DecryptedSourceResponse,
   MediaType,
   Metadata,
@@ -25,8 +28,25 @@ export interface SourceRequest {
   timestamp?: string;
 }
 
-const DEFAULT_HEADERS = NO_CACHE_HEADERS;
+export interface SourceFetchOptions {
+  identity?: CdnIdentity;
+}
+
 const UPSTREAM_TIMEOUT_MS = 12_000;
+
+function headersForIdentity(identity: CdnIdentity): HeadersInit {
+  return identity === "videasy" ? VIDEASY_NO_CACHE_HEADERS : NO_CACHE_HEADERS;
+}
+
+function resolveServer(
+  serverName: string,
+  identity: CdnIdentity
+): ServerConfig | undefined {
+  if (identity === "videasy") {
+    return getVideasyServerByName(serverName);
+  }
+  return getServerByName(serverName);
+}
 
 function buildSourceUrl(
   endpoint: string,
@@ -64,11 +84,12 @@ export function preferHlsSources(
 
 async function fetchEncryptedOnce(
   url: string,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  identity: CdnIdentity
 ): Promise<string> {
   const res = await fetchWithTimeout(
     url,
-    { headers: DEFAULT_HEADERS },
+    { headers: headersForIdentity(identity) },
     UPSTREAM_TIMEOUT_MS,
     fetchImpl
   );
@@ -87,9 +108,11 @@ async function fetchEncryptedOnce(
 export async function fetchServerSources(
   serverName: string,
   req: Omit<SourceRequest, "seed">,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  opts: SourceFetchOptions = {}
 ): Promise<DecryptedSourceResponse> {
-  const server = getServerByName(serverName);
+  const identity = opts.identity ?? "vidking";
+  const server = resolveServer(serverName, identity);
   if (!server || !server.isActive) {
     throw new Error(`Server "${serverName}" is not available or does not exist`);
   }
@@ -97,13 +120,13 @@ export async function fetchServerSources(
   const tmdbNum = parseInt(req.tmdbId, 10);
 
   const attempt = async (): Promise<DecryptedSourceResponse> => {
-    const seed = await fetchSeed(req.tmdbId, API_BASE, fetchImpl);
+    const seed = await fetchSeed(req.tmdbId, API_BASE, fetchImpl, identity);
     const url = buildSourceUrl(server.endpoint, seed, {
       ...req,
       seed,
       timestamp: req.timestamp ?? String(Date.now()),
     });
-    const ciphertext = await fetchEncryptedOnce(url, fetchImpl);
+    const ciphertext = await fetchEncryptedOnce(url, fetchImpl, identity);
     const parsed = decryptAndParse<DecryptedSourceResponse>(
       ciphertext,
       seed,
@@ -117,7 +140,7 @@ export async function fetchServerSources(
   } catch (err: unknown) {
     const e = err as { status?: number };
     if (e?.status === 401) {
-      clearSeedCache(req.tmdbId);
+      clearSeedCache(req.tmdbId, API_BASE, identity);
       return attempt();
     }
     throw err;
@@ -132,7 +155,8 @@ export async function fetchServerSourcesDirect(
   meta: Metadata,
   seasonId?: string,
   episodeId?: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  opts: SourceFetchOptions = {}
 ): Promise<DecryptedSourceResponse | null> {
   try {
     const data = await fetchServerSources(
@@ -147,7 +171,8 @@ export async function fetchServerSourcesDirect(
         imdbId: meta.imdbId,
         timestamp: String(Date.now()),
       },
-      fetchImpl
+      fetchImpl,
+      opts
     );
     if (!data?.sources?.length) return null;
     return data;

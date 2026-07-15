@@ -13,7 +13,7 @@ describe("decrypt offline fixture", () => {
     const metaPath = join(FIXTURE_DIR, "decrypt-meta-27205.json");
     const cipherPath = join(FIXTURE_DIR, "encrypted-movie-27205.txt");
     if (!existsSync(metaPath) || !existsSync(cipherPath)) {
-      return; // skip — run: npx tsx scripts/save-fixtures.mjs
+      return; // skip — run: npm run save-fixtures
     }
     const { tmdbId, seed } = JSON.parse(readFileSync(metaPath, "utf-8"));
     const ciphertext = readFileSync(cipherPath, "utf-8");

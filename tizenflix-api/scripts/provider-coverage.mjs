@@ -1,10 +1,10 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /** Compare Streamflix Kotlin registry vs Tizenflix provider implementation status. */
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAllProviders } from "../src/streamflix/providers/registry.js";
-import { getAllIptvProviders } from "../src/streamflix/iptv/registry.js";
+import { getAllProviders } from "../dist/streamflix/providers/registry.js";
+import { getAllIptvProviders } from "../dist/streamflix/iptv/registry.js";
 import { readdirSync } from "node:fs";
 
 const REF = process.env.STREAMFLIX_REF || "/tmp/streamflix-ref";

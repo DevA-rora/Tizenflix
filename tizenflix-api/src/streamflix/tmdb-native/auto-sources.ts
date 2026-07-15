@@ -1,4 +1,4 @@
-/** TMDB-native sources included in `backend=auto` (priority order). */
+/** TMDB-native sources included in remaining auto embeds (after VixSrc tier). Videasy is a first-class CDN backend. */
 export const AUTO_TMDB_SOURCE_IDS = [
   "vixsrc",
   "twoembed",

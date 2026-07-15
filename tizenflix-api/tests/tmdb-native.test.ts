@@ -43,9 +43,10 @@ describe("tmdb-native registry", () => {
     expect(tvSources.find((s) => s.id === "moviesapi")).toBeUndefined();
   });
 
-  it("Videasy marked duplicateOf vidking", () => {
+  it("Videasy uses WingsDatabase CDN (not marked as vidking duplicate)", () => {
     const v = TMDB_NATIVE_SOURCES.find((s) => s.id === "videasy");
-    expect(v?.duplicateOf).toBe("vidking");
+    expect(v?.duplicateOf).toBeUndefined();
+    expect(v?.mainUrl).toContain("wingsdatabase");
   });
 
   it("Vidzee builds 14 server entries", async () => {

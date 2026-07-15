@@ -1,4 +1,4 @@
-import { findSflixMovieId, getSflixServers, extractSflixServer } from "../src/streamflix/providers/sflix.js";
+import { findSflixMovieId, getSflixServers, extractSflixServer } from "../dist/streamflix/providers/sflix.js";
 
 try {
   const id = await findSflixMovieId("27205", "Inception");

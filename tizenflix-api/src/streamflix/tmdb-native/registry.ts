@@ -7,7 +7,6 @@ import { BROWSER_UA, fetchJson } from "../http.js";
 import type { TmdbNativeEntry, TmdbNativeResolveOpts, TmdbNativeSource } from "./types.js";
 
 const VIXSRC = "https://vixsrc.to";
-const VIDEASY = "https://api.videasy.net";
 const MOVIESAPI = "https://moviesapi.club";
 const TWOEMBED = "https://www.2embed.cc";
 const VIDSRC_NET = "https://vidsrc-embed.ru";
@@ -20,12 +19,14 @@ const PRIMESRC = "https://primesrc.me";
 const VIDSRC_TO = "https://vidsrc.to";
 
 const VIDEASY_EN_SERVERS = [
-  { name: "Neon", endpoint: "mb-flix", movieOnly: false },
-  { name: "Yoru", endpoint: "cdn", movieOnly: true },
+  { name: "Neon", endpoint: "neon2", movieOnly: false },
+  { name: "Yoru", endpoint: "cdn", movieOnly: false },
+  { name: "Tejo", endpoint: "tejo", movieOnly: false },
+  { name: "Sage", endpoint: "ym", movieOnly: false },
   { name: "Cypher", endpoint: "downloader2", movieOnly: false },
-  { name: "Sage", endpoint: "1movies", movieOnly: false },
   { name: "Breach", endpoint: "m4uhd", movieOnly: false },
   { name: "Vyse", endpoint: "hdmovie", movieOnly: false },
+  { name: "Jett", endpoint: "jett", movieOnly: false },
 ];
 
 const VIDZEE_SERVERS = [
@@ -125,19 +126,18 @@ export const TMDB_NATIVE_SOURCES: TmdbNativeSource[] = [
   {
     id: "videasy",
     name: "Videasy",
-    mainUrl: VIDEASY,
+    mainUrl: "https://api.wingsdatabase.com",
     priority: 2,
     supportsMovies: true,
     supportsTv: true,
-    duplicateOf: "vidking",
     buildEntries(opts) {
       const year = String(opts.year ?? "").split("-")[0] ?? "";
       const imdb = opts.imdbId ?? "";
       return VIDEASY_EN_SERVERS.filter((c) => !(c.movieOnly && opts.type === "tv")).map((c) => {
         const base =
           opts.type === "movie"
-            ? `${VIDEASY}/${c.endpoint}/sources-with-title?title=${encodeURIComponent(opts.title)}&mediaType=movie&year=${year}&tmdbId=${opts.tmdbId}&imdbId=${imdb}`
-            : `${VIDEASY}/${c.endpoint}/sources-with-title?title=${encodeURIComponent(opts.title)}&mediaType=tv&year=${year}&tmdbId=${opts.tmdbId}&imdbId=${imdb}&episodeId=${opts.episode ?? "1"}&seasonId=${opts.season ?? "1"}`;
+            ? `https://api.wingsdatabase.com/${c.endpoint}/sources-with-title?title=${encodeURIComponent(opts.title)}&mediaType=movie&year=${year}&tmdbId=${opts.tmdbId}&imdbId=${imdb}`
+            : `https://api.wingsdatabase.com/${c.endpoint}/sources-with-title?title=${encodeURIComponent(opts.title)}&mediaType=tv&year=${year}&tmdbId=${opts.tmdbId}&imdbId=${imdb}&episodeId=${opts.episode ?? "1"}&seasonId=${opts.season ?? "1"}`;
         return { name: `${c.name} (Videasy)`, url: base };
       });
     },

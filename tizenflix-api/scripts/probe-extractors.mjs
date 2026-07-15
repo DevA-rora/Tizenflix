@@ -1,9 +1,9 @@
-import { twoEmbedExtractor } from "../src/streamflix/extractors/two-embed.js";
-import { vidsrcNetExtractor } from "../src/streamflix/extractors/vidsrc-net.js";
-import { vidzeeExtractor } from "../src/streamflix/extractors/vidzee.js";
-import { vidsrcToExtractor } from "../src/streamflix/extractors/vidsrc-to.js";
-import { vidrockExtractor } from "../src/streamflix/extractors/vidrock.js";
-import { buildVidrockApiUrl } from "../src/streamflix/tmdb-native/registry.js";
+import { twoEmbedExtractor } from "../dist/streamflix/extractors/two-embed.js";
+import { vidsrcNetExtractor } from "../dist/streamflix/extractors/vidsrc-net.js";
+import { vidzeeExtractor } from "../dist/streamflix/extractors/vidzee.js";
+import { vidsrcToExtractor } from "../dist/streamflix/extractors/vidsrc-to.js";
+import { vidrockExtractor } from "../dist/streamflix/extractors/vidrock.js";
+import { buildVidrockApiUrl } from "../dist/streamflix/tmdb-native/registry.js";
 
 const TIMEOUT_MS = 60_000;
 

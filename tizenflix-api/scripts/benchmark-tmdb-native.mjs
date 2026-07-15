@@ -5,21 +5,21 @@
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, requireTmdbKey } from "../src/config.js";
-import { resolvePlayableSources } from "../src/normalize/to-play-response.js";
-import { resolveTmdbNativePlay } from "../src/streamflix/tmdb-native/resolve.js";
-import { AUTO_TMDB_SOURCE_IDS } from "../src/streamflix/tmdb-native/auto-sources.js";
-import { resolveWithBackend } from "../src/normalize/resolve-backend.js";
-import { TMDB_NATIVE_SOURCES } from "../src/streamflix/tmdb-native/registry.js";
+import { loadConfig, requireTmdbKey } from "../dist/config.js";
+import { resolvePlayableSources } from "../dist/normalize/to-play-response.js";
+import { resolveTmdbNativePlay } from "../dist/streamflix/tmdb-native/resolve.js";
+import { AUTO_TMDB_SOURCE_IDS } from "../dist/streamflix/tmdb-native/auto-sources.js";
+import { resolveWithBackend } from "../dist/normalize/resolve-backend.js";
+import { TMDB_NATIVE_SOURCES } from "../dist/streamflix/tmdb-native/registry.js";
 import {
   preflightAllSources,
   formatPreflightHelp,
-} from "../src/streamflix/tmdb-native/preflight.js";
-import { fetchMetadata } from "../src/api/metadata.js";
+} from "../dist/streamflix/tmdb-native/preflight.js";
+import { fetchMetadata } from "../dist/api/metadata.js";
 import {
   checkPlaywrightReady,
   formatPlaywrightSetupHelp,
-} from "../src/streamflix/network/playwright-health.js";
+} from "../dist/streamflix/network/playwright-health.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = loadConfig();

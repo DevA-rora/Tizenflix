@@ -9,7 +9,7 @@
  *   npm run resolve -- movie 27205 --json
  */
 
-import { resolvePlayableSources, SERVER_PRIORITY } from "../src/index.ts";
+import { resolvePlayableSources, SERVER_PRIORITY } from "../dist/index.js";
 
 function parseArgs(argv) {
   const args = argv.slice(2);

@@ -28,7 +28,7 @@
 
 Override list: `GET /play/movie/27205?backend=auto&sources=vixsrc,vidrock`
 
-Smoke probe: `npx tsx scripts/probe-extractors.mjs` (requires Playwright for 2Embed/VidsrcNet/Vidsrc.to when embed hosts are slow).
+Smoke probe: `node scripts/run.mjs scripts/probe-extractors.mjs` (requires Playwright for 2Embed/VidsrcNet/Vidsrc.to when embed hosts are slow).
 
 ## TMDB-native sources (12 English-global)
 

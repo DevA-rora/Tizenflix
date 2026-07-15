@@ -9,7 +9,16 @@ var debug = require("../core/debug.js");
 var playbackSession = require("./playback-session.js");
 var playerChrome = require("../components/player-chrome.js");
 
-/** Vidking CDN order — aligns with API TIZEN_SERVER_PRIORITY. */
+/** Videasy CDN order — aligns with API VIDEASY_TIZEN_SERVER_PRIORITY. */
+var VIDEASY_SERVER_FALLBACKS = [
+  { label: "Neon", query: "server=Neon&backend=videasy", timeoutMs: 15000 },
+  { label: "Yoru", query: "server=Yoru&backend=videasy", timeoutMs: 15000 },
+  { label: "Tejo", query: "server=Tejo&backend=videasy", timeoutMs: 15000 },
+  { label: "Sage", query: "server=Sage&backend=videasy", timeoutMs: 15000 },
+  { label: "Cypher", query: "server=Cypher&backend=videasy", timeoutMs: 15000 },
+];
+var VIDEASY_SERVER_NAMES = ["Neon", "Yoru", "Tejo", "Sage", "Cypher", "Vyse", "Breach", "Jett", "Killjoy"];
+/** Vidking CDN order — last-resort fallback. */
 var VIDKING_SERVER_FALLBACKS = [
   { label: "Oxygen", query: "server=Oxygen&backend=vidking", timeoutMs: 15000 },
   { label: "Titanium", query: "server=Titanium&backend=vidking", timeoutMs: 15000 },
@@ -22,6 +31,7 @@ var PRIMARY_RESOLVE_TIMEOUT_MS = 90000;
 var ANIME_PROVIDER_ORDER = ["hianime", "anikoto", "ani-world", "anime-world"];
 var EN_PROVIDER_ORDER = ["sflix", "ridomovies", "superstream", "streaming-community-en", "anymovie"];
 var TMDB_BACKUP_QUERY = "backend=tmdb-native&sources=twoembed,vidrock,vidsrcnet,vidzee";
+var VIXSRC_QUERY = "backend=tmdb-native&sources=vixsrc";
 var playSession = 0;
 var progressSaveTimer = null;
 var lastProgressSaveAt = 0;
@@ -730,6 +740,15 @@ function isVidkingProviderName(name) {
   return false;
 }
 
+function isVideasyProviderName(name) {
+  if (!name) return false;
+  var lower = String(name).toLowerCase();
+  for (var i = 0; i < VIDEASY_SERVER_NAMES.length; i++) {
+    if (VIDEASY_SERVER_NAMES[i].toLowerCase() === lower) return true;
+  }
+  return false;
+}
+
 function currentPlayProvider(play) {
   if (!play || !play.sources || !play.sources[0]) return null;
   var s = play.sources[0];
@@ -880,6 +899,33 @@ function buildNextProviderFallbacks(currentProviderId, tmdbId, type, season, epi
   return buildStreamflixProviderFallbacks(tmdbId, type, season, episode, currentProviderId);
 }
 
+function buildVideasyFallbacks(tmdbId, type, season, episode) {
+  var attempts = [];
+  for (var i = 0; i < VIDEASY_SERVER_FALLBACKS.length; i++) {
+    (function (fb) {
+      attempts.push({
+        label: fb.label,
+        run: function () {
+          if (type === "tv") {
+            return api.resolveTvEpisode(tmdbId, season, episode, fb.query, fb.timeoutMs);
+          }
+          return api.resolveMovie(tmdbId, fb.query, fb.timeoutMs);
+        },
+      });
+    })(VIDEASY_SERVER_FALLBACKS[i]);
+  }
+  return attempts;
+}
+
+function buildVideasyFallbacksExcluding(tmdbId, type, season, episode, excludeServer) {
+  var all = buildVideasyFallbacks(tmdbId, type, season, episode);
+  if (!excludeServer) return all;
+  var lower = String(excludeServer).toLowerCase();
+  return all.filter(function (attempt) {
+    return String(attempt.label).toLowerCase() !== lower;
+  });
+}
+
 function buildVidkingFallbacks(tmdbId, type, season, episode) {
   return type === "tv"
     ? buildTvVidkingFallbacks(tmdbId, season, episode)
@@ -895,9 +941,40 @@ function buildVidkingFallbacksExcluding(tmdbId, type, season, episode, excludeSe
   });
 }
 
+function buildVixsrcFallback(tmdbId, type, season, episode) {
+  return {
+    label: "VixSrc",
+    run: function () {
+      if (type === "tv") {
+        return api.resolveTvEpisode(
+          tmdbId,
+          season,
+          episode,
+          VIXSRC_QUERY,
+          PRIMARY_RESOLVE_TIMEOUT_MS
+        );
+      }
+      return api.resolveMovie(tmdbId, VIXSRC_QUERY, PRIMARY_RESOLVE_TIMEOUT_MS);
+    },
+  };
+}
+
 function buildPlaybackFallbacks(play, tmdbId, type, season, episode) {
   var current = currentPlayProvider(play);
   var backend = play && play.backend;
+  if (backend === "videasy" || isVideasyProviderName(current) || (backend === "auto" && isVideasyProviderName(current))) {
+    var videasyNext = buildVideasyFallbacksExcluding(
+      tmdbId,
+      type,
+      season,
+      episode,
+      current
+    );
+    return videasyNext
+      .concat([buildVixsrcFallback(tmdbId, type, season, episode)])
+      .concat(buildStreamflixProviderFallbacks(tmdbId, type, season, episode, null))
+      .concat(buildVidkingFallbacks(tmdbId, type, season, episode));
+  }
   if (backend === "vidking" || isVidkingProviderName(current)) {
     var vidkingNext = buildVidkingFallbacksExcluding(
       tmdbId,
@@ -923,13 +1000,18 @@ function buildReResolveQuery(overrides) {
   var parts = [];
   if (overrides.server) {
     parts.push("server=" + encodeURIComponent(overrides.server));
-    parts.push("backend=vidking");
+    parts.push(
+      "backend=" +
+        (isVideasyProviderName(overrides.server) ? "videasy" : "vidking")
+    );
   } else if (overrides.providerId) {
     parts.push("providerId=" + encodeURIComponent(overrides.providerId));
     parts.push("backend=streamflix");
   } else if (overrides.onlySourceId) {
     parts.push("onlySourceId=" + encodeURIComponent(overrides.onlySourceId));
-    parts.push("backend=tmdb-native");
+    parts.push(
+      "backend=" + (overrides.onlySourceId === "videasy" ? "videasy" : "tmdb-native")
+    );
   } else if (overrides.backend) {
     parts.push("backend=" + encodeURIComponent(overrides.backend));
   }
@@ -953,14 +1035,20 @@ function handlePlaybackFailure(session, err) {
 function buildEmptyResolveAttempts(tmdbId, type, season, episode, preferred) {
   var backend = config.getPlayBackend();
   var emptyAttempts = [];
+  if (backend === "videasy" || backend === "auto") {
+    emptyAttempts = emptyAttempts.concat(
+      buildVideasyFallbacks(tmdbId, type, season, episode)
+    );
+    emptyAttempts.push(buildVixsrcFallback(tmdbId, type, season, episode));
+  }
+  if (backend === "streamflix" || backend === "auto" || backend === "videasy" || backend === "vidking") {
+    emptyAttempts = emptyAttempts.concat(
+      buildStreamflixProviderFallbacks(tmdbId, type, season, episode, preferred)
+    );
+  }
   if (backend === "vidking" || backend === "auto") {
     emptyAttempts = emptyAttempts.concat(
       buildVidkingFallbacks(tmdbId, type, season, episode)
-    );
-  }
-  if (backend === "streamflix" || backend === "auto" || backend === "vidking") {
-    emptyAttempts = emptyAttempts.concat(
-      buildStreamflixProviderFallbacks(tmdbId, type, season, episode, preferred)
     );
   }
   emptyAttempts = emptyAttempts.concat(

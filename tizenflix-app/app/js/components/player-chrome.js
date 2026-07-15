@@ -18,6 +18,7 @@ var panelOpen = null;
 var providersCache = null;
 
 var HIDE_MS = 5000;
+var VIDEASY_SERVERS = ["Neon", "Yoru", "Tejo", "Sage", "Cypher"];
 var VIDKING_SERVERS = ["Oxygen", "Titanium", "Helium", "Hydrogen", "Lithium"];
 
 function escapeHtml(text) {
@@ -327,6 +328,18 @@ function renderServerPanel(panel) {
       "</button>";
   }
 
+  html += '<p class="player-panel-hint">CDN (Videasy)</p>';
+  for (var ve = 0; ve < VIDEASY_SERVERS.length; ve++) {
+    var vServer = VIDEASY_SERVERS[ve];
+    html +=
+      '<button type="button" class="player-panel-item focusable" data-videasy="' +
+      escapeHtml(vServer) +
+      '" aria-label="Videasy ' +
+      escapeHtml(vServer) +
+      '">' +
+      escapeHtml(vServer) +
+      "</button>";
+  }
   html += '<p class="player-panel-hint">CDN fallback (Vidking)</p>';
   for (var v = 0; v < VIDKING_SERVERS.length; v++) {
     var server = VIDKING_SERVERS[v];
@@ -346,6 +359,11 @@ function renderServerPanel(panel) {
     if (btn.hasAttribute("data-source-index")) {
       var idx = parseInt(btn.getAttribute("data-source-index"), 10);
       if (!isNaN(idx) && handlers.onSourceSwitch) handlers.onSourceSwitch(idx);
+      return;
+    }
+    var vs = btn.getAttribute("data-videasy");
+    if (vs && handlers.onReResolve) {
+      handlers.onReResolve({ server: vs, backend: "videasy" });
       return;
     }
     var vk = btn.getAttribute("data-vidking");

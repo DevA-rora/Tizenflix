@@ -12,10 +12,11 @@ opensubtitles is best for western movies, and subDL for non-western showings.
 - [ ] Add settings for user to change default resolution + resolution while streaming.
 - [ ] Apply anchor effect from the homepage to episode selector.
 
+
 # Doing
-- [ ] Consistent streams
 
 # Done
+- [x] Change of plans, let's use Videasy instead of Vidking (more reliable streams) — auto waterfall is now videasy → vixsrc → streamflix → embeds → vidking
 - [x] Let the user select which language they want streams to play in (native or specific)
 - [x] Add to settings the ability for the user to change the size of the grids. (small medium large)
 - [x] Add new row to keyboard.

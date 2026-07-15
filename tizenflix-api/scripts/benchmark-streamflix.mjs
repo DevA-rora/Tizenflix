@@ -5,15 +5,15 @@
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, requireTmdbKey } from "../src/config.js";
-import { resolvePlayableSources } from "../src/normalize/to-play-response.js";
-import { resolveStreamflixPlay } from "../src/streamflix/resolve.js";
-import { fetchMetadata } from "../src/api/metadata.js";
+import { loadConfig, requireTmdbKey } from "../dist/config.js";
+import { resolvePlayableSources } from "../dist/normalize/to-play-response.js";
+import { resolveStreamflixPlay } from "../dist/streamflix/resolve.js";
+import { fetchMetadata } from "../dist/api/metadata.js";
 import {
   checkPlaywrightReady,
   formatPlaywrightSetupHelp,
-} from "../src/streamflix/network/playwright-health.js";
-import { getEnabledProviders } from "../src/streamflix/providers/registry.js";
+} from "../dist/streamflix/network/playwright-health.js";
+import { getEnabledProviders } from "../dist/streamflix/providers/registry.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = loadConfig();
