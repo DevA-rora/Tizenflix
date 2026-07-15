@@ -14,6 +14,7 @@ opensubtitles is best for western movies, and subDL for non-western showings.
 
 
 # Doing
+- [ ] Test stream playback with videasy.
 
 # Done
 - [x] Change of plans, let's use Videasy instead of Vidking (more reliable streams) — auto waterfall is now videasy → vixsrc → streamflix → embeds → vidking

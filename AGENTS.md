@@ -13,7 +13,8 @@ Root `package.json` is TizenBrew LAN-dev module metadata only. Real commands liv
 
 - Install API: `cd tizenflix-api && npm install` (postinstall installs Playwright Chromium; set `TMDB_API_KEY` in `.env`)
 - Install app: `cd tizenflix-app && npm install`
-- Dev API: `cd tizenflix-api && PUBLIC_BASE=http://<LAN-IP>:8790 npm run api`
+- Dev API: `cd tizenflix-api && npm run dev` (auto-detects LAN IP; works on Linux + macOS)
+- Dev API (manual IP): `cd tizenflix-api && PUBLIC_BASE=http://<LAN-IP>:8790 npm run api`
 - Dev app: `cd tizenflix-app && npm start` (builds bundles, serves `:3010`)
 - Test: `cd tizenflix-api && npm test`
 - Lint: none configured in this repo

@@ -11,6 +11,7 @@
     "resolve": "node scripts/run.mjs scripts/resolve.mjs",
     "download": "node scripts/run.mjs scripts/download.mjs",
     "capture": "node scripts/capture-network.mjs",
+    "dev": "node scripts/dev-api.mjs",
     "api": "node scripts/run.mjs scripts/server.mjs",
     "save-fixtures": "node scripts/run.mjs scripts/save-fixtures.mjs",
     "sample-mp4": "node scripts/sample-mp4.mjs",
