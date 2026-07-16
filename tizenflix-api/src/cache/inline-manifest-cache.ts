@@ -1,4 +1,7 @@
-const TTL_MS = 5 * 60 * 1000;
+// Must outlive the client-side prefetch TTL (5 min, playback-session.js
+// PREFETCH_TTL_MS) so a prefetched play never resolves to an expired token,
+// which the TV surfaced as a FATAL manifestLoadError / networkError.
+const TTL_MS = 30 * 60 * 1000;
 
 export const INLINE_MANIFEST_PREFIX = "tizenflix-inline-manifest:";
 

@@ -159,7 +159,11 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Range");
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Length, Content-Range, Accept-Ranges"
+    );
     if (req.method === "OPTIONS") {
       res.status(204).end();
       return;
@@ -1248,7 +1252,9 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     };
     try {
       if (looksLikeBinarySegment(target)) {
-        await pipeProxiedStream(target, res, fetch, headerOptions);
+        const rangeHeader =
+          typeof req.headers.range === "string" ? req.headers.range : undefined;
+        await pipeProxiedStream(target, res, fetch, headerOptions, rangeHeader);
         return;
       }
 

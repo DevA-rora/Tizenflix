@@ -359,10 +359,18 @@ function resetVideoSource(video) {
 }
 
 function isProxiedHls(url) {
-  return url && url.indexOf("/proxy/stream") !== -1;
+  return (
+    !!url &&
+    (url.indexOf("/proxy/stream") !== -1 || url.indexOf("/proxy/inline-manifest") !== -1)
+  );
 }
 
 function prefersHlsJsFirst(url) {
+  // Every Tizenflix stream is served through our own proxy. hls.js is the path
+  // proven to work in desktop browsers and is far more tolerant of manifest
+  // quirks than Tizen's native AVPlay — which previously stalled on proxied HLS
+  // and forced the TMDB-native backup fallback. Prefer hls.js first for any
+  // proxied/inline HLS, including on Tizen.
   if (isProxiedHls(url)) return true;
   if (prefersNativeHls()) {
     var pref = config.getQualityPreference();
@@ -823,7 +831,18 @@ function playHlsJs(video, url, onLog, videoWrap, title, session, onFatal) {
       return;
     }
 
-    if (data.type === Hls.ErrorTypes.NETWORK_ERROR && fatalRetries < 3) {
+    // Manifest-level fatals mean hls.js already exhausted its internal manifest
+    // retries (manifestLoadingMaxRetry) against a manifest that is missing,
+    // expired (stale prefetch / inline-manifest token) or unparseable. Retrying
+    // startLoad(-1) cannot re-fetch a dead manifest — it only delays the source
+    // fallback and, when no fallback fires, surfaces as a FATAL to the user.
+    // Fail fast so playSources advances to the next source / escalation tier.
+    var isManifestFatal =
+      data.details === "manifestLoadError" ||
+      data.details === "manifestLoadTimeOut" ||
+      data.details === "manifestParsingError";
+
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !isManifestFatal && fatalRetries < 3) {
       fatalRetries += 1;
       debug.debugLog("HLS network error — retry " + fatalRetries);
       if (onLog) onLog("HLS network error — retry " + fatalRetries);

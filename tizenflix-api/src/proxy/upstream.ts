@@ -113,11 +113,15 @@ async function drainResponseBody(res: globalThis.Response): Promise<void> {
 async function fetchOnce(
   targetUrl: string,
   headers: HeadersInit,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  extraHeaders?: Record<string, string>
 ): Promise<globalThis.Response> {
+  const finalHeaders = extraHeaders
+    ? { ...(headers as Record<string, string>), ...extraHeaders }
+    : headers;
   return fetchWithTimeout(
     targetUrl,
-    { headers, redirect: "follow" },
+    { headers: finalHeaders, redirect: "follow" },
     UPSTREAM_TIMEOUT_MS,
     fetchImpl
   );
@@ -144,10 +148,11 @@ function refererAttemptsForIronbubble(headerOptions?: UpstreamHeaderOptions): st
 export async function fetchUpstreamWithRefererFallback(
   targetUrl: string,
   fetchImpl: typeof fetch = fetch,
-  headerOptions?: UpstreamHeaderOptions
+  headerOptions?: UpstreamHeaderOptions,
+  extraHeaders?: Record<string, string>
 ): Promise<globalThis.Response> {
   if (prefersBareUpstreamHeaders(targetUrl)) {
-    const bare = await fetchOnce(targetUrl, BARE_UPSTREAM_HEADERS, fetchImpl);
+    const bare = await fetchOnce(targetUrl, BARE_UPSTREAM_HEADERS, fetchImpl, extraHeaders);
     if (bare.status !== 403) return bare;
     await drainResponseBody(bare);
 
@@ -163,7 +168,7 @@ export async function fetchUpstreamWithRefererFallback(
           }
         })(),
       });
-      const attempt = await fetchOnce(targetUrl, headers, fetchImpl);
+      const attempt = await fetchOnce(targetUrl, headers, fetchImpl, extraHeaders);
       if (attempt.status !== 403) return attempt;
       await drainResponseBody(attempt);
     }
@@ -172,7 +177,7 @@ export async function fetchUpstreamWithRefererFallback(
   }
 
   const primary = buildUpstreamHeaders(headerOptions);
-  const first = await fetchOnce(targetUrl, primary, fetchImpl);
+  const first = await fetchOnce(targetUrl, primary, fetchImpl, extraHeaders);
 
   if (first.status !== 403 || !headersIncludeOriginOrReferer(primary)) {
     return first;
@@ -180,7 +185,7 @@ export async function fetchUpstreamWithRefererFallback(
 
   await drainResponseBody(first);
 
-  return fetchOnce(targetUrl, BARE_UPSTREAM_HEADERS, fetchImpl);
+  return fetchOnce(targetUrl, BARE_UPSTREAM_HEADERS, fetchImpl, extraHeaders);
 }
 
 export interface ProxyStreamResult {
@@ -199,18 +204,36 @@ export async function pipeProxiedStream(
   targetUrl: string,
   res: Response,
   fetchImpl: typeof fetch = fetch,
-  headerOptions?: UpstreamHeaderOptions
+  headerOptions?: UpstreamHeaderOptions,
+  rangeHeader?: string
 ): Promise<void> {
+  // Forward the client's Range request upstream so Tizen/native players that
+  // require partial-content (206) get it. Desktop hls.js/MSE does not send Range,
+  // so this is additive and does not affect the working browser path.
+  const extraHeaders =
+    typeof rangeHeader === "string" && rangeHeader ? { Range: rangeHeader } : undefined;
+
   const upstream = await fetchUpstreamWithRefererFallback(
     targetUrl,
     fetchImpl,
-    headerOptions
+    headerOptions,
+    extraHeaders
   );
 
   res.status(upstream.status);
   const contentType = upstream.headers.get("content-type");
   if (contentType) res.setHeader("content-type", contentType);
   res.setHeader("access-control-allow-origin", "*");
+  res.setHeader(
+    "access-control-expose-headers",
+    "Content-Length, Content-Range, Accept-Ranges"
+  );
+  // Advertise/propagate range capability so TV players issue and trust seeks.
+  res.setHeader("accept-ranges", upstream.headers.get("accept-ranges") || "bytes");
+  const contentRange = upstream.headers.get("content-range");
+  if (contentRange) res.setHeader("content-range", contentRange);
+  const contentLength = upstream.headers.get("content-length");
+  if (contentLength) res.setHeader("content-length", contentLength);
   res.setHeader("cache-control", "public, max-age=3600");
 
   if (!upstream.body) {

@@ -10,10 +10,10 @@ opensubtitles is best for western movies, and subDL for non-western showings.
 - [ ] Add a loading ring when the source stuff is being loaded.
 - [ ] Add settings for user to change default resolution + resolution while streaming.
 - [ ] Apply anchor effect from the homepage to episode selector.
-
+- [ ] Fix the episode picker in the player view (clicking on an episode doesn't play that episode...)
 
 # Doing
-- [ ] Fix the episode picker in the player view (clicking on an episode doesn't play that episode...)
+- [ ] Fix TV Playback (only working in Web Browser currently, but not the TV...)
 
 # Done
 - [x] Test stream playback with videasy.

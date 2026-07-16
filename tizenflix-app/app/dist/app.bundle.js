@@ -2650,7 +2650,7 @@ var TizenflixApp = (function() {
         video.load();
       }
       function isProxiedHls(url) {
-        return url && url.indexOf("/proxy/stream") !== -1;
+        return !!url && (url.indexOf("/proxy/stream") !== -1 || url.indexOf("/proxy/inline-manifest") !== -1);
       }
       function prefersHlsJsFirst(url) {
         if (isProxiedHls(url)) return true;
@@ -3063,7 +3063,8 @@ var TizenflixApp = (function() {
             recoverNonFatalHlsError(hlsInstance, video, data, onLog);
             return;
           }
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && fatalRetries < 3) {
+          var isManifestFatal = data.details === "manifestLoadError" || data.details === "manifestLoadTimeOut" || data.details === "manifestParsingError";
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !isManifestFatal && fatalRetries < 3) {
             fatalRetries += 1;
             debug.debugLog("HLS network error \u2014 retry " + fatalRetries);
             if (onLog) onLog("HLS network error \u2014 retry " + fatalRetries);
