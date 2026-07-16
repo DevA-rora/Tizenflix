@@ -211,6 +211,33 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
     res.json({ ok: true, service: "tizenflix-api", publicBase });
   });
 
+  app.get("/proxy/health", async (_req, res) => {
+    const { getRequestStats } = await import("../proxy/request-logger.js");
+    const { getDedupStats } = await import("../proxy/request-deduplication.js");
+    const stats = getRequestStats();
+    const dedupStats = getDedupStats();
+    
+    res.json({
+      ok: true,
+      service: "tizenflix-proxy",
+      stats: {
+        totalRequests: stats.totalRequests,
+        rateLimitedRequests: stats.rateLimitedRequests,
+        cacheHits: stats.cacheHits,
+        cacheHitRate: stats.totalRequests > 0 
+          ? ((stats.cacheHits / stats.totalRequests) * 100).toFixed(1) + "%"
+          : "0%",
+        rateLimitRate: stats.totalRequests > 0
+          ? ((stats.rateLimitedRequests / stats.totalRequests) * 100).toFixed(1) + "%"
+          : "0%",
+        last10Seconds: stats.last10Seconds,
+        requestsPerSecond: (stats.last10Seconds / 10).toFixed(1),
+        pendingDeduplications: dedupStats.pendingCount,
+        byHost: stats.byHost,
+      },
+    });
+  });
+
   app.get("/test/sample.mp4", (_req, res) => {
     const file = join(FIXTURES_DIR, "sample.mp4");
     if (!existsSync(file)) {
@@ -1217,12 +1244,13 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       typeof req.query.maxHeight === "string" ? parseInt(req.query.maxHeight, 10) : undefined;
     const maxHeight =
       maxHeightRaw && Number.isFinite(maxHeightRaw) && maxHeightRaw > 0 ? maxHeightRaw : undefined;
+    const tizenProfile = req.query.profile === "tizen";
     const rewritten = rewriteM3u8(
       entry.body,
       entry.upstreamUrl,
       publicBase,
       entry.referer ? { referer: entry.referer } : undefined,
-      { preferredAudioLang, maxHeight }
+      { preferredAudioLang, maxHeight, tizenProfile }
     );
     res.status(200);
     res.setHeader("content-type", "application/vnd.apple.mpegurl");
@@ -1245,15 +1273,19 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       typeof req.query.maxHeight === "string" ? parseInt(req.query.maxHeight, 10) : undefined;
     const maxHeight =
       maxHeightRaw && Number.isFinite(maxHeightRaw) && maxHeightRaw > 0 ? maxHeightRaw : undefined;
+    const tizenProfile = req.query.profile === "tizen";
     const headerOptions = {
       ...proxyHeaders,
       preferredAudioLang,
       maxHeight,
+      tizenProfile,
     };
+    
+    // Support Range requests for all content types (Task 10)
+    const rangeHeader = typeof req.headers.range === "string" ? req.headers.range : undefined;
+    
     try {
       if (looksLikeBinarySegment(target)) {
-        const rangeHeader =
-          typeof req.headers.range === "string" ? req.headers.range : undefined;
         await pipeProxiedStream(target, res, fetch, headerOptions, rangeHeader);
         return;
       }
@@ -1262,11 +1294,31 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
       res.status(result.status);
       if (result.contentType) res.setHeader("content-type", result.contentType);
       res.setHeader("access-control-allow-origin", "*");
-      if (result.rewritten) res.setHeader("x-m3u8-rewritten", "true");
+      res.setHeader("accept-ranges", "bytes");  // Advertise range support
+      
+      // Add cache control based on content type
+      if (result.rewritten) {
+        res.setHeader("x-m3u8-rewritten", "true");
+        res.setHeader("cache-control", "public, max-age=60");  // Manifests: 1 min
+      } else {
+        res.setHeader("cache-control", "public, max-age=3600");  // Other content: 1 hour
+      }
+      
       if (typeof result.body === "string") res.send(result.body);
       else res.send(Buffer.from(result.body));
     } catch (err) {
-      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      
+      // Provide better error messages for rate limiting
+      if (errMsg.includes("429") || errMsg.includes("Rate limited")) {
+        res.status(429).json({
+          error: "CDN rate limit exceeded",
+          message: "Too many requests. Wait 30 seconds and try again.",
+          retryAfter: 30,
+        });
+      } else {
+        res.status(502).json({ error: errMsg });
+      }
     }
   });
 }

@@ -33,3 +33,13 @@ You do **not** need a polished UI or npm publish for the first LAN test.
 - [TV setup & gate test explained](docs/tv-setup.md)
 - [TizenBrew research & build plan](docs/tizenbrew-app-research.md)
 - [API reference](tizenflix-api/api_info.md)
+- [**TV Playback Fix - CDN Rate Limiting Solution**](TV_PLAYBACK_FIX_SUMMARY.md) ← **NEW**
+
+## Troubleshooting
+
+### TV Shows "All Sources Failed" Error
+See [TV_PLAYBACK_FIX_SUMMARY.md](TV_PLAYBACK_FIX_SUMMARY.md) for comprehensive CDN rate limiting fix that addresses:
+- HTTP 429 (Too Many Requests) errors
+- TV-specific hls.js optimization
+- Request deduplication and caching improvements
+- Monitoring and debugging tools

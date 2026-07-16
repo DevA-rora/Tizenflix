@@ -1,5 +1,6 @@
 .env
 node_modules/
+.claude
 utils/user-config.json
 
 # API runtime data

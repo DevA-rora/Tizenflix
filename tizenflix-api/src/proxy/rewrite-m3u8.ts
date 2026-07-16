@@ -45,6 +45,8 @@ export interface SimplifyMasterOptions {
   preferredAudioLang?: string;
   /** Max manifest rung height (default 1080; use 2160 for 4K). */
   maxHeight?: number;
+  /** Force lower quality for TV to reduce rate limiting (default: false) */
+  tizenProfile?: boolean;
 }
 
 function pickAudioLine(mediaLines: string[], preferredAudioLang?: string): string | undefined {
@@ -77,9 +79,12 @@ export function simplifyMasterForTv(
     typeof maxRungsOrOptions === "number"
       ? { maxRungs: maxRungsOrOptions }
       : maxRungsOrOptions;
-  const maxRungs = options.maxRungs ?? 3;
+  
+  // Reduce rungs for TV to minimize requests and avoid rate limiting
+  const maxRungs = options.tizenProfile ? 2 : (options.maxRungs ?? 3);
   const preferredAudioLang = options.preferredAudioLang;
   const maxHeight = options.maxHeight ?? 1080;
+  
   if (!isMasterPlaylist(content)) return content;
 
   const lines = content.split(/\r?\n/);
@@ -143,7 +148,7 @@ export function rewriteM3u8(
   headers?: ProxyHeaderParams,
   options?: SimplifyMasterOptions
 ): string {
-  const simplified = simplifyMasterForTv(content, options ?? { maxRungs: 3 });
+  const simplified = simplifyMasterForTv(content, options ?? { maxRungs: 3, tizenProfile: false });
   const maxHeight = options?.maxHeight;
   const lines = simplified.split(/\r?\n/);
   const out: string[] = [];

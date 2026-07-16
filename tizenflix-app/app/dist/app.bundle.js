@@ -2663,11 +2663,63 @@ var TizenflixApp = (function() {
       }
       function createHlsInstance() {
         var extra = config.getExtraBuffering();
-        var baseMax = extra ? 120 : isTizenTv() ? 90 : 60;
+        var isTV = isTizenTv();
+        if (isTV) {
+          return new Hls({
+            enableWorker: false,
+            // Reduced buffer sizes for TV to minimize concurrent requests
+            maxBufferLength: 20,
+            // Was 90 - reduced to prevent burst requests
+            maxMaxBufferLength: 60,
+            // Was 240 - keep buffer modest
+            maxBufferSize: 60 * 1e3 * 1e3,
+            // 60MB limit
+            maxBufferHole: 2,
+            highBufferWatchdogPeriod: 3,
+            nudgeOffset: 0.1,
+            nudgeMaxRetry: 8,
+            // Reduced from 12
+            maxFragLookUpTolerance: 0.5,
+            maxAudioFramesDrift: 3,
+            stretchShortVideoTrack: true,
+            // Reduced timeouts for faster failure detection
+            fragLoadingTimeOut: 3e4,
+            // Was 90000 - 30s timeout
+            manifestLoadingTimeOut: 2e4,
+            // Was 45000 - 20s timeout
+            levelLoadingTimeOut: 2e4,
+            // Was 45000 - 20s timeout
+            // Fewer retries to avoid hammering CDN
+            fragLoadingMaxRetry: 5,
+            // Was 10
+            fragLoadingRetryDelay: 2e3,
+            // Longer delay between retries
+            manifestLoadingMaxRetry: 3,
+            // Was 6 - fewer manifest retries
+            levelLoadingMaxRetry: 3,
+            // Was 6
+            startLevel: -1,
+            capLevelToPlayerSize: false,
+            testBandwidth: false,
+            abrEwmaDefaultEstimate: 5e6,
+            // Lower initial estimate
+            // CRITICAL: Disable prefetch to avoid burst requests
+            startFragPrefetch: false,
+            // Was true - this prevents request bursts!
+            backBufferLength: 30,
+            // Reduced from 45
+            maxStarvationDelay: 4,
+            maxLoadingDelay: 4,
+            // Additional TV-specific settings
+            lowLatencyMode: false,
+            maxLiveSyncPlaybackRate: 1
+          });
+        }
+        var baseMax = extra ? 120 : 60;
         return new Hls({
           enableWorker: false,
           maxBufferLength: baseMax,
-          maxMaxBufferLength: extra ? 300 : isTizenTv() ? 240 : 180,
+          maxMaxBufferLength: extra ? 300 : 180,
           maxBufferSize: 120 * 1e3 * 1e3,
           maxBufferHole: 2,
           highBufferWatchdogPeriod: 3,
@@ -3066,8 +3118,9 @@ var TizenflixApp = (function() {
           var isManifestFatal = data.details === "manifestLoadError" || data.details === "manifestLoadTimeOut" || data.details === "manifestParsingError";
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !isManifestFatal && fatalRetries < 3) {
             fatalRetries += 1;
-            debug.debugLog("HLS network error \u2014 retry " + fatalRetries);
-            if (onLog) onLog("HLS network error \u2014 retry " + fatalRetries);
+            var retryMsg = "HLS network error \u2014 retry " + fatalRetries + "/3";
+            debug.debugLog(retryMsg);
+            if (onLog) onLog(retryMsg);
             try {
               hlsInstance.startLoad(-1);
             } catch (e) {
@@ -3076,12 +3129,28 @@ var TizenflixApp = (function() {
           }
           if (data.type === Hls.ErrorTypes.MEDIA_ERROR && fatalRetries < 3) {
             fatalRetries += 1;
-            debug.debugLog("HLS media error \u2014 recover " + fatalRetries);
-            if (onLog) onLog("HLS media error \u2014 recover " + fatalRetries);
+            var mediaRetryMsg = "HLS media error \u2014 recover " + fatalRetries + "/3";
+            debug.debugLog(mediaRetryMsg);
+            if (onLog) onLog(mediaRetryMsg);
             try {
               hlsInstance.recoverMediaError();
             } catch (e) {
             }
+            return;
+          }
+          if (isTizenTv() && canNativeHls(video) && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            var nativeFallbackMsg = "HLS.js network failures \u2014 trying native HLS player";
+            debug.debugLog(nativeFallbackMsg);
+            if (onLog) onLog(nativeFallbackMsg);
+            if (hlsInstance) {
+              try {
+                hlsInstance.detachMedia();
+              } catch (e) {
+              }
+              hlsInstance.destroy();
+              hlsInstance = null;
+            }
+            playNativeHls(video, url, onLog, videoWrap, title, session, null, onFatal);
             return;
           }
           if (hlsInstance) {
@@ -3230,11 +3299,22 @@ var TizenflixApp = (function() {
         function tryNext(reason) {
           if (reason) {
             lastFailureReason = reason;
+            var userMsg = reason;
+            if (reason.indexOf("429") !== -1 || reason.indexOf("Rate limit") !== -1) {
+              userMsg = "CDN rate limit \u2014 trying next source...";
+            } else if (reason.indexOf("manifestLoadError") !== -1 || reason.indexOf("manifestLoadTimeOut") !== -1) {
+              userMsg = "Manifest fetch failed \u2014 trying next source...";
+            } else if (reason.indexOf("NETWORK_ERROR") !== -1) {
+              userMsg = "Network error \u2014 trying next source...";
+            }
             debug.debugLog(reason);
-            if (onLog) onLog(reason);
+            if (onLog) onLog(userMsg);
           }
           if (index >= sources.length) {
             var done = "All sources failed \u2014 CDN may be blocking playback";
+            if (lastFailureReason && (lastFailureReason.indexOf("429") !== -1 || lastFailureReason.indexOf("Rate limit") !== -1 || lastFailureReason.indexOf("NETWORK_ERROR") !== -1)) {
+              done = "All sources failed \u2014 possible CDN rate limit. Wait 30s and try again.";
+            }
             debug.debugLog(done);
             if (onLog) onLog(done);
             if (options.onAllSourcesFailed) {
