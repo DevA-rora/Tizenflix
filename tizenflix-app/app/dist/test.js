@@ -1,4 +1,4 @@
-var TizenflixApp = (function() {
+(function() {
   var __getOwnPropNames = Object.getOwnPropertyNames;
   var __commonJS = function(cb, mod) {
     return function __require() {
@@ -3113,7 +3113,7 @@ var TizenflixApp = (function() {
       function playNativeHls(video, url, onLog, videoWrap, title, session, onStallFallback, onFatal) {
         debug.debugLog("Player path: native HLS");
         if (onLog) onLog("Player path: native HLS (wait up to 5s, then HLS.js fallback)");
-        setCrossOrigin(video, false);
+        setCrossOrigin(video, true);
         video.src = url;
         setupNativeQualityTracking(video, session);
         function fallback(reason) {
@@ -8366,5 +8366,5 @@ var TizenflixApp = (function() {
       };
     }
   });
-  return require_app();
+  require_app();
 })();

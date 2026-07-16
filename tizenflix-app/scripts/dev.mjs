@@ -70,6 +70,7 @@ function safePath(urlPath) {
 }
 
 const server = http.createServer((req, res) => {
+  console.log("[dev] " + req.method + " " + req.url);
   const filePath = safePath(req.url);
   if (!filePath) {
     res.writeHead(403);

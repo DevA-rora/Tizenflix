@@ -5,7 +5,7 @@ Netflix-style streaming for Samsung TVs via TizenBrew (educational purposes only
 
 ## Tech Stack
 - Backend: Node.js >=18, TypeScript ^5.8, Express ^5.1 (Vitest + Playwright)
-- Frontend: Vanilla JS TizenBrew SPA, esbuild-bundled to ES2015 IIFE (not React)
+- Frontend: Vanilla JS TizenBrew SPA, esbuild-bundled to ES5 IIFE (not React)
 - Database: none — progress, jobs, and provider health are local JSON under `tizenflix-api/data/`
 
 ## Commands
@@ -32,6 +32,7 @@ Root `package.json` is TizenBrew LAN-dev module metadata only. Real commands liv
 - API tests live in `tizenflix-api/tests/` (Vitest)
 - After editing `tizenflix-app/app/js/**`, run `npm run build` before TV testing (TV loads `app/dist/*.bundle.js`)
 - Follow `tizenflix-app/TIZEN_COMPAT.md` (no CSS vars / `gap` / `grid` / `aspect-ratio` on TV)
+- **CRITICAL COMPATIBILITY NOTE**: The `esbuild` target in `tizenflix-app/package.json` **MUST** be set to `es5` (not `es2015`). Tizen TVs use older Chromium engines that throw fatal syntax errors on ES6 features (like arrow functions in IIFE wrappers or object property shorthands) causing the app to freeze on the "Loading Tizenflix..." screen.
 
 ## Do not touch
 - `tizenflix-api/data/` — runtime state (gitignored)

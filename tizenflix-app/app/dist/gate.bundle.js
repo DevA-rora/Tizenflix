@@ -1,12 +1,14 @@
-var TizenflixGate = (() => {
+var TizenflixGate = (function() {
   var __getOwnPropNames = Object.getOwnPropertyNames;
-  var __commonJS = (cb, mod) => function __require() {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  var __commonJS = function(cb, mod) {
+    return function __require() {
+      return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+    };
   };
 
   // app/js/core/config.js
   var require_config = __commonJS({
-    "app/js/core/config.js"(exports, module) {
+    "app/js/core/config.js": function(exports, module) {
       var STORAGE_KEY = "tizenflix.apiBase";
       var QUALITY_MODE_KEY = "tizenflix.qualityMode";
       var QUALITY_LEVEL_KEY = "tizenflix.qualityLevel";
@@ -356,12 +358,12 @@ var TizenflixGate = (() => {
       }
       function setQualityLevel(index) {
         var level = typeof index === "number" && isFinite(index) && index >= 0 ? Math.floor(index) : 0;
-        writeQualityLevelPref({ mode: "manual", level });
+        writeQualityLevelPref({ mode: "manual", level: level });
         try {
           localStorage.removeItem(QUALITY_MODE_KEY);
         } catch (err) {
         }
-        return { mode: "manual", level };
+        return { mode: "manual", level: level };
       }
       function resolveLegacyQualityLevel(hls) {
         var pref = getQualityPreference();
@@ -640,85 +642,85 @@ var TizenflixGate = (() => {
         });
       }
       module.exports = {
-        STORAGE_KEY,
-        QUALITY_MODE_KEY,
-        QUALITY_LEVEL_KEY,
-        DEV_MODE_KEY,
-        PLAY_RESOLVE_TIMEOUT_MS,
-        deriveDefaultApi,
-        API_PORT,
-        VALID_QUALITY_MODES,
-        isTizenClient,
-        getDevMode,
-        setDevMode,
-        buildPlayQuery,
-        getPlayBackend,
-        setPlayBackend,
-        getPreferredSourceId,
-        setPreferredSourceId,
-        getPreferredProviderId,
-        setPreferredProviderId,
-        getApiBase,
-        setApiBase,
-        getQualityMode,
-        setQualityMode,
-        getQualityPreference,
-        setQualityAuto,
-        setQualityLevel,
-        resolveLegacyQualityLevel,
-        levelIndexForLegacyMode,
-        levelIndexForTargetHeight,
-        getTargetResolution,
-        setTargetResolution,
-        targetResolutionPixels,
-        preferredQualityForTarget,
-        parseHeightFromLabel,
-        orderSourcesForTargetResolution,
-        maxSourceHeight,
-        qualityHeightScore,
-        isBelowTargetResolution,
-        VALID_TARGET_RESOLUTIONS,
-        checkHealth,
-        resolveMovie,
-        resolveTvEpisode,
-        pickPlayableSource,
-        listM3u8Sources,
-        orderSourcesForPlay,
-        listSourcesToTry,
-        detectStreamType,
-        logLine,
-        apiGet,
-        apiPost,
-        fetchWithTimeout,
-        GRID_SCALE_KEY,
-        getGridScale,
-        setGridScale,
-        applyGridScale,
-        getAutoplayNext,
-        setAutoplayNext,
-        getAutoplayBufferSec,
-        setAutoplayBufferSec,
-        getExtraBuffering,
-        setExtraBuffering,
-        getPlaybackSpeed,
-        setPlaybackSpeed,
-        cyclePlaybackSpeed,
-        getCatalogLang,
-        setCatalogLang,
-        CATALOG_LANG_KEY,
-        AUDIO_PREF_KEY,
-        VALID_AUDIO_PREFS,
-        getAudioPref,
-        setAudioPref,
-        getUiAnimations,
-        setUiAnimations
+        STORAGE_KEY: STORAGE_KEY,
+        QUALITY_MODE_KEY: QUALITY_MODE_KEY,
+        QUALITY_LEVEL_KEY: QUALITY_LEVEL_KEY,
+        DEV_MODE_KEY: DEV_MODE_KEY,
+        PLAY_RESOLVE_TIMEOUT_MS: PLAY_RESOLVE_TIMEOUT_MS,
+        deriveDefaultApi: deriveDefaultApi,
+        API_PORT: API_PORT,
+        VALID_QUALITY_MODES: VALID_QUALITY_MODES,
+        isTizenClient: isTizenClient,
+        getDevMode: getDevMode,
+        setDevMode: setDevMode,
+        buildPlayQuery: buildPlayQuery,
+        getPlayBackend: getPlayBackend,
+        setPlayBackend: setPlayBackend,
+        getPreferredSourceId: getPreferredSourceId,
+        setPreferredSourceId: setPreferredSourceId,
+        getPreferredProviderId: getPreferredProviderId,
+        setPreferredProviderId: setPreferredProviderId,
+        getApiBase: getApiBase,
+        setApiBase: setApiBase,
+        getQualityMode: getQualityMode,
+        setQualityMode: setQualityMode,
+        getQualityPreference: getQualityPreference,
+        setQualityAuto: setQualityAuto,
+        setQualityLevel: setQualityLevel,
+        resolveLegacyQualityLevel: resolveLegacyQualityLevel,
+        levelIndexForLegacyMode: levelIndexForLegacyMode,
+        levelIndexForTargetHeight: levelIndexForTargetHeight,
+        getTargetResolution: getTargetResolution,
+        setTargetResolution: setTargetResolution,
+        targetResolutionPixels: targetResolutionPixels,
+        preferredQualityForTarget: preferredQualityForTarget,
+        parseHeightFromLabel: parseHeightFromLabel,
+        orderSourcesForTargetResolution: orderSourcesForTargetResolution,
+        maxSourceHeight: maxSourceHeight,
+        qualityHeightScore: qualityHeightScore,
+        isBelowTargetResolution: isBelowTargetResolution,
+        VALID_TARGET_RESOLUTIONS: VALID_TARGET_RESOLUTIONS,
+        checkHealth: checkHealth,
+        resolveMovie: resolveMovie,
+        resolveTvEpisode: resolveTvEpisode,
+        pickPlayableSource: pickPlayableSource,
+        listM3u8Sources: listM3u8Sources,
+        orderSourcesForPlay: orderSourcesForPlay,
+        listSourcesToTry: listSourcesToTry,
+        detectStreamType: detectStreamType,
+        logLine: logLine,
+        apiGet: apiGet,
+        apiPost: apiPost,
+        fetchWithTimeout: fetchWithTimeout,
+        GRID_SCALE_KEY: GRID_SCALE_KEY,
+        getGridScale: getGridScale,
+        setGridScale: setGridScale,
+        applyGridScale: applyGridScale,
+        getAutoplayNext: getAutoplayNext,
+        setAutoplayNext: setAutoplayNext,
+        getAutoplayBufferSec: getAutoplayBufferSec,
+        setAutoplayBufferSec: setAutoplayBufferSec,
+        getExtraBuffering: getExtraBuffering,
+        setExtraBuffering: setExtraBuffering,
+        getPlaybackSpeed: getPlaybackSpeed,
+        setPlaybackSpeed: setPlaybackSpeed,
+        cyclePlaybackSpeed: cyclePlaybackSpeed,
+        getCatalogLang: getCatalogLang,
+        setCatalogLang: setCatalogLang,
+        CATALOG_LANG_KEY: CATALOG_LANG_KEY,
+        AUDIO_PREF_KEY: AUDIO_PREF_KEY,
+        VALID_AUDIO_PREFS: VALID_AUDIO_PREFS,
+        getAudioPref: getAudioPref,
+        setAudioPref: setAudioPref,
+        getUiAnimations: getUiAnimations,
+        setUiAnimations: setUiAnimations
       };
     }
   });
 
   // app/js/core/debug.js
   var require_debug = __commonJS({
-    "app/js/core/debug.js"(exports, module) {
+    "app/js/core/debug.js": function(exports, module) {
       var MAX_LINES = 8;
       var lines = [];
       var READY_LABELS = {
@@ -804,18 +806,18 @@ var TizenflixGate = (() => {
         });
       }
       module.exports = {
-        debugLog,
-        debugClear,
-        describeVideoError,
-        formatVideoState,
-        attachVideoDebug
+        debugLog: debugLog,
+        debugClear: debugClear,
+        describeVideoError: describeVideoError,
+        formatVideoState: formatVideoState,
+        attachVideoDebug: attachVideoDebug
       };
     }
   });
 
   // app/js/player/player.js
   var require_player = __commonJS({
-    "app/js/player/player.js"(exports, module) {
+    "app/js/player/player.js": function(exports, module) {
       var config2 = require_config();
       var debug2 = require_debug();
       var hlsInstance = null;
@@ -1211,7 +1213,7 @@ var TizenflixGate = (() => {
           var level = hls.levels[i];
           var label = formatQualityLabel(level);
           if (label === "Level") label = "Level " + (i + 1);
-          out.push({ level: i, label, bitrate: level.bitrate || 0, height: level.height || 0 });
+          out.push({ level: i, label: label, bitrate: level.bitrate || 0, height: level.height || 0 });
         }
         return out;
       }
@@ -1231,9 +1233,9 @@ var TizenflixGate = (() => {
             if (label === "Level") label = "\u2014";
           }
           return {
-            label,
-            height,
-            isAuto,
+            label: label,
+            height: height,
+            isAuto: isAuto,
             badge: isAuto && label !== "\u2014" ? "Auto \xB7 " + label : label
           };
         }
@@ -1327,7 +1329,7 @@ var TizenflixGate = (() => {
         fetch(base + "/play/report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: currentProvider, success })
+          body: JSON.stringify({ provider: currentProvider, success: success })
         }).catch(function() {
         });
       }
@@ -1597,7 +1599,7 @@ var TizenflixGate = (() => {
       function playNativeHls(video, url, onLog, videoWrap, title, session, onStallFallback, onFatal) {
         debug2.debugLog("Player path: native HLS");
         if (onLog) onLog("Player path: native HLS (wait up to 5s, then HLS.js fallback)");
-        setCrossOrigin(video, true);
+        setCrossOrigin(video, false);
         video.src = url;
         setupNativeQualityTracking(video, session);
         function fallback(reason) {
@@ -1622,7 +1624,7 @@ var TizenflixGate = (() => {
           video.removeEventListener("error", onVideoError);
         });
         startPlaybackWhenReady(video, videoWrap, title, onLog, {
-          session,
+          session: session,
           onStall: function() {
             if (video.networkState === 3) {
               debug2.debugLog("Native HLS: networkState=no_source");
@@ -1683,7 +1685,7 @@ var TizenflixGate = (() => {
         if (onLog) onLog("Player path: direct " + config2.detectStreamType(url));
         setCrossOrigin(video, !!needsCors);
         video.src = url;
-        startPlaybackWhenReady(video, videoWrap, title, onLog, { session });
+        startPlaybackWhenReady(video, videoWrap, title, onLog, { session: session });
       }
       function playDirect(video, url, onLog, videoWrap, title, needsCors) {
         destroyPlayer(video);
@@ -1803,33 +1805,33 @@ var TizenflixGate = (() => {
         return false;
       }
       module.exports = {
-        destroyPlayer,
-        playUrl,
-        playSources,
-        playDirect,
-        showVideoWrap,
-        enterPlaybackMode,
-        showPlaybackChrome,
-        exitPlaybackMode,
-        applySubtitles,
-        selectSubtitle,
-        bindSubtitleButton,
-        cycleSubtitles,
-        seekBy,
-        getPlaybackState,
-        isTizenTv,
-        logVideoState,
-        safePlay,
-        togglePlayPause,
-        isMediaPlayPauseKey,
-        getQualityOptions,
-        applyQualityMode,
-        applyQualityPreference,
-        setQualityLevel,
-        getCurrentQuality,
-        onQualityChange,
-        formatQualityLabel,
-        setResumePosition,
+        destroyPlayer: destroyPlayer,
+        playUrl: playUrl,
+        playSources: playSources,
+        playDirect: playDirect,
+        showVideoWrap: showVideoWrap,
+        enterPlaybackMode: enterPlaybackMode,
+        showPlaybackChrome: showPlaybackChrome,
+        exitPlaybackMode: exitPlaybackMode,
+        applySubtitles: applySubtitles,
+        selectSubtitle: selectSubtitle,
+        bindSubtitleButton: bindSubtitleButton,
+        cycleSubtitles: cycleSubtitles,
+        seekBy: seekBy,
+        getPlaybackState: getPlaybackState,
+        isTizenTv: isTizenTv,
+        logVideoState: logVideoState,
+        safePlay: safePlay,
+        togglePlayPause: togglePlayPause,
+        isMediaPlayPauseKey: isMediaPlayPauseKey,
+        getQualityOptions: getQualityOptions,
+        applyQualityMode: applyQualityMode,
+        applyQualityPreference: applyQualityPreference,
+        setQualityLevel: setQualityLevel,
+        getCurrentQuality: getCurrentQuality,
+        onQualityChange: onQualityChange,
+        formatQualityLabel: formatQualityLabel,
+        setResumePosition: setResumePosition,
         getHlsInstance: function() {
           return hlsInstance;
         }
@@ -1839,7 +1841,7 @@ var TizenflixGate = (() => {
 
   // app/js/core/motion.js
   var require_motion = __commonJS({
-    "app/js/core/motion.js"(exports, module) {
+    "app/js/core/motion.js": function(exports, module) {
       var config2 = require_config();
       var EASE_CURVE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
       var BROWSER = {
@@ -1934,29 +1936,29 @@ var TizenflixGate = (() => {
         return scaled;
       }
       module.exports = {
-        EASE_CURVE,
-        BROWSER,
-        TV,
-        ROW_ANCHOR_SPOTLIGHT_PX,
-        ROW_ANCHOR_FALLBACK_PX,
-        BROWSE_LANE_MIN_PX,
-        isTvPerfMode,
-        setTvPerfMode,
-        getMotionProfile,
-        prefersReducedMotion,
-        animationsEnabled,
-        shouldSnapScroll,
-        useCssRowScroll,
-        easeOutCubic,
-        applyBodyClass,
-        computeBrowseLaneAnchorY
+        EASE_CURVE: EASE_CURVE,
+        BROWSER: BROWSER,
+        TV: TV,
+        ROW_ANCHOR_SPOTLIGHT_PX: ROW_ANCHOR_SPOTLIGHT_PX,
+        ROW_ANCHOR_FALLBACK_PX: ROW_ANCHOR_FALLBACK_PX,
+        BROWSE_LANE_MIN_PX: BROWSE_LANE_MIN_PX,
+        isTvPerfMode: isTvPerfMode,
+        setTvPerfMode: setTvPerfMode,
+        getMotionProfile: getMotionProfile,
+        prefersReducedMotion: prefersReducedMotion,
+        animationsEnabled: animationsEnabled,
+        shouldSnapScroll: shouldSnapScroll,
+        useCssRowScroll: useCssRowScroll,
+        easeOutCubic: easeOutCubic,
+        applyBodyClass: applyBodyClass,
+        computeBrowseLaneAnchorY: computeBrowseLaneAnchorY
       };
     }
   });
 
   // app/js/services/api.js
   var require_api = __commonJS({
-    "app/js/services/api.js"(exports, module) {
+    "app/js/services/api.js": function(exports, module) {
       var config2 = require_config();
       function getBase() {
         return config2.getApiBase();
@@ -2050,7 +2052,7 @@ var TizenflixGate = (() => {
         return config2.apiGet("/providers/streamflix");
       }
       function toggleStreamflixProvider(id, enabled) {
-        return config2.apiPost("/providers/streamflix/toggle", { id, enabled });
+        return config2.apiPost("/providers/streamflix/toggle", { id: id, enabled: enabled });
       }
       function getLiveProviders() {
         return config2.apiGet("/live/providers");
@@ -2064,41 +2066,41 @@ var TizenflixGate = (() => {
         );
       }
       module.exports = {
-        getBase,
+        getBase: getBase,
         setBase: config2.setApiBase,
-        health,
-        browseRows,
-        browseRow,
-        search,
-        searchSuggest,
-        getMovie,
-        getTv,
-        getSeasons,
-        getEpisodes,
-        resolveMovie,
-        resolveTvEpisode,
-        sourcesForPlay,
-        hasPlayableSources,
-        getProviders,
-        continueWatching,
-        saveProgress,
-        warmStreamUrl,
-        fetchPlaySubtitlesMovie,
-        fetchPlaySubtitlesTv,
-        listGenres,
-        browseGenre,
-        getStreamflixProviders,
-        toggleStreamflixProvider,
-        getLiveProviders,
-        getLiveChannels,
-        resolveLiveChannel
+        health: health,
+        browseRows: browseRows,
+        browseRow: browseRow,
+        search: search,
+        searchSuggest: searchSuggest,
+        getMovie: getMovie,
+        getTv: getTv,
+        getSeasons: getSeasons,
+        getEpisodes: getEpisodes,
+        resolveMovie: resolveMovie,
+        resolveTvEpisode: resolveTvEpisode,
+        sourcesForPlay: sourcesForPlay,
+        hasPlayableSources: hasPlayableSources,
+        getProviders: getProviders,
+        continueWatching: continueWatching,
+        saveProgress: saveProgress,
+        warmStreamUrl: warmStreamUrl,
+        fetchPlaySubtitlesMovie: fetchPlaySubtitlesMovie,
+        fetchPlaySubtitlesTv: fetchPlaySubtitlesTv,
+        listGenres: listGenres,
+        browseGenre: browseGenre,
+        getStreamflixProviders: getStreamflixProviders,
+        toggleStreamflixProvider: toggleStreamflixProvider,
+        getLiveProviders: getLiveProviders,
+        getLiveChannels: getLiveChannels,
+        resolveLiveChannel: resolveLiveChannel
       };
     }
   });
 
   // app/js/services/playback-session.js
   var require_playback_session = __commonJS({
-    "app/js/services/playback-session.js"(exports, module) {
+    "app/js/services/playback-session.js": function(exports, module) {
       var current = null;
       var prefetchCache = null;
       var warmedManifestUrl = null;
@@ -2107,7 +2109,7 @@ var TizenflixGate = (() => {
         return type + ":" + tmdbId + ":" + (season || "") + ":" + (episode || "");
       }
       function setPrefetch(key, play) {
-        prefetchCache = { key, play, fetchedAt: Date.now() };
+        prefetchCache = { key: key, play: play, fetchedAt: Date.now() };
       }
       function getPrefetch(key) {
         if (!prefetchCache || prefetchCache.key !== key) return null;
@@ -2178,24 +2180,24 @@ var TizenflixGate = (() => {
         current = null;
       }
       module.exports = {
-        create,
-        get,
-        update,
-        setFromPlay,
-        clear,
-        prefetchKey,
-        setPrefetch,
-        getPrefetch,
-        clearPrefetch,
-        setWarmedManifest,
-        getWarmedManifest
+        create: create,
+        get: get,
+        update: update,
+        setFromPlay: setFromPlay,
+        clear: clear,
+        prefetchKey: prefetchKey,
+        setPrefetch: setPrefetch,
+        getPrefetch: getPrefetch,
+        clearPrefetch: clearPrefetch,
+        setWarmedManifest: setWarmedManifest,
+        getWarmedManifest: getWarmedManifest
       };
     }
   });
 
   // app/js/core/player-focus.js
   var require_player_focus = __commonJS({
-    "app/js/core/player-focus.js"(exports, module) {
+    "app/js/core/player-focus.js": function(exports, module) {
       var FOCUS_SELECTOR = "button:not(:disabled), [tabindex='0']";
       var currentEl = null;
       var keyHandler = null;
@@ -2352,10 +2354,10 @@ var TizenflixGate = (() => {
       }
       module.exports = {
         init: init2,
-        destroy,
-        focusElement,
-        focusDefault,
-        setZoneProvider,
+        destroy: destroy,
+        focusElement: focusElement,
+        focusDefault: focusDefault,
+        setZoneProvider: setZoneProvider,
         getCurrent: function() {
           return currentEl;
         }
@@ -2365,7 +2367,7 @@ var TizenflixGate = (() => {
 
   // app/js/core/keys.js
   var require_keys = __commonJS({
-    "app/js/core/keys.js"(exports, module) {
+    "app/js/core/keys.js": function(exports, module) {
       function isBackKey(e) {
         if (!e) return false;
         if (e.key === "Back" || e.key === "Escape") return true;
@@ -2373,14 +2375,14 @@ var TizenflixGate = (() => {
         return code === 10009 || code === 461;
       }
       module.exports = {
-        isBackKey
+        isBackKey: isBackKey
       };
     }
   });
 
   // app/js/components/player-chrome.js
   var require_player_chrome = __commonJS({
-    "app/js/components/player-chrome.js"(exports, module) {
+    "app/js/components/player-chrome.js": function(exports, module) {
       var player2 = require_player();
       var playerFocus = require_player_focus();
       var api = require_api();
@@ -2659,7 +2661,7 @@ var TizenflixGate = (() => {
           var providerId = btn.getAttribute("data-provider-id");
           if (providerId && handlers.onReResolve) {
             config2.setPreferredProviderId(providerId);
-            handlers.onReResolve({ providerId, backend: "streamflix" });
+            handlers.onReResolve({ providerId: providerId, backend: "streamflix" });
           }
         });
         loadStreamflixProviders(panel, activeProviderId);
@@ -2735,7 +2737,7 @@ var TizenflixGate = (() => {
           for (var i = 0; i < episodes.length; i++) {
             (function(ep) {
               var active = ep.episode === session.episode ? " player-rail-card-active" : "";
-              var still = ep.still ? ` style="background-image:url('` + escapeHtml(ep.still) + `')"` : "";
+              var still = ep.still ? " style=\"background-image:url('" + escapeHtml(ep.still) + "')\"" : "";
               var card = document.createElement("button");
               card.type = "button";
               card.className = "player-rail-card focusable" + active;
@@ -2944,24 +2946,24 @@ var TizenflixGate = (() => {
         handlers = {};
       }
       module.exports = {
-        mount,
-        destroy,
-        show,
-        hide,
-        isVisible,
-        handleBack,
-        closePanel,
-        closeRail,
-        updateProgress,
-        updatePlayPauseIcon,
-        updateQualityBadge
+        mount: mount,
+        destroy: destroy,
+        show: show,
+        hide: hide,
+        isVisible: isVisible,
+        handleBack: handleBack,
+        closePanel: closePanel,
+        closeRail: closeRail,
+        updateProgress: updateProgress,
+        updatePlayPauseIcon: updatePlayPauseIcon,
+        updateQualityBadge: updateQualityBadge
       };
     }
   });
 
   // app/js/services/playback.js
   var require_playback = __commonJS({
-    "app/js/services/playback.js"(exports, module) {
+    "app/js/services/playback.js": function(exports, module) {
       var api = require_api();
       var config2 = require_config();
       var player2 = require_player();
@@ -3077,7 +3079,7 @@ var TizenflixGate = (() => {
           season: session.type === "tv" ? session.season : void 0,
           episode: session.type === "tv" ? session.episode : void 0,
           title: session.showTitle || session.title || "",
-          poster,
+          poster: poster,
           positionSeconds: Math.floor(position),
           durationSeconds: Math.floor(duration)
         };
@@ -3243,9 +3245,9 @@ var TizenflixGate = (() => {
               label,
               onStatus,
               {
-                showTitle,
-                episodeTitle,
-                overview,
+                showTitle: showTitle,
+                episodeTitle: episodeTitle,
+                overview: overview,
                 metaLine: session ? session.metaLine : ""
               }
             ).catch(function(err) {
@@ -3265,7 +3267,7 @@ var TizenflixGate = (() => {
               episode,
               showTitle + " S" + season + "E" + episode,
               onStatus,
-              { showTitle, metaLine: session.metaLine }
+              { showTitle: showTitle, metaLine: session.metaLine }
             ).catch(function(err) {
               log(err.message);
             });
@@ -3313,7 +3315,7 @@ var TizenflixGate = (() => {
               if (onStatus) onStatus(msg);
               return entry.run().then(function(play) {
                 if (play && api.hasPlayableSources(play)) {
-                  return { play, via: entry.label, tierIndex };
+                  return { play: play, via: entry.label, tierIndex: tierIndex };
                 }
                 return prev;
               }).catch(function(err) {
@@ -3329,7 +3331,7 @@ var TizenflixGate = (() => {
             if (onStatus) onStatus("Resolved via: " + result.via);
           }
           var fallbacks = result.tierIndex >= 0 ? resolveAttempts.slice(result.tierIndex + 1) : resolveAttempts;
-          return { play: result.play, via: result.via, fallbacks };
+          return { play: result.play, via: result.via, fallbacks: fallbacks };
         });
       }
       function escalatePlaybackFallback(fallbacks, title, onStatus, session, playOptions) {
@@ -3414,11 +3416,11 @@ var TizenflixGate = (() => {
         player2.playSources(video, sources, log, wrap, title || play.title || "Playback", sourceOptions);
         if (playOptions._upgradeAttempts && playOptions._upgradeAttempts.length) {
           pendingQualityUpgrade = {
-            session,
-            play,
-            title,
-            onStatus,
-            playOptions
+            session: session,
+            play: play,
+            title: title,
+            onStatus: onStatus,
+            playOptions: playOptions
           };
           setTimeout(function() {
             if (!pendingQualityUpgrade || pendingQualityUpgrade.session !== session) return;
@@ -3805,8 +3807,8 @@ var TizenflixGate = (() => {
                 onStatus("Trying fallback\u2026");
               }
               return {
-                play,
-                via,
+                play: play,
+                via: via,
                 fallbacks: buildPlaybackFallbacks(play, tmdbId, type, season, episode),
                 _upgradeAttempts: upgradeAttempts
               };
@@ -3874,9 +3876,9 @@ var TizenflixGate = (() => {
         meta = meta || {};
         var startSeconds = meta.startSeconds || 0;
         var sessionMeta = {
-          tmdbId,
+          tmdbId: tmdbId,
           type: "movie",
-          title,
+          title: title,
           displayTitle: title,
           showTitle: title
         };
@@ -3890,7 +3892,7 @@ var TizenflixGate = (() => {
             return Promise.reject(new Error(formatResolveError(result.play)));
           }
           return playResolved(result.play, title, onStatus, session, {
-            startSeconds,
+            startSeconds: startSeconds,
             _fallbacks: result.fallbacks || [],
             _upgradeAttempts: result._upgradeAttempts || []
           });
@@ -3902,11 +3904,11 @@ var TizenflixGate = (() => {
         meta = meta || {};
         var startSeconds = meta.startSeconds || 0;
         var sessionMeta = {
-          tmdbId,
+          tmdbId: tmdbId,
           type: "tv",
-          season,
-          episode,
-          title,
+          season: season,
+          episode: episode,
+          title: title,
           displayTitle: title,
           showTitle: meta.showTitle || title,
           episodeTitle: meta.episodeTitle || "",
@@ -3923,7 +3925,7 @@ var TizenflixGate = (() => {
             return Promise.reject(new Error(formatResolveError(result.play)));
           }
           return playResolved(result.play, title, onStatus, session, {
-            startSeconds,
+            startSeconds: startSeconds,
             _fallbacks: result.fallbacks || [],
             _upgradeAttempts: result._upgradeAttempts || []
           });
@@ -4019,23 +4021,23 @@ var TizenflixGate = (() => {
         return playbackSession.get();
       }
       module.exports = {
-        playResolved,
-        playMovie,
-        playTvEpisode,
-        prefetchMovie,
-        prefetchTvEpisode,
-        stop,
-        getSession,
-        switchSource,
-        reResolveWith,
-        handleBackKey
+        playResolved: playResolved,
+        playMovie: playMovie,
+        playTvEpisode: playTvEpisode,
+        prefetchMovie: prefetchMovie,
+        prefetchTvEpisode: prefetchTvEpisode,
+        stop: stop,
+        getSession: getSession,
+        switchSource: switchSource,
+        reResolveWith: reResolveWith,
+        handleBackKey: handleBackKey
       };
     }
   });
 
   // app/js/core/choreography.js
   var require_choreography = __commonJS({
-    "app/js/core/choreography.js"(exports, module) {
+    "app/js/core/choreography.js": function(exports, module) {
       var motion = require_motion();
       var focus2 = require_focus();
       var IMMERSIVE_SCREENS = {
@@ -4213,19 +4215,19 @@ var TizenflixGate = (() => {
         });
       }
       module.exports = {
-        pulseZoneCross,
-        runScreenTransition,
-        playDetailHandoff,
-        openDetail,
-        animateDetailContentIn,
-        revealDetailEpisodes
+        pulseZoneCross: pulseZoneCross,
+        runScreenTransition: runScreenTransition,
+        playDetailHandoff: playDetailHandoff,
+        openDetail: openDetail,
+        animateDetailContentIn: animateDetailContentIn,
+        revealDetailEpisodes: revealDetailEpisodes
       };
     }
   });
 
   // app/js/core/router.js
   var require_router = __commonJS({
-    "app/js/core/router.js"(exports, module) {
+    "app/js/core/router.js": function(exports, module) {
       var focus2 = require_focus();
       var playback = require_playback();
       var choreography = require_choreography();
@@ -4361,14 +4363,14 @@ var TizenflixGate = (() => {
         }
       }
       module.exports = {
-        register,
-        navigate,
-        replace,
-        back,
-        canBack,
-        current,
-        rerender,
-        rerenderWithSidebarFocus,
+        register: register,
+        navigate: navigate,
+        replace: replace,
+        back: back,
+        canBack: canBack,
+        current: current,
+        rerender: rerender,
+        rerenderWithSidebarFocus: rerenderWithSidebarFocus,
         init: init2
       };
     }
@@ -4376,7 +4378,7 @@ var TizenflixGate = (() => {
 
   // app/js/core/focus.js
   var require_focus = __commonJS({
-    "app/js/core/focus.js"(exports, module) {
+    "app/js/core/focus.js": function(exports, module) {
       var motion = require_motion();
       var FOCUS_SELECTOR = "button:not(:disabled), input[type='text']:not(:disabled), a[href], [tabindex='0']";
       var onFocusChange = null;
@@ -4487,9 +4489,9 @@ var TizenflixGate = (() => {
         if (!track) return { track: null, outer: null };
         var outer = track.parentElement;
         if (outer && outer.classList.contains("row-track-outer")) {
-          return { track, outer };
+          return { track: track, outer: outer };
         }
-        return { track, outer: track };
+        return { track: track, outer: track };
       }
       function getMaxTrackOffset(track, outer) {
         if (!track || !outer) return 0;
@@ -4520,8 +4522,8 @@ var TizenflixGate = (() => {
         var rowId = getFocusRowId(el);
         var isCard = !!(el && el.classList && el.classList.contains("card"));
         return {
-          rowId,
-          isCard,
+          rowId: rowId,
+          isCard: isCard,
           tmdbId: isCard ? el.getAttribute("data-tmdb-id") : null,
           mediaType: isCard ? el.getAttribute("data-media-type") : null,
           label: labelFor(el)
@@ -4658,7 +4660,7 @@ var TizenflixGate = (() => {
         var profile = motion.getMotionProfile();
         duration = duration || profile.scrollMs;
         if (motion.useCssRowScroll()) {
-          let finish2 = function() {
+          var finish2 = function() {
             if (settled || gen !== scrollAnimGen) return;
             settled = true;
             track.removeEventListener("transitionend", onTransitionEnd2);
@@ -5017,9 +5019,9 @@ var TizenflixGate = (() => {
           }
         }
         scheduleScrollAfterLayout(el, rowId, needsVerticalAnchor, {
-          capturedAnchorY,
-          spotlightToggled,
-          browseFocusToggled
+          capturedAnchorY: capturedAnchorY,
+          spotlightToggled: spotlightToggled,
+          browseFocusToggled: browseFocusToggled
         });
         if (isInSidebar(el)) lastSidebarEl = el;
         if (onFocusChange) onFocusChange(buildFocusMeta(el));
@@ -5420,21 +5422,21 @@ var TizenflixGate = (() => {
       }
       module.exports = {
         init: init2,
-        destroy,
-        focusElement,
-        focusDefaultMain,
-        rememberMainFocus,
-        restoreMainFocus,
-        focusSidebar,
-        handleBrowseBack,
-        isInMainArea,
-        resetMainScroll,
-        afterScreenRender,
-        scrollDetailSectionToAnchor,
-        setDetailEpisodesRevealHandler,
-        getFocusables,
-        getCurrentElement,
-        setupFocus
+        destroy: destroy,
+        focusElement: focusElement,
+        focusDefaultMain: focusDefaultMain,
+        rememberMainFocus: rememberMainFocus,
+        restoreMainFocus: restoreMainFocus,
+        focusSidebar: focusSidebar,
+        handleBrowseBack: handleBrowseBack,
+        isInMainArea: isInMainArea,
+        resetMainScroll: resetMainScroll,
+        afterScreenRender: afterScreenRender,
+        scrollDetailSectionToAnchor: scrollDetailSectionToAnchor,
+        setDetailEpisodesRevealHandler: setDetailEpisodesRevealHandler,
+        getFocusables: getFocusables,
+        getCurrentElement: getCurrentElement,
+        setupFocus: setupFocus
       };
     }
   });
@@ -5582,7 +5584,7 @@ var TizenflixGate = (() => {
         }
         playerDbg("GET " + fullUrl);
         return options.resolve(base).then(function(play) {
-          return { base, play };
+          return { base: base, play: play };
         });
       }).then(function(result) {
         var play = result.play;
@@ -5617,8 +5619,8 @@ var TizenflixGate = (() => {
     function resolveMoviePlay(label) {
       var playPath = "/play/movie/" + TEST_MOVIE_TMDB_ID;
       return playResolvedContent({
-        label,
-        playPath,
+        label: label,
+        playPath: playPath,
         defaultTitle: "Inception",
         resolve: function(base) {
           return config.resolveMovie(base, TEST_MOVIE_TMDB_ID);
@@ -5628,8 +5630,8 @@ var TizenflixGate = (() => {
     function resolveTvPlay(season, episode, label) {
       var playPath = "/play/tv/" + OFF_CAMPUS_TMDB_ID + "/" + season + "/" + episode;
       return playResolvedContent({
-        label,
-        playPath,
+        label: label,
+        playPath: playPath,
         defaultTitle: "Off Campus S" + season + "E" + episode,
         wireOpts: {
           onTvPlaying: function() {

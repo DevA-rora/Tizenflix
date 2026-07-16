@@ -880,7 +880,7 @@ function setupNativeQualityTracking(video, session) {
 function playNativeHls(video, url, onLog, videoWrap, title, session, onStallFallback, onFatal) {
   debug.debugLog("Player path: native HLS");
   if (onLog) onLog("Player path: native HLS (wait up to 5s, then HLS.js fallback)");
-  setCrossOrigin(video, true);
+  setCrossOrigin(video, false);
   video.src = url;
   setupNativeQualityTracking(video, session);
 
