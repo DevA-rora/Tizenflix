@@ -1,6 +1,6 @@
 {
   "name": "tizenflix",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "TizenBrew module for Tizenflix (LAN dev — websiteURL points at your PC)",
   "packageType": "mods",
   "appName": "Tizenflix",
@@ -11,6 +11,5 @@
     "MediaFastForward",
     "MediaRewind"
   ],
-  "license": "MIT",
-  "private": true
+  "license": "MIT"
 }
