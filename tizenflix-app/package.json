@@ -4,7 +4,7 @@
   "description": "TizenBrew streaming client for Tizenflix (educational purposes only)",
   "packageType": "app",
   "appName": "Tizenflix",
-  "appPath": "app/hls-test.html",
+  "appPath": "app/index.html",
   "keys": [
     "MediaPlayPause",
     "MediaFastForward",
