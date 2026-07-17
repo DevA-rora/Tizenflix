@@ -47,3 +47,17 @@ export function inlineManifestToken(url: string): string | null {
   if (!isInlineManifestSource(url)) return null;
   return url.slice(INLINE_MANIFEST_PREFIX.length);
 }
+
+/**
+ * Store a pre-warmed manifest and return a prefixed URL for the source.
+ * This allows the API to pre-fetch and cache manifests before sending to TV,
+ * avoiding timeout issues when the referer ladder takes time to complete.
+ */
+export function prewarmInlineManifest(
+  body: string,
+  upstreamUrl: string,
+  referer?: string
+): string {
+  const token = storeInlineManifest(body, upstreamUrl, referer);
+  return `${INLINE_MANIFEST_PREFIX}${token}`;
+}

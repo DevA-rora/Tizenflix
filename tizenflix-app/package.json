@@ -4,7 +4,7 @@
   "description": "TizenBrew streaming client for Tizenflix (educational purposes only)",
   "packageType": "app",
   "appName": "Tizenflix",
-  "appPath": "app/index.html",
+  "appPath": "app/hls-test.html",
   "keys": [
     "MediaPlayPause",
     "MediaFastForward",
@@ -23,7 +23,10 @@
     "build:gate": "esbuild app/js/gate/main.js --bundle --outfile=app/dist/gate.bundle.js --target=es5 --format=iife --global-name=TizenflixGate",
     "dev": "npm run build && node scripts/dev.mjs",
     "start": "npm run build && node scripts/dev.mjs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test-mode": "node scripts/toggle-test-mode.mjs test",
+    "prod-mode": "node scripts/toggle-test-mode.mjs prod",
+    "toggle-mode": "node scripts/toggle-test-mode.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

@@ -7,6 +7,7 @@ import {
   fetchUpstreamWithRefererFallback,
   type UpstreamHeaderOptions,
 } from "./upstream.js";
+import { prewarmInlineManifest } from "../cache/inline-manifest-cache.js";
 import type { PlayResponse, PlayableSource } from "../types.js";
 
 export interface ManifestProbe {
@@ -16,6 +17,8 @@ export interface ManifestProbe {
   segmentMs?: number;
   /** Highest RESOLUTION= height parsed from manifest body */
   maxHeight?: number;
+  /** Manifest body - included when prewarm=true for tizen pre-warming */
+  body?: string;
 }
 
 export interface ValidatePlayOptions {
@@ -67,7 +70,8 @@ export async function probeHlsManifest(
   upstreamUrl: string,
   _publicBase: string,
   fetchImpl: typeof fetch = fetch,
-  headerOptions?: UpstreamHeaderOptions
+  headerOptions?: UpstreamHeaderOptions,
+  prewarm = false
 ): Promise<ManifestProbe> {
   try {
     const upstream = await fetchUpstreamWithRefererFallback(
@@ -111,6 +115,7 @@ export async function probeHlsManifest(
             reason: `first segment HTTP ${seg.status}`,
             segmentMs,
             maxHeight: maxHeight > 0 ? maxHeight : undefined,
+            body: prewarm ? body : undefined,
           };
         }
         await drainProbeBody(seg);
@@ -121,6 +126,7 @@ export async function probeHlsManifest(
           reason: err instanceof Error ? err.message : String(err),
           segmentMs: Date.now() - t0,
           maxHeight: maxHeight > 0 ? maxHeight : undefined,
+          body: prewarm ? body : undefined,
         };
       }
     }
@@ -130,6 +136,7 @@ export async function probeHlsManifest(
       status: upstream.status,
       segmentMs,
       maxHeight: maxHeight > 0 ? maxHeight : undefined,
+      body: prewarm ? body : undefined,
     };
   } catch (err) {
     return {
@@ -249,12 +256,29 @@ async function probeSource(
     return { source };
   }
 
+  // For Tizen profile, prewarm the manifest to avoid referer ladder timeout issues
   const probe = await probeHlsManifest(
     source.url,
     publicBase,
     fetchImpl,
-    headerOptionsForSource(source)
+    headerOptionsForSource(source),
+    options.tizenProfile
   );
+  
+  // If probe succeeded and we have a manifest body (Tizen), pre-warm it in inline cache
+  if (probe.ok && probe.body && options.tizenProfile) {
+    const headerOpts = headerOptionsForSource(source);
+    const referer = headerOpts?.referer;
+    const inlineUrl = prewarmInlineManifest(probe.body, source.url, referer);
+    console.log(`[prewarm] ${source.provider} ${source.label}: cached as ${inlineUrl.slice(0, 50)}...`);
+    
+    // Replace the source URL with the inline manifest URL
+    source = {
+      ...source,
+      url: inlineUrl,
+    };
+  }
+  
   if (probe.ok) {
     options.reportProvider?.(source.provider, true);
     return {

@@ -1168,13 +1168,13 @@ var TizenflixGate = (function() {
             maxFragLookUpTolerance: 0.5,
             maxAudioFramesDrift: 3,
             stretchShortVideoTrack: true,
-            // Reduced timeouts for faster failure detection
+            // Timeouts adjusted for TV - allows referer ladder to complete (~1.5-3s worst case)
             fragLoadingTimeOut: 3e4,
             // Was 90000 - 30s timeout
-            manifestLoadingTimeOut: 2e4,
-            // Was 45000 - 20s timeout
-            levelLoadingTimeOut: 2e4,
-            // Was 45000 - 20s timeout
+            manifestLoadingTimeOut: 45e3,
+            // 45s - CRITICAL: gives referer ladder time (was 20s)
+            levelLoadingTimeOut: 45e3,
+            // 45s - match manifest timeout (was 20s)
             // Fewer retries to avoid hammering CDN
             fragLoadingMaxRetry: 5,
             // Was 10

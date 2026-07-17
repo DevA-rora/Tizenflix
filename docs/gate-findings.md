@@ -63,9 +63,9 @@ This document captures everything learned from the gate test (Inception movie + 
 
 ```
 Samsung TV (TizenBrew)
-  → http://192.168.86.11:3010/app/index.html   (main app)
-  → http://192.168.86.11:3010/app/gate/index.html   (gate test)
-  → http://192.168.86.11:8790                  (tizenflix-api)
+  → http://192.168.86.49:3010/app/index.html   (main app)
+  → http://192.168.86.49:3010/app/gate/index.html   (gate test)
+  → http://192.168.86.49:8790                  (tizenflix-api)
        → /play/movie|tv/...  (resolve)
        → /proxy/stream?url=... (rewrite m3u8, simplify master)
        → upstream CDN (Oxygen, Hydrogen, …)

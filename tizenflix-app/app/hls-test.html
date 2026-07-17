@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HLS.js Test - Tizenflix</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      padding: 20px;
+      font-size: 16px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      color: #e50914;
+    }
+    .status {
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+    .status.info { background: #1a73e8; }
+    .status.ok { background: #0d7017; }
+    .status.err { background: #c5221f; }
+    .video-wrap {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%; /* 16:9 */
+      background: #111;
+      margin: 20px 0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    .panel {
+      background: #1a1a1a;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+      border: 1px solid #333;
+    }
+    h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: #e5e5e5;
+    }
+    .stream-list {
+      list-style: none;
+    }
+    .stream-item {
+      padding: 15px;
+      margin: 10px 0;
+      background: #2a2a2a;
+      border-radius: 4px;
+      border: 2px solid #333;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .stream-item:hover,
+    .stream-item:focus {
+      border-color: #e50914;
+      background: #3a3a3a;
+      outline: none;
+    }
+    .stream-item.active {
+      border-color: #0d7017;
+      background: #1a3a1c;
+    }
+    .stream-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    .stream-url {
+      font-size: 0.85rem;
+      color: #888;
+      word-break: break-all;
+    }
+    .stream-type {
+      display: inline-block;
+      padding: 2px 8px;
+      margin-top: 8px;
+      background: #e50914;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .log {
+      background: #0a0a0a;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      max-height: 300px;
+      overflow-y: auto;
+      color: #0f0;
+      margin-top: 15px;
+    }
+    .log-line {
+      margin: 3px 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-line.error {
+      color: #ff5555;
+    }
+    .log-line.warn {
+      color: #ffaa00;
+    }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin: 15px 0;
+    }
+    button {
+      padding: 12px 24px;
+      background: #e50914;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover,
+    button:focus {
+      background: #f6121d;
+      outline: 2px solid #fff;
+      outline-offset: 2px;
+    }
+    button:active {
+      background: #b00710;
+    }
+    button.secondary {
+      background: #555;
+    }
+    button.secondary:hover,
+    button.secondary:focus {
+      background: #666;
+    }
+    .info-text {
+      color: #aaa;
+      font-size: 0.9rem;
+      margin: 10px 0;
+    }
+    .focusable {
+      outline: none;
+    }
+    .focusable:focus {
+      outline: 3px solid #e50914;
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 HLS.js Test - Tizenflix</h1>
+    <p class="info-text">Testing HLS.js playback capability on Tizen TV</p>
+    
+    <div id="status" class="status info">Select a test stream below</div>
+
+    <div class="video-wrap">
+      <video id="video" controls playsinline></video>
+    </div>
+
+    <div class="panel">
+      <h2>🧪 Test Streams</h2>
+      <ul id="streamList" class="stream-list"></ul>
+    </div>
+
+    <div class="panel">
+      <h2>🎮 Controls</h2>
+      <div class="btn-row">
+        <button type="button" id="playBtn" class="focusable">Play / Pause</button>
+        <button type="button" id="reloadBtn" class="secondary focusable">Reload Video</button>
+      </div>
+      <p class="info-text">TV Remote: Play/Pause button • Back button to exit</p>
+    </div>
+
+    <div class="panel">
+      <h2>📊 Debug Log</h2>
+      <div id="debug" class="log"></div>
+    </div>
+  </div>
+
+  <script src="lib/hls.min.js"></script>
+  <script>
+    // Test configuration
+    var testStreams = [
+      {
+        title: "Big Buck Bunny (HLS)",
+        url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+        type: "m3u8"
+      },
+      {
+        title: "Sintel Trailer (HLS)",
+        url: "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
+        type: "m3u8"
+      },
+      {
+        title: "Apple Advanced Stream (HLS)",
+        url: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8",
+        type: "m3u8"
+      },
+      {
+        title: "Tears of Steel (HLS)",
+        url: "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+        type: "m3u8"
+      },
+      {
+        title: "Test MP4 (Direct)",
+        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        type: "mp4"
+      }
+    ];
+
+    var video = document.getElementById("video");
+    var status = document.getElementById("status");
+    var debug = document.getElementById("debug");
+    var streamList = document.getElementById("streamList");
+    var hlsInstance = null;
+    var currentStreamIndex = -1;
+
+    function log(msg, level) {
+      var line = document.createElement("div");
+      line.className = "log-line" + (level ? " " + level : "");
+      var timestamp = new Date().toLocaleTimeString();
+      line.textContent = "[" + timestamp + "] " + msg;
+      debug.appendChild(line);
+      debug.scrollTop = debug.scrollHeight;
+      console.log(msg);
+    }
+
+    function updateStatus(msg, type) {
+      status.textContent = msg;
+      status.className = "status " + type;
+      log(msg);
+    }
+
+    function destroyHls() {
+      if (hlsInstance) {
+        log("Destroying HLS instance");
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+    }
+
+    function detectHlsSupport() {
+      var nativeSupport = video.canPlayType("application/vnd.apple.mpegurl");
+      var hlsJsSupport = window.Hls && Hls.isSupported();
+      
+      log("=== HLS Support Detection ===");
+      log("Native HLS support: " + (nativeSupport ? "YES" : "NO"));
+      log("HLS.js available: " + (window.Hls ? "YES" : "NO"));
+      log("HLS.js supported: " + (hlsJsSupport ? "YES" : "NO"));
+      
+      if (hlsJsSupport) {
+        log("HLS.js version: " + Hls.version);
+      }
+      
+      log("User agent: " + navigator.userAgent);
+      log("============================");
+      
+      return { native: nativeSupport, hlsjs: hlsJsSupport };
+    }
+
+    function loadStream(stream, index) {
+      log("=== Loading Stream ===");
+      log("Title: " + stream.title);
+      log("URL: " + stream.url);
+      log("Type: " + stream.type);
+      
+      destroyHls();
+      video.removeAttribute("src");
+      video.load();
+      
+      currentStreamIndex = index;
+      updateStreamSelection();
+      
+      if (stream.type === "m3u8") {
+        var support = detectHlsSupport();
+        
+        if (support.hlsjs) {
+          log("Using HLS.js for playback");
+          hlsInstance = new Hls({
+            debug: true,
+            enableWorker: true,
+            lowLatencyMode: false
+          });
+          
+          hlsInstance.on(Hls.Events.MEDIA_ATTACHED, function() {
+            log("HLS: Media attached");
+          });
+          
+          hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+            log("HLS: Manifest parsed, " + data.levels.length + " quality levels");
+            updateStatus("✅ HLS manifest loaded - Ready to play", "ok");
+            video.play().catch(function(err) {
+              log("Auto-play blocked: " + err.message, "warn");
+            });
+          });
+          
+          hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+            log("HLS: Switched to level " + data.level);
+          });
+          
+          hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+            var msg = "HLS Error: " + data.type + " - " + data.details;
+            log(msg, data.fatal ? "error" : "warn");
+            
+            if (data.fatal) {
+              updateStatus("❌ HLS Fatal Error: " + data.type, "err");
+              destroyHls();
+            }
+          });
+          
+          hlsInstance.loadSource(stream.url);
+          hlsInstance.attachMedia(video);
+          updateStatus("⏳ Loading HLS stream...", "info");
+          
+        } else if (support.native) {
+          log("Using native HLS playback");
+          video.src = stream.url;
+          updateStatus("⏳ Loading with native HLS...", "info");
+        } else {
+          log("No HLS support available!", "error");
+          updateStatus("❌ No HLS support on this device", "err");
+          return;
+        }
+      } else {
+        // Direct MP4
+        log("Using direct MP4 playback");
+        video.src = stream.url;
+        updateStatus("⏳ Loading MP4...", "info");
+      }
+    }
+
+    function updateStreamSelection() {
+      var items = streamList.querySelectorAll(".stream-item");
+      items.forEach(function(item, i) {
+        if (i === currentStreamIndex) {
+          item.classList.add("active");
+        } else {
+          item.classList.remove("active");
+        }
+      });
+    }
+
+    function renderStreams() {
+      streamList.innerHTML = "";
+      testStreams.forEach(function(stream, index) {
+        var li = document.createElement("li");
+        li.className = "stream-item focusable";
+        li.tabIndex = 0;
+        
+        var title = document.createElement("div");
+        title.className = "stream-title";
+        title.textContent = stream.title;
+        
+        var type = document.createElement("span");
+        type.className = "stream-type";
+        type.textContent = stream.type;
+        
+        var url = document.createElement("div");
+        url.className = "stream-url";
+        url.textContent = stream.url;
+        
+        li.appendChild(title);
+        li.appendChild(type);
+        li.appendChild(url);
+        
+        li.addEventListener("click", function() {
+          loadStream(stream, index);
+        });
+        
+        li.addEventListener("keydown", function(e) {
+          if (e.keyCode === 13 || e.keyCode === 32) { // Enter or Space
+            e.preventDefault();
+            loadStream(stream, index);
+          }
+        });
+        
+        streamList.appendChild(li);
+      });
+    }
+
+    // Video event listeners
+    video.addEventListener("loadstart", function() {
+      log("Video: Load start");
+    });
+
+    video.addEventListener("loadedmetadata", function() {
+      log("Video: Metadata loaded - Duration: " + video.duration.toFixed(2) + "s");
+    });
+
+    video.addEventListener("canplay", function() {
+      log("Video: Can play");
+      updateStatus("▶️ Ready to play", "ok");
+    });
+
+    video.addEventListener("playing", function() {
+      log("Video: Playing");
+      updateStatus("▶️ Playing", "ok");
+    });
+
+    video.addEventListener("pause", function() {
+      log("Video: Paused");
+    });
+
+    video.addEventListener("waiting", function() {
+      log("Video: Buffering...");
+      updateStatus("⏳ Buffering...", "info");
+    });
+
+    video.addEventListener("error", function(e) {
+      var error = video.error;
+      var msg = "Video error: ";
+      if (error) {
+        msg += "Code " + error.code + " - ";
+        switch(error.code) {
+          case 1: msg += "MEDIA_ERR_ABORTED"; break;
+          case 2: msg += "MEDIA_ERR_NETWORK"; break;
+          case 3: msg += "MEDIA_ERR_DECODE"; break;
+          case 4: msg += "MEDIA_ERR_SRC_NOT_SUPPORTED"; break;
+          default: msg += "UNKNOWN";
+        }
+        if (error.message) msg += " - " + error.message;
+      }
+      log(msg, "error");
+      updateStatus("❌ " + msg, "err");
+    });
+
+    video.addEventListener("ended", function() {
+      log("Video: Ended");
+      updateStatus("✅ Playback completed", "ok");
+    });
+
+    // Button handlers
+    document.getElementById("playBtn").addEventListener("click", function() {
+      if (video.paused) {
+        video.play();
+      } else {
+        video.pause();
+      }
+    });
+
+    document.getElementById("reloadBtn").addEventListener("click", function() {
+      if (currentStreamIndex >= 0) {
+        loadStream(testStreams[currentStreamIndex], currentStreamIndex);
+      }
+    });
+
+    // Tizen TV remote key handling
+    document.addEventListener("keydown", function(e) {
+      log("Key pressed: " + e.keyCode);
+      
+      // Play/Pause (415 = MediaPlayPause on Tizen)
+      if (e.keyCode === 415 || e.keyCode === 19) {
+        e.preventDefault();
+        if (video.paused) {
+          video.play();
+        } else {
+          video.pause();
+        }
+      }
+      
+      // Back button (10009 on Tizen)
+      if (e.keyCode === 10009) {
+        e.preventDefault();
+        log("Back button pressed - would exit app");
+      }
+      
+      // MediaRewind (412)
+      if (e.keyCode === 412) {
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 10);
+        log("Rewind 10s");
+      }
+      
+      // MediaFastForward (417)
+      if (e.keyCode === 417) {
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration, video.currentTime + 10);
+        log("Forward 10s");
+      }
+    });
+
+    // Initialize
+    log("=== Tizenflix HLS.js Test Started ===");
+    log("Page loaded at: " + new Date().toLocaleString());
+    detectHlsSupport();
+    renderStreams();
+    
+    // Auto-load first stream
+    if (testStreams.length > 0) {
+      setTimeout(function() {
+        log("Auto-loading first test stream...");
+        loadStream(testStreams[0], 0);
+      }, 1000);
+    }
+  </script>
+</body>
+</html>

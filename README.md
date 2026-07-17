@@ -2,6 +2,21 @@
 
 Netflix-style streaming for Samsung TVs via [TizenBrew](https://github.com/reisxd/TizenBrew). Educational purposes only.
 
+## 🧪 HLS Test Mode Active
+
+The TV app is currently configured to run **HLS.js diagnostics** instead of the full application. This helps identify whether playback issues are caused by HLS.js compatibility or stream URL problems.
+
+**Quick Commands:**
+```bash
+cd tizenflix-app
+npm run prod-mode    # Switch back to full app
+npm run test-mode    # Switch to test page (current)
+```
+
+📖 See [QUICK_HLS_TEST.md](QUICK_HLS_TEST.md) for complete guide.
+
+---
+
 ## Repository layout
 
 ```

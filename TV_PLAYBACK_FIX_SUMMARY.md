@@ -276,5 +276,11 @@ This fix addresses the root cause of TV playback failures by:
 2. Implementing robust caching and deduplication
 3. Handling rate limits gracefully with retry logic
 4. Providing fallback mechanisms and better error messages
+5. **Pre-warming manifests to avoid referer ladder timeout (NEW)**
+6. **Increasing hls.js timeout to accommodate referer ladder (NEW)**
 
-The TV now makes ~70% fewer requests to CDNs, with intelligent retry and caching strategies that prevent rate limiting while maintaining smooth playback.
+The TV now makes ~70% fewer requests to CDNs, with intelligent retry and caching strategies that prevent rate limiting while maintaining smooth playback. Additionally, manifests are pre-validated and cached before being sent to the TV, eliminating the 403 errors that previously caused FATAL networkError.
+
+## Additional Fix: Referer Ladder Timeout
+
+See [REFERER_LADDER_FIX.md](REFERER_LADDER_FIX.md) for detailed information about the manifest pre-warming implementation that fixes the issue where the TV's hls.js times out before the proxy's referer ladder completes.

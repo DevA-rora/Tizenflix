@@ -4,6 +4,25 @@ TizenBrew client for Samsung TVs. Talks to [tizenflix-api](../tizenflix-api) ove
 
 Educational purposes only.
 
+## 🧪 TEST MODE ACTIVE
+
+**The app is currently configured to run HLS.js diagnostics instead of the full application.**
+
+```bash
+npm run prod-mode    # Switch back to full app
+npm run test-mode    # Switch to HLS test page
+npm run toggle-mode  # Toggle between modes
+```
+
+📖 See [TEST_MODE_README.md](TEST_MODE_README.md) for complete guide.
+
+The test page helps determine if playback issues are caused by:
+- HLS.js not working on the TV
+- Invalid/blocked stream URLs
+- Codec/format incompatibility
+
+---
+
 ## What this is
 
 **v0.2** — UI scaffold + proven playback layer. The main app (`app/index.html`) is a Netflix-style shell ready for browse/detail screens. The **gate test** (`app/gate/index.html`) remains available for playback diagnostics.
@@ -15,7 +34,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the full directory map.
 ```bash
 # Terminal 1 — API
 cd ../tizenflix-api
-PUBLIC_BASE=http://192.168.86.11:8790 npm run api
+PUBLIC_BASE=http://192.168.86.49:8790 npm run api
 
 # Terminal 2 — App
 cd ../tizenflix-app

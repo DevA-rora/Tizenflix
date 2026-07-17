@@ -61,7 +61,8 @@ function proxyWrap(
   url: string,
   headers?: ProxyHeaderParams,
   audioLang?: string,
-  maxHeight?: number
+  maxHeight?: number,
+  tizenProfile = false
 ): string {
   if (isInlineManifestSource(url)) {
     const token = url.slice("tizenflix-inline-manifest:".length);
@@ -69,6 +70,7 @@ function proxyWrap(
     const params = new URLSearchParams();
     if (audioLang) params.set("audioLang", audioLang);
     if (maxHeight && maxHeight > 0) params.set("maxHeight", String(maxHeight));
+    if (tizenProfile) params.set("profile", "tizen");
     const qs = params.toString();
     if (qs) inlineUrl += `?${qs}`;
     return inlineUrl;
@@ -80,7 +82,8 @@ function withProxiedUrls(
   publicBase: string,
   play: Awaited<ReturnType<typeof resolvePlayableSources>>,
   preferredAudioLang?: string,
-  maxHeight?: number
+  maxHeight?: number,
+  tizenProfile = false
 ) {
   const audioLang =
     preferredAudioLang ?? play.audioPreference?.targetLanguage ?? undefined;
@@ -88,11 +91,11 @@ function withProxiedUrls(
     ...play,
     sources: play.sources.map((s) => ({
       ...s,
-      url: proxyWrap(publicBase, s.url, proxyHeadersFromSource(s), audioLang, maxHeight),
+      url: proxyWrap(publicBase, s.url, proxyHeadersFromSource(s), audioLang, maxHeight, tizenProfile),
     })),
     subtitles: play.subtitles.map((sub) => ({
       ...sub,
-      url: sub.url ? proxyWrap(publicBase, sub.url, undefined, audioLang, maxHeight) : sub.url,
+      url: sub.url ? proxyWrap(publicBase, sub.url, undefined, audioLang, maxHeight, tizenProfile) : sub.url,
     })),
   };
 }
@@ -691,7 +694,8 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
           publicBase,
           fast,
           play.audioPreference?.targetLanguage,
-          options.maxHeight
+          options.maxHeight,
+          tizenProfile
         )
       );
       return;
@@ -711,7 +715,8 @@ export function registerRoutes(app: Express, ctx: RouteContext): void {
         publicBase,
         validated,
         play.audioPreference?.targetLanguage,
-        options.maxHeight
+        options.maxHeight,
+        tizenProfile
       )
     );
   }

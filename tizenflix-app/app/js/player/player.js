@@ -400,10 +400,10 @@ function createHlsInstance() {
       maxFragLookUpTolerance: 0.5,
       maxAudioFramesDrift: 3,
       stretchShortVideoTrack: true,
-      // Reduced timeouts for faster failure detection
+      // Timeouts adjusted for TV - allows referer ladder to complete (~1.5-3s worst case)
       fragLoadingTimeOut: 30000,  // Was 90000 - 30s timeout
-      manifestLoadingTimeOut: 20000,  // Was 45000 - 20s timeout
-      levelLoadingTimeOut: 20000,  // Was 45000 - 20s timeout
+      manifestLoadingTimeOut: 45000,  // 45s - CRITICAL: gives referer ladder time (was 20s)
+      levelLoadingTimeOut: 45000,  // 45s - match manifest timeout (was 20s)
       // Fewer retries to avoid hammering CDN
       fragLoadingMaxRetry: 5,  // Was 10
       fragLoadingRetryDelay: 2000,  // Longer delay between retries

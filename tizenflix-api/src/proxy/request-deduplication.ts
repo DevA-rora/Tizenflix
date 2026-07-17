@@ -51,7 +51,13 @@ export async function deduplicatedFetch(
   }
 
   // No existing request - create new one
-  const promise = fetchFn();
+  const promise = fetchFn().then(res => {
+    // Clone immediately so the original response can be shared safely
+    // The stored promise resolves to a clone, allowing the original
+    // to be consumed by the initial caller and clones for waiters
+    return res.clone();
+  });
+  
   pendingRequests.set(key, {
     promise,
     timestamp: Date.now(),
@@ -61,7 +67,8 @@ export async function deduplicatedFetch(
     const response = await promise;
     // Keep in pending for a brief moment to catch rapid successive requests
     setTimeout(() => pendingRequests.delete(key), 100);
-    return response;
+    // Return a clone so the stored version remains readable for other callers
+    return response.clone();
   } catch (err) {
     pendingRequests.delete(key);
     throw err;
